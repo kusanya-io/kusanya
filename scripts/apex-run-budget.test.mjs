@@ -73,16 +73,31 @@ test('current dispatch uses its checked subject while unrelated legacy subjects 
   previous.readLog = () => 'No trusted subject';
   assert.throws(() => collectAttempts(previous), /subject/);
 });
-test('Apex job start, not workflow queue date, determines UTC attempt day', () => {
+test('trusted harness start, not workflow or job approval-queue date, determines UTC attempt day', () => {
   const history = fakeHistory();
   const originalApi = history.api;
   history.api = (path) => {
     const result = originalApi(path);
     if (path.endsWith('/attempts/1'))
       result.run_started_at = '2026-09-09T23:00:00Z';
+    if (path.includes('/jobs?'))
+      result.jobs[0].started_at = '2026-09-09T23:01:00Z';
     return result;
   };
-  assert.equal(collectAttempts(history)[0].startedAt, '2026-09-10T12:00:00Z');
+  assert.equal(
+    collectAttempts(history)[0].startedAt,
+    '2026-09-10T12:00:00.000Z',
+  );
+  const env = {
+    KUSANYA_POLICY_REPOSITORY: repository,
+    KUSANYA_POLICY_HEAD_SHA: headSha,
+    GITHUB_RUN_ID: '12',
+    GITHUB_RUN_ATTEMPT: '1',
+  };
+  assert.equal(
+    runBudget({ env, now: new Date('2026-09-10T13:00:00Z'), ...history }).kind,
+    'infrastructure-retry',
+  );
 });
 const identity = { runId: '11', attempt: 1, headSha };
 const marker = (changes = {}) =>
@@ -92,6 +107,7 @@ const marker = (changes = {}) =>
     runId: '11-1',
     headSha,
     outcome: 'failed-infrastructure',
+    startedAt: '2026-09-10T12:00:00.000Z',
     retryable: true,
     ...changes,
   })}`;
@@ -100,6 +116,7 @@ test('budget accepts one exact-head, exact-attempt sanitized outcome', () => {
   assert.deepEqual(readVerificationMarker(marker(), identity), {
     verificationOutcome: 'failed-infrastructure',
     retryable: true,
+    startedAt: '2026-09-10T12:00:00.000Z',
   });
   assert.deepEqual(
     readVerificationMarker(
@@ -109,6 +126,7 @@ test('budget accepts one exact-head, exact-attempt sanitized outcome', () => {
     {
       verificationOutcome: 'passed',
       retryable: false,
+      startedAt: '2026-09-10T12:00:00.000Z',
     },
   );
 });
@@ -127,6 +145,10 @@ test('budget refuses absent, malformed, duplicate, spoofed and contradictory mar
     marker({ outcome: 'skipped' }),
     marker({ retryable: 'true' }),
     marker({ schemaVersion: 2 }),
+    marker({ startedAt: null }),
+    marker({ startedAt: undefined }),
+    marker({ startedAt: '2026-02-30T12:00:00.000Z' }),
+    marker({ startedAt: '2026-09-10T15:00:00.000+03:00' }),
     marker({ outcome: 'failed-tests', retryable: true }),
     marker({ outcome: 'passed', retryable: true }),
   ])

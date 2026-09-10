@@ -37,13 +37,21 @@ export function readVerificationMarker(log, { runId, attempt, headSha }) {
     record.role !== 'ci' ||
     record.runId !== `${runId}-${attempt}` ||
     record.headSha !== headSha ||
+    typeof record.startedAt !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(record.startedAt) ||
+    !Number.isFinite(Date.parse(record.startedAt)) ||
+    new Date(record.startedAt).toISOString() !== record.startedAt ||
     !outcomes.has(record.outcome) ||
     typeof record.retryable !== 'boolean' ||
     (['passed', 'failed-tests', 'failed-cleanup'].includes(record.outcome) &&
       record.retryable)
   )
     throw new Error('Verification marker does not match this exact attempt.');
-  return { verificationOutcome: record.outcome, retryable: record.retryable };
+  return {
+    verificationOutcome: record.outcome,
+    retryable: record.retryable,
+    startedAt: record.startedAt,
+  };
 }
 
 export function readVerificationSubject(log) {
@@ -184,7 +192,6 @@ export function collectAttempts({
         runId: String(run.id),
         attempt: number,
         headSha: reviewedHead,
-        startedAt: job.started_at,
         status: previous.status,
         conclusion: job.conclusion,
         ...marker,

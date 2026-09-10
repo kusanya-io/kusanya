@@ -147,8 +147,9 @@ Only a unique, sanitized harness marker matching run/attempt/head establishes th
 previous outcome. The marker is also subject to finding 10's explicit-review rule.
 Manual dispatch uses main's workflow SHA, so history is enumerated without a SHA
 filter and its reviewed head is bound by the trusted `Verifying PR ... at head ...`
-log line. The Apex job's start time, not time spent queued for approval, determines
-the UTC retry day. Unidentified legacy dispatches or missing logs fail closed and
+log line. The trusted harness's actual start timestamp determines the UTC retry
+day; GitHub timestamps a job even while it is waiting for approval, so neither
+workflow nor job start metadata is used for this counter. Unidentified legacy dispatches or missing logs fail closed and
 need investigation; they are not silently excluded. The history reader caps at
 1,000 workflow runs and refuses incomplete history rather than resetting budget.
 

@@ -34,6 +34,10 @@ export function runVerification({
     role: null,
     runId: null,
     headSha: null,
+    startedAt:
+      now instanceof Date && Number.isFinite(now.getTime())
+        ? now.toISOString()
+        : null,
     outcome: 'failed-infrastructure',
     retryable: false,
   };

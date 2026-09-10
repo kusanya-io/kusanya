@@ -434,6 +434,7 @@ test('wrapper emits exactly one successful full-head marker after tests and owne
     runId: '100-1',
     headSha: sha,
     outcome: 'passed',
+    startedAt: now.toISOString(),
     retryable: false,
   });
   assert.equal(f.state.creates, 1);

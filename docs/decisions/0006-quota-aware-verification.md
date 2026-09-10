@@ -76,8 +76,9 @@ returns, within the same retry budget and only after another preflight. Read
 complete GitHub attempt history and the exact run/head's sanitized harness outcome;
 missing or contradictory history is not permission to retry. A quota check is
 advisory, never a reservation against other operators.
-Count the UTC day of the Apex job's start, not the workflow's earlier approval
-queue time. Manual dispatch evidence must bind its reviewed head from the trusted
+Count the UTC day of the trusted harness's actual start timestamp, not GitHub's
+workflow or job start metadata (both can include waiting for approval). Manual
+dispatch evidence must bind its reviewed head from the trusted
 subject log, not confuse it with main's dispatch SHA. Ambiguous legacy logs and
 history beyond the bounded complete reader require investigation, not exemption.
 
