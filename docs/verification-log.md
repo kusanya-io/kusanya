@@ -100,3 +100,26 @@ Findings 3 to 6 from review 1 are fixed in 5e22782 (file removed, 4xx statuses p
 `HOLD: PR #3, 1 finding` (finding 1 closes when that run passes and the three checks are required on `main`).
 
 `PHASE 0: HOLD` until then.
+
+### Security review before approving run 34499943255, same day: head `ac93b957702fe8834841ec6982dc65408fab9055`
+
+Correction to the previous entry: it recorded the `--sfdx-url-stdin` flag as checked because the flag exists in CLI 2.135.7. That check was not enough, because the flag takes a value. Run 34487910391 was approved on the strength of that entry and failed at authentication for exactly this reason. It never created a scratch org or ran Apex.
+
+What was checked:
+
+- The failed run's log, 442 lines. The authentication step failed with its output discarded. The secret appears only as `***`. There are no `force://` strings and no strings shaped like a refresh token. The logout step failed because nothing was logged in, and the gate failed closed. Nothing leaked.
+- Both command forms, reproduced in CLI 2.135.7 with a fake input that is not a credential. The old form exits 2 with "Unexpected argument" naming the alias, which matches the hosted failure. The new form with `-` reads stdin and exits 1 with `INVALID_SFDX_AUTH_URL`, which proves the input reaches the URL parser.
+- The diff since 5e5567f: one token in the workflow, a Bash resolver with its tests, and docs. The harness pin is still 7974e25, and the pinned scripts are unchanged. `salesforce/` is unchanged since 72c6ccf. The secret is still in scope for one step only, with stdout and stderr discarded.
+- The merge ref the pending run executes, 9de19e3, whose parents are `main` at c2945e0 and the head ac93b95. Its workflow and `salesforce/` are identical to the head.
+- Pending run 34499943255: a `pull_request` event on head ac93b95, waiting on `salesforce-ci`, with no approvals. Public CI run 34499942796 is green on the same head.
+- The environment, which is unchanged: reviewer `cobitechsolutions`, administrator bypass off, branch policies `main` and `refs/pull/*/merge`, one environment secret and zero repository secrets. `main` still has no required status checks.
+- Root tests: 22 of 22 pass in Git Bash and in PowerShell, so note 9 is fixed. The format check and scaffold check pass, and actionlint 1.7.12 is clean.
+- The new authentication tests. They use a labelled fake string, check the exact nine arguments, and assert that nothing reaches stdout or stderr. ADR 0005 and the CI runbook describe them as plumbing tests, not authentication evidence.
+
+Residual risks R1 to R4 are unchanged.
+
+`SAFE TO APPROVE: run 34499943255 at head ac93b95`
+
+`HOLD: PR #3, 1 finding` (finding 1 closes when this run passes and the three checks are required on `main`).
+
+`PHASE 0: HOLD` until then.
