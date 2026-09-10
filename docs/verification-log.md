@@ -149,3 +149,34 @@ The adjustments A1 to A11 and the tool safeguards are in the design review on PR
 `HOLD: PR #3, 2 findings` (1 and 10)
 
 `PHASE 0: HOLD`
+
+### Security review before approving run 34523564584, same day: head `8e1e2b7c984298c19ae61d1ddf5609c58a635d4c`
+
+Scope: whether Bill may approve Salesforce run 34523564584. The head adds ADR 0006, a builder-org tool, a quota preflight, tagged scratch lifecycle and cleanup, a documentation classifier, a retry budget, global serialisation and a new harness pin, c8470cd. No scratch orgs were created for this review.
+
+What was checked:
+
+- Every new or changed script and workflow line, ADR 0006, and the doc changes. The pin c8470cd is in the branch history. Its scripts are identical to the head; the head differs only in the pin value and one test.
+- The credentialed job. The secret is still in scope for one step. The verify step runs only pinned scripts that import Node built-ins. No pull request code or npm package runs there. The GitHub token is read-only. Head checks run before authentication and after the tests.
+- SOQL is built only from validated values. Cleanup deletes only `ActiveScratchOrg` records whose tag, request ID and org ID match an org created in the same run.
+- The Dev Hub schema, read-only. `OrgName` is filterable with 80 characters, and tags reach at most about 56. `ScratchOrg` is a 15-character string on both objects, matching the cleanup filter. Both exact filters run, and `ActiveScratchOrg` is deletable. `Description` is not filterable, and the builder tool only reads it.
+- CLI 2.135.7: `--name`, `--description`, `--async`, `--job-id`, `--sobject` and `--record-id` all exist and take values.
+- The policy job holds no secret and runs pinned code. The documentation classifier fails closed to full Apex. PR #3 is not exempt.
+- Tests: 100 of 100 tooling tests in Git Bash and in PowerShell, service lint, typecheck and 11 unit tests, format and scaffold checks. Public CI 34523565060 is green on the head. The merge ref 02037ab matches the head for workflows, scripts and `salesforce/`. `salesforce/` metadata is unchanged since 72c6ccf, `service/` since 5e22782, and `docs/verification.md` is untouched.
+- The environment is unchanged: one environment secret, no variables, still the shared Dev Hub. Dev Hub limits at 20:08 UTC: 3 of 3 active free, 0 of 6 daily left.
+- actionlint 1.7.12 with shellcheck reports warning SC2155 on the classify step. The builder reported a clean run.
+
+Findings:
+
+- Finding 10 is closed. ADR 0006 and `docs/ci.md` state that the check is a tripwire, list the files that need explicit verifier review, and require a PASS to cite the Apex run, coverage and cleanup.
+- Finding 11, should fix before the gate. The retry budget runs only in the policy job. GitHub's REST reference says "Re-run failed jobs" and "Re-run a job" repeat only failed jobs and their dependents. The policy job is not repeated, so a partial re-run either reuses the earlier budget decision or skips Apex. The budget also decides on the trigger's UTC day, not the approval day.
+- Finding 12, should fix before the gate. An Apex job cancelled while waiting for approval is recorded as cancelled with no steps, and its log does not exist; run 34523279197 shows this. The budget reader then refuses every later attempt on that head. For a cancelled dispatch run it refuses every head. Only skipped jobs are excused, and no test covers the cancelled shape.
+- Finding 13, should fix before Phase 1. Creation, deploy and test waits are 15 minutes each, which, with setup, can reach the 45-minute job timeout. A killed job never reaches the harness's cleanup, so an org could hold one of 3 active slots for up to a day.
+- Note 14. The SC2155 line masks a failed `git rev-parse`. The result is still full Apex, so it fails safe.
+- Note 15. A creation rejected with no request record is reported as failed cleanup, and a deploy compile error as failed infrastructure. Both fail closed, but the labels mislead. The quota-message pattern is unverified against a real rejection.
+
+`SAFE TO APPROVE: run 34523564584 at head 8e1e2b7`, only after daily scratch capacity returns, from 11:33 UTC on 11 September. Do not cancel or reject the run, because of finding 12.
+
+`HOLD: PR #3, 4 findings` (1, 11, 12 and 13)
+
+`PHASE 0: HOLD`
