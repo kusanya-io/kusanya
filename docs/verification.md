@@ -39,3 +39,19 @@ Kusanya is built by a coding agent and verified by a second, independent agent w
 - **Must fix before phase gate:** a defect the brief lists in C3 has been reintroduced, a governor limit is hit on the stated volumes, or a security check in C8 is missing.
 - **Should fix:** anything else that would embarrass the product in front of a customer.
 - **Note:** style and naming.
+
+## Hand-off between builder and verifier
+
+The builder and the verifier do not share a session. Bill relays between them. So the builder must make every hand-off explicit:
+
+1. When a pull request is ready, the builder ends its message to Bill with one line in this exact form, so it is never missed:
+   `READY FOR CLAUDE VERIFICATION: PR #<number> <title> — claims tests <list>`
+2. The builder may continue on the next branch while a review is pending, but it never merges its own pull request and never opens more than two pull requests awaiting review at once.
+3. At a phase gate the builder stops entirely and ends with:
+   `PHASE <n> GATE: awaiting Claude verification` and waits for the verdict.
+4. When the verifier's findings come back, the builder answers each one in the pull request, then ends its message with:
+   `READY FOR CLAUDE RE-VERIFICATION: PR #<number>`
+5. When the builder must ask a question under the brief's "ask" rules, it ends with:
+   `QUESTION FOR BILL:` followed by the question and the options it sees.
+
+The verifier, in turn, posts findings as pull request review comments and ends its report to Bill with either `PASS: PR #<number> may be merged` or `HOLD: PR #<number>, <count> findings`, and at a gate with `PHASE <n>: PASS` or `PHASE <n>: HOLD`.
