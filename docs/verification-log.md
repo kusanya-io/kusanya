@@ -68,3 +68,35 @@ Two commits were added after the review: a quoting fix to the Postgres health co
 `HOLD: PR #3, 3 findings` (1 blocks the gate, 3 and 4 block the merge).
 
 `PHASE 0: HOLD` pending finding 1.
+
+### Security review before releasing the Dev Hub secret, same day: head `5e5567fbeae6885eda29b86867c3bbbeadcbf1d8`
+
+Scope: is it safe for Bill to approve Salesforce verification run 34487910391 (attempt 2, `pull_request` event, head 5e5567f), which releases the environment secret `SF_DEV_HUB_AUTH_URL` to the job? Bill had approved the automatic same-repository trigger recommended in finding 1.
+
+What was checked:
+
+- The whole workflow at the head, ADR 0005, the CI runbook, and the six policy tests that run the workflow's own shell guards.
+- The pinned harness commit 7974e25: its `verify-salesforce.mjs` and `apex-coverage.mjs` are byte-identical to the scripts reviewed at 72c6ccf; the only difference is the removed publish script. They are unchanged at the head too.
+- The `salesforce/` tree the credentialed job checks out: eight known files, no dotfiles, classes unchanged since 72c6ccf.
+- The `salesforce-ci` environment through the API: required reviewer `cobitechsolutions`, administrator bypass off, branch policies `main` and `refs/pull/*/merge`, one environment secret, zero repository secrets.
+- The pending run: `pull_request`, head 5e5567f, waiting on that environment, no approvals yet. Public CI run 34487911546 is green on the same head.
+- Root tests at the head (13, including the policy tests), service lint and 11 unit tests, format check: pass from PowerShell. actionlint 1.7.12: clean.
+
+Why it is safe: the secret is in scope for one step only, piped through stdin with output discarded, telemetry and log file off; the only code that runs with the resulting Salesforce session in reach is the pinned harness, the pinned Salesforce CLI from npm, and Apex that executes inside a scratch org rather than on the runner; nothing from the pull request is installed or executed; the GitHub token is read-only; the PR head is re-checked immediately before authentication and again after the tests, so a push after approval fails before the credential is used; fork pull requests are skipped and the gate job fails closed.
+
+Residual risks, none blocking:
+
+- R1. The pull request controls its own workflow file, so the pin and every guard live in the file the approver reads. Human approval is the real boundary: read the YAML of every run before approving, not only the source diff. ADR 0005 says this.
+- R2. Self-review prevention is off and the reviewer account is also the author account, so GitHub cannot tell Bill from the builder. Acceptable while the builder pushes from Bill's machine; revisit if the builder gets its own token.
+- R3. The secret is the Dev Hub's administrator refresh token. The org holds no customer data. Rotate it on any suspicion.
+- R4. The job tests the PR head, not the merge result with `main`. Fine while `main` has no Salesforce source.
+
+Note 9: the policy tests fail when run from Git Bash because `where.exe git` returns the `mingw64` launcher first and the derived Bash path does not exist. They pass from PowerShell, the documented shell, and on Linux.
+
+Findings 3 to 6 from review 1 are fixed in 5e22782 (file removed, 4xx statuses preserved with three new unit tests, stale action mention removed, Prettier now covers the service). Finding 7 was acknowledged in the roadmap and ADR 0003.
+
+`SAFE TO APPROVE: run 34487910391 at head 5e5567f`
+
+`HOLD: PR #3, 1 finding` (finding 1 closes when that run passes and the three checks are required on `main`).
+
+`PHASE 0: HOLD` until then.
