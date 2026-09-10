@@ -35,15 +35,14 @@ npm --prefix service run typecheck
 npm --prefix service test
 ```
 
-Scratch-org deployment/tests/cleanup in PowerShell:
-
-```powershell
-$env:KUSANYA_DEV_HUB = 'Kusanya-DevHub'
-node scripts/verify-salesforce.mjs
-```
-
-See `salesforce/README.md` and `docs/ci.md` for the credentialed gate. The script uses
-fresh orgs and exact coverage counts. Never deploy this scaffold to a customer org.
+Use the builder-only development org for iterative Apex work; see
+`salesforce/README.md`. Do not repeatedly invoke the fresh verification harness.
+The builder's Apex evidence is hosted CI on the exact reviewed head. Claude uses
+one independent fresh org or pair for the complete relevant suite. Development-org
+output is never verification evidence. Read the quota/approval rules in
+`docs/ci.md` before requesting a scratch org. Never deploy into the Dev Hub itself
+or a customer org. On Windows PowerShell use `npm.cmd` when script policy blocks
+the `npm.ps1` launcher; do not weaken system execution policy.
 
 For service integration, inject an existing disposable database URL and TLS policy,
 set `REQUIRE_DATABASE_TESTS=true`, and run `npm --prefix service run test:integration`.

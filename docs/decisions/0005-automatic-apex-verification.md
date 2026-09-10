@@ -1,12 +1,18 @@
 # ADR 0005: Automatic Apex verification with an approval gate
 
-- Status: Accepted by Bill; implementation pending independent verification and maintainer setup
+- Status: Amended by ADR 0006 (allocation, concurrency, exemption and trust reporting)
 - Date: 2026-09-10
 - Brief sections: C8, C11 Phase 0, C12, C13
 - Decision owner: Cobitech Solutions
 - Supersedes: ADR 0004's manual-only trigger and default-branch harness selection
 
 ## Context
+
+ADR 0006 records Bill's later approval of Claude's A1–A11 adjustments. The original
+policy below is historical where it describes per-PR serialization, all-docs Apex
+or the original bootstrap pin. The current runbook is `docs/ci.md`. The required
+check is a tripwire, not a security boundary: explicit verifier review of changes
+to the workflow and verification logic remains mandatory.
 
 Claude's PR #3 finding 1 identified that manual-only Apex testing did not meet the
 automatic PR gate. Bill explicitly approved the guarded same-repository PR trigger,

@@ -41,7 +41,8 @@ package install link and a source-deploy route. Package creation is deferred pen
 the C12 packaging decision; no package Id or registered namespace is claimed.
 
 For the scaffold's source-deploy route, follow [salesforce/README.md](salesforce/README.md)
-to create a disposable scratch org and deploy only the smoke metadata. For service
+for the builder-only development org and reviewed fresh CI verification. Reuse the
+development org for iteration; its output is not verification evidence. For service
 builds, tests and container commands, see [service/README.md](service/README.md).
 Build commands are not an authorization to deploy an environment.
 
