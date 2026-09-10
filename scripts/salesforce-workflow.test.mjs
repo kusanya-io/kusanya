@@ -192,7 +192,7 @@ test('Salesforce workflow keeps the pinned harness, source guard and uncondition
     /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/,
   );
   assert.equal(
-    (workflow.match(/ref: 825030ea69bd4c833b6dd2b0f7b3009b82658576/g) ?? [])
+    (workflow.match(/ref: c8470cd3b63f775c719f8e61f2d8963275394623/g) ?? [])
       .length,
     2,
   );
