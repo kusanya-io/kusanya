@@ -1,0 +1,78 @@
+name: Salesforce verification
+# Dispatch trusted default-branch code after reviewing the exact source SHA.
+# Configure required reviewers and Dev Hub secret in environment salesforce-ci.
+# Never use pull_request_target or expose credentials to PR executable scripts.
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Same-repository pull request number reviewed by the maintainer
+        required: true
+        type: string
+      reviewed_sha:
+        description: Full 40-character head SHA reviewed by the maintainer
+        required: true
+        type: string
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  apex:
+    name: Scratch org tests and 85 percent coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: salesforce-ci
+    env:
+      SF_DISABLE_LOG_FILE: 'true'
+      SF_DISABLE_TELEMETRY: 'true'
+      KUSANYA_DEV_HUB: Kusanya-CI-DevHub
+    steps:
+      - name: Confirm reviewed commit and trusted workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pull_request }}
+          REVIEWED_SHA: ${{ inputs.reviewed_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" == "$DEFAULT_BRANCH" ]] || { echo 'Dispatch this workflow from the trusted default branch.'; exit 1; }
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo 'Invalid PR number.'; exit 1; }
+          [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'A full reviewed SHA is required.'; exit 1; }
+          current_sha="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)"
+          source_repo="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.repo.full_name)"
+          [[ "$current_sha" == "$REVIEWED_SHA" && "$source_repo" == "$GITHUB_REPOSITORY" ]] || { echo 'PR head changed or fork source refused. Review the same-repository head first.'; exit 1; }
+      - name: Checkout trusted verification harness
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          path: trusted
+          persist-credentials: false
+      - name: Checkout reviewed metadata as data only
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.reviewed_sha }}
+          path: reviewed
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Install pinned Salesforce CLI
+        run: npm install --global @salesforce/cli@2.135.7
+        working-directory: ${{ runner.temp }}
+      - name: Authenticate dedicated Dev Hub without printing its auth URL
+        env:
+          SF_DEV_HUB_AUTH_URL: ${{ secrets.SF_DEV_HUB_AUTH_URL }}
+        run: |
+          set -euo pipefail
+          [[ -n "$SF_DEV_HUB_AUTH_URL" ]] || { echo 'Missing environment secret SF_DEV_HUB_AUTH_URL. Apex verification is blocked.'; exit 1; }
+          if ! printf '%s' "$SF_DEV_HUB_AUTH_URL" | sf org login sfdx-url --sfdx-url-stdin --alias Kusanya-CI-DevHub --set-default-dev-hub --json >/dev/null 2>&1; then
+            echo 'Dev Hub authentication failed; inspect the environment secret privately.'
+            exit 1
+          fi
+      - name: Verify reviewed metadata using only trusted harness code
+        env:
+          KUSANYA_SALESFORCE_DIR: ${{ github.workspace }}/reviewed/salesforce
+        run: node trusted/scripts/verify-salesforce.mjs
+      - name: Remove Dev Hub authentication from the ephemeral runner
+        if: always()
+        run: sf org logout --target-org Kusanya-CI-DevHub --no-prompt >/dev/null 2>&1

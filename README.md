@@ -9,29 +9,50 @@ Two things set it apart from the products it replaces:
 
 ## Status
 
-Pre-alpha. The build brief is in [docs/brief.md](docs/brief.md); the verification protocol every change is held to is in [docs/verification.md](docs/verification.md). Decisions are recorded in [docs/decisions](docs/decisions).
+Pre-alpha, Phase 0 scaffold; independent verification is pending. The operational
+service and Salesforce smoke tests are foundations, not a working collection product.
+No C10 product acceptance tests are implemented yet. The build contract is
+[docs/brief.md](docs/brief.md), with the review protocol in
+[docs/verification.md](docs/verification.md). See [architecture](docs/architecture.md),
+[threat model](docs/threat-model.md), [roadmap](docs/roadmap.md) and
+[decisions](docs/decisions).
 
 ## Repository layout
 
-| Folder | What it holds |
-|---|---|
-| `salesforce/` | The Salesforce package (SFDX source): objects, Apex, Lightning components, permission sets |
-| `service/` | The multi-tenant service: OpenRosa endpoints, Enketo hosting, Salesforce connection, ingestion relay |
-| `mobile/` | The Android app on the ODK JavaRosa engine (phase 6) |
-| `seed/` | Reference material: the schema of the product being replaced and a worked example of a real form, job and submission |
-| `docs/` | Brief, architecture, data model, API contracts, verification protocol, decisions |
+| Folder        | What it holds                                                                                                        |
+| ------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `salesforce/` | The Salesforce package (SFDX source): objects, Apex, Lightning components, permission sets                           |
+| `service/`    | The multi-tenant service: OpenRosa endpoints, Enketo hosting, Salesforce connection, ingestion relay                 |
+| `mobile/`     | The Android app on the ODK JavaRosa engine (phase 6)                                                                 |
+| `seed/`       | Reference material: the schema of the product being replaced and a worked example of a real form, job and submission |
+| `docs/`       | Brief, architecture, data model, API contracts, verification protocol, decisions                                     |
 
 ## Built on
 
-ODK XForms, ODK Collect, JavaRosa, Enketo and ODK Validate, all Apache-2.0. Kusanya is Apache-2.0 for the Salesforce package and the mobile app; the service licence is recorded in `docs/decisions`.
+The client architecture uses ODK XForms, ODK Collect, JavaRosa, Enketo and ODK
+Validate. Exact upstream releases and their licences will be checked before each
+integration. The Phase 0 service uses Node.js 24, TypeScript, Fastify 5 and PostgreSQL 17. Kusanya's original code uses Apache-2.0 across all three components (ADR 0002).
+See [dependency licences](docs/licences.md).
 
 ## Installing
 
-Not yet. When the first release exists this section will carry two routes: a versioned unlocked package installable by link into any Salesforce org, and a source deploy with the Salesforce CLI.
+No installable package or mobile release exists. The brief targets a versioned
+package install link and a source-deploy route. Package creation is deferred pending
+the C12 packaging decision; no package Id or registered namespace is claimed.
+
+For the scaffold's source-deploy route, follow [salesforce/README.md](salesforce/README.md)
+to create a disposable scratch org and deploy only the smoke metadata. For service
+builds, tests and container commands, see [service/README.md](service/README.md).
+Build commands are not an authorization to deploy an environment.
+
+Development and staging services belong on Cobitech's `cobitech-edge` server in
+separate Compose projects. Production belongs on Azure. Phase 0 deploys to neither.
 
 ## Contributing
 
-See CONTRIBUTING.md once it lands. Until then, open an issue.
+Read [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) and
+the verification protocol. Work on a branch, identify the brief sections and tests
+in the PR, and wait for independent review. Maintainers merge; builders do not.
 
 ## Name and trademark
 

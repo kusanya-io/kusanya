@@ -1,0 +1,76 @@
+openapi: 3.1.0
+info:
+  title: Kusanya Phase 0 operational API
+  version: 0.0.0
+  description: Health probes only. No tenant, authentication or OpenRosa API is implemented.
+paths:
+  /healthz:
+    get:
+      operationId: getLiveness
+      summary: Process is accepting requests, independent of PostgreSQL
+      responses:
+        '200':
+          description: Alive
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status]
+                properties:
+                  status: { type: string, const: ok }
+    head:
+      operationId: headLiveness
+      responses:
+        '200':
+          description: Alive; no response body
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+  /readyz:
+    get:
+      operationId: getReadiness
+      summary: PostgreSQL answers SELECT 1 within configured timeouts
+      responses:
+        '200':
+          description: Ready
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status]
+                properties:
+                  status: { type: string, const: ready }
+        '503':
+          description: PostgreSQL unavailable; no connection details returned
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status]
+                properties:
+                  status: { type: string, const: unavailable }
+    head:
+      operationId: headReadiness
+      responses:
+        '200':
+          description: Ready; no response body
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+        '503':
+          description: PostgreSQL unavailable; no response body
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
