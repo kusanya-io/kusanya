@@ -123,3 +123,29 @@ Residual risks R1 to R4 are unchanged.
 `HOLD: PR #3, 1 finding` (finding 1 closes when this run passes and the three checks are required on `main`).
 
 `PHASE 0: HOLD` until then.
+
+### Testing-strategy design review, same day: PR #3 head `ac93b95`, no scratch orgs created
+
+Scope: the builder's proposal to reduce scratch org use. It covers cheap checks first, one reused seven-day builder org, fresh hosted CI on the final head, the verifier's separate fresh org, a quota preflight with blocked diagnostics, coordination between runs, two slots for C10 test 14, and never counting reused-org or blocked runs as evidence.
+
+Facts read from the Dev Hub and GitHub at 19:13 UTC:
+
+- Limits: 3 active scratch orgs, all 3 free; 6 daily, none left. Salesforce counts the daily limit at creation over a rolling 24 hours. Deleting an org frees an active slot but not a daily one.
+- All six daily slots were used on 10 September. The setup smoke test used one at 11:33 UTC, three builder runs used three at 13:20, 13:22 and 13:26, and two verifier runs used two at 13:44 and 13:46 on the same head. All six are deleted. The verifier needed only one of its two.
+- Run 34499943255 authenticated and then failed to create its scratch org. There is no creation record after 13:46, so the daily limit caused the failure. The harness reported only "Scratch creation failed". Hosted Apex is still unverified.
+- Daily slots should return at 11:33 UTC on 11 September, then at 13:20, 13:22, 13:26, 13:44 and 13:46.
+- GitHub: free organisation plan, one member, one account with push access, no rulesets, no CODEOWNERS and no required checks on `main`.
+
+Assessment:
+
+- Independence holds if the reused org stays development only. The evidence must then be two fresh orgs per final head: the hosted CI run, which also serves as the builder's evidence, and the verifier's run.
+- One Dev Hub is enough for Phases 0 and 1, at about two reviewed heads a day with one retry. It is not enough from Phase 2. C10 test 14 needs two orgs for CI and two for the verifier on every suite run. That is 4 of 6 daily slots for one head, and every later gate reruns the test.
+- Finding 10, must fix before the gate. The required check `Salesforce verification gate` comes from the pull request's own workflow file and runs without environment approval. A pull request that edits that job can turn the check green without running Apex. One GitHub account holds every role, so no technical control prevents this. The real boundary is the verifier's review of `.github/` and `scripts/`, plus a PASS that cites the Apex run for the exact head.
+
+The adjustments A1 to A11 and the tool safeguards are in the design review on PR #3.
+
+`STRATEGY: ADOPT WITH ADJUSTMENTS A1 to A11`
+
+`HOLD: PR #3, 2 findings` (1 and 10)
+
+`PHASE 0: HOLD`
