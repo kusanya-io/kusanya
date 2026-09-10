@@ -51,6 +51,10 @@ const sha = 'a'.repeat(40);
 const fixtures = {
   PR_NUMBER: '3',
   REVIEWED_SHA: sha,
+  POLICY_RESULT: 'success',
+  POLICY_SHA: sha,
+  POLICY_DECISION: 'full-apex',
+  BUDGET_ALLOWED: 'true',
   DEFAULT_BRANCH: 'main',
   GITHUB_REPOSITORY: 'kusanya-io/kusanya',
   GITHUB_EVENT_NAME: 'pull_request',
@@ -172,7 +176,7 @@ test('Salesforce result guard rejects a head changed during tests', () => {
   assert.equal(runStep(step, { FAKE_HEAD: 'b'.repeat(40) }).status, 1);
 });
 test('Salesforce required gate rejects skipped, cancelled, failed and absent Apex', () => {
-  const step = 'Require actual Apex success, never a skipped job';
+  const step = 'Require exact-head Apex or explicit documentation exemption';
   assert.equal(runStep(step, { APEX_RESULT: 'success' }).status, 0);
   for (const result of ['skipped', 'cancelled', 'failure', '']) {
     assert.equal(runStep(step, { APEX_RESULT: result }).status, 1);
@@ -187,12 +191,88 @@ test('Salesforce workflow keeps the pinned harness, source guard and uncondition
     workflow,
     /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/,
   );
-  assert.match(workflow, /ref: 7974e25e8fa5855ca015bf01123282b744367f2e/);
+  assert.equal(
+    (workflow.match(/ref: 825030ea69bd4c833b6dd2b0f7b3009b82658576/g) ?? [])
+      .length,
+    2,
+  );
   assert.match(workflow, /run: node trusted\/scripts\/verify-salesforce\.mjs/);
-  assert.match(workflow, /needs: apex\n    if: always\(\)/);
+  assert.match(workflow, /needs: \[policy, apex\]\n    if: always\(\)/);
   assert.match(workflow, /cancel-in-progress: false/);
   assert.ok(
     workflow.indexOf('Recheck exact head immediately before authentication') <
       workflow.indexOf('      - name: Authenticate dedicated Dev Hub'),
   );
+});
+
+test('documentation exemption is explicit, exact-head and cannot imply Apex ran', () => {
+  const step = 'Require exact-head Apex or explicit documentation exemption';
+  const result = runStep(step, {
+    POLICY_DECISION: 'documentation-exemption',
+    APEX_RESULT: 'skipped',
+    BUDGET_ALLOWED: '',
+  });
+  assert.equal(result.status, 0);
+  assert.match(
+    result.stdout,
+    /Apex not run—approved documentation-only exemption/,
+  );
+  assert.match(result.stdout, /Not phase-gate Apex evidence/);
+  assert.ok(result.stdout.includes(sha));
+  for (const APEX_RESULT of ['success', 'failure', 'cancelled', '']) {
+    assert.equal(
+      runStep(step, { POLICY_DECISION: 'documentation-exemption', APEX_RESULT })
+        .status,
+      1,
+    );
+  }
+});
+
+test('gate rejects policy failure, unknown exemption, stale head and missing retry eligibility', () => {
+  const step = 'Require exact-head Apex or explicit documentation exemption';
+  for (const invalid of [
+    { POLICY_RESULT: 'skipped' },
+    { POLICY_RESULT: 'failure' },
+    { POLICY_RESULT: '' },
+    { POLICY_SHA: 'b'.repeat(40) },
+    { POLICY_SHA: '' },
+    { POLICY_DECISION: 'unknown' },
+    { FAKE_HEAD: 'b'.repeat(40) },
+    { BUDGET_ALLOWED: '' },
+    { BUDGET_ALLOWED: 'false' },
+  ]) {
+    assert.equal(
+      runStep(step, { APEX_RESULT: 'success', ...invalid }).status,
+      1,
+    );
+  }
+});
+
+test('Apex serializes across every PR and no existing target-org input exists', () => {
+  const apexJob = workflow.slice(
+    workflow.indexOf('\n  apex:'),
+    workflow.indexOf('\n  gate:'),
+  );
+  assert.match(
+    apexJob,
+    /concurrency:\n      group: \$\{\{ github\.repository \}\}-salesforce-ci\n      cancel-in-progress: false/,
+  );
+  assert.doesNotMatch(workflow, /^concurrency:/m);
+  assert.match(apexJob, /environment: salesforce-ci/);
+  const inputs = workflow.slice(
+    workflow.indexOf('    inputs:'),
+    workflow.indexOf('\npermissions:'),
+  );
+  assert.deepEqual(
+    [...inputs.matchAll(/^      ([a-z_]+):$/gm)].map((match) => match[1]),
+    ['pull_request', 'reviewed_sha'],
+  );
+  assert.doesNotMatch(inputs, /target.org|existing.org/i);
+  assert.match(apexJob, /KUSANYA_VERIFY_ROLE: ci/);
+  assert.match(
+    workflow,
+    /run: node trusted\/scripts\/verify-salesforce\.mjs\n/,
+  );
+  assert.match(workflow, /node trusted\/scripts\/apex-run-budget\.mjs/);
+  assert.match(workflow, /node trusted\/scripts\/apex-pr-policy\.mjs classify/);
 });
