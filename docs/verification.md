@@ -55,3 +55,27 @@ The builder and the verifier do not share a session. Bill relays between them. S
    `QUESTION FOR BILL:` followed by the question and the options it sees.
 
 The verifier, in turn, posts findings as pull request review comments and ends its report to Bill with either `PASS: PR #<number> may be merged` or `HOLD: PR #<number>, <count> findings`, and at a gate with `PHASE <n>: PASS` or `PHASE <n>: HOLD`.
+
+## The verification request the builder writes
+
+The hand-off line is the trigger. Beneath it, the builder writes a verification request that Bill copies whole and pastes to the verifier. It must be self-contained: the verifier starts from it with no other context from the builder's session. Exact shape:
+
+```
+VERIFICATION REQUEST
+Pull request: #<number> <title>, <url>
+Branch: <name>, head commit <sha>
+Phase: <n> of brief C11
+Brief sections implemented: <list, e.g. C4 data model (Form, Form_Version, Question), C5 print view>
+Acceptance tests claimed (brief C10): <numbers and one line each on how each was exercised>
+How to run it:
+  - scratch org: <command or script>
+  - service: <command, with the Compose project name on cobitech-edge if deployed there>
+  - tests: <commands for Apex tests, service tests, acceptance tests>
+What changed: <five to fifteen lines, by folder>
+Decisions recorded: <ADR numbers and titles>
+Known gaps and deviations from the brief: <list, or "none">
+What the verifier should look at hardest: <the two or three riskiest parts, in the builder's own judgement>
+Questions for Bill: <list, or "none">
+```
+
+Rules for the request: every path and command must be real and copy-pasteable; every test claimed must have been run by the builder before the request is written; a deviation from the brief that is not listed under "known gaps" is a blocker when the verifier finds it. Re-verification requests use the same shape with a first line `RE-VERIFICATION REQUEST` and a section `Findings answered:` listing each finding and what changed.
