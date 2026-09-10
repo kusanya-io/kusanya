@@ -100,7 +100,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ -n "$SF_DEV_HUB_AUTH_URL" ]] || { echo 'Missing environment secret SF_DEV_HUB_AUTH_URL. Apex verification is blocked.'; exit 1; }
-          if ! printf '%s' "$SF_DEV_HUB_AUTH_URL" | sf org login sfdx-url --sfdx-url-stdin --alias Kusanya-CI-DevHub --set-default-dev-hub --json >/dev/null 2>&1; then
+          if ! printf '%s' "$SF_DEV_HUB_AUTH_URL" | sf org login sfdx-url --sfdx-url-stdin - --alias Kusanya-CI-DevHub --set-default-dev-hub --json >/dev/null 2>&1; then
             echo 'Dev Hub authentication failed; inspect the environment secret privately.'
             exit 1
           fi

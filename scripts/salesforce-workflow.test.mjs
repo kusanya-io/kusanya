@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { readFileSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { resolveGitBash } from './git-bash.mjs';
 
 const workflow = readFileSync(
   new URL('../.github/workflows/salesforce-verify.yml', import.meta.url),
@@ -39,11 +39,13 @@ if (process.platform === 'win32') {
     0,
     'Git for Windows is required for shell-guard tests.',
   );
-  bash = join(
-    dirname(dirname(git.stdout.trim().split(/\r?\n/)[0])),
-    'bin',
-    'bash.exe',
-  );
+  bash = resolveGitBash(git.stdout, (path) => {
+    try {
+      return statSync(path).isFile();
+    } catch {
+      return false;
+    }
+  });
 }
 const sha = 'a'.repeat(40);
 const fixtures = {
@@ -59,6 +61,8 @@ const fixtures = {
   FAKE_SOURCE: 'kusanya-io/kusanya',
   FAKE_BASE: 'main',
   FAKE_STATE: 'open',
+  SF_DEV_HUB_AUTH_URL: 'synthetic-auth-input-not-a-credential',
+  FAKE_AUTH_RESULT: '0',
 };
 const doubles = `
 gh() {
@@ -71,6 +75,18 @@ gh() {
   esac
 }
 git() { printf '%s\\n' "$FAKE_CHECKOUT"; }
+sf() {
+  [[ "$#" -eq 9 && "$1" == org && "$2" == login && "$3" == sfdx-url &&
+     "$4" == --sfdx-url-stdin && "$5" == - && "$6" == --alias &&
+     "$7" == Kusanya-CI-DevHub && "$8" == --set-default-dev-hub && "$9" == --json ]] || return 2
+  local payload
+  payload="$(cat)"
+  [[ "$payload" == synthetic-auth-input-not-a-credential ]] || return 3
+  # Simulate a CLI that includes its input in diagnostics; neither stream may leak.
+  printf '%s\\n' "$payload"
+  printf '%s\\n' "$payload" >&2
+  return "$FAKE_AUTH_RESULT"
+}
 `;
 function runStep(name, overrides = {}) {
   const env = { ...process.env, ...fixtures, ...overrides };
@@ -125,6 +141,30 @@ test('Salesforce authentication guard rejects mismatched checkout and changed he
   assert.equal(runStep(step).status, 0);
   assert.equal(runStep(step, { FAKE_CHECKOUT: 'b'.repeat(40) }).status, 1);
   assert.equal(runStep(step, { FAKE_HEAD: 'b'.repeat(40) }).status, 1);
+});
+test('Salesforce authentication passes the explicit stdin marker and suppresses CLI output', () => {
+  const result = runStep(
+    'Authenticate dedicated Dev Hub without printing its auth URL',
+  );
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(result.stdout, '');
+  assert.equal(result.stderr, '');
+});
+test('Salesforce authentication fails closed without a secret or after a CLI failure', () => {
+  const step = 'Authenticate dedicated Dev Hub without printing its auth URL';
+  const missing = runStep(step, { SF_DEV_HUB_AUTH_URL: '' });
+  assert.equal(missing.status, 1);
+  assert.match(missing.stdout, /Missing environment secret/);
+  const failed = runStep(step, { FAKE_AUTH_RESULT: '1' });
+  assert.equal(failed.status, 1);
+  assert.match(failed.stdout, /Dev Hub authentication failed/);
+  for (const result of [missing, failed]) {
+    assert.doesNotMatch(
+      result.stdout + result.stderr,
+      /synthetic-auth-input-not-a-credential/,
+    );
+    assert.equal(result.stderr, '');
+  }
 });
 test('Salesforce result guard rejects a head changed during tests', () => {
   const step = 'Reject a stale successful run';

@@ -39,6 +39,12 @@ head. Check the actual checkout and live head again before authentication; rejec
 a head changed during testing. Serialize runs per PR without cancelling an active
 scratch lifecycle. Keep exact-line >=85% coverage and cleanup checks.
 
+Pass the Dev Hub auth URL only through stdin with the CLI's explicit
+`--sfdx-url-stdin -` marker; retain suppressed stdout/stderr and fail closed on
+authentication errors. This corrects the argument-parsing failure in hosted run
+`34487910391` (attempt 2), which never reached scratch creation or Apex execution.
+The correction does not change the credential scope, harness pin or approval gate.
+
 Require `Salesforce verification gate`, an always-running job that fails unless the
 Apex job succeeded. Do not require the conditionally skipped Apex job alone: GitHub
 treats skipped jobs as successful required checks.
@@ -63,9 +69,12 @@ review YAML as well as source and must not approve a stale run. Missing secrets 
 an unconfigured/denied environment do not count as passing Apex tests. Environment
 rules must permit main and `refs/pull/*/merge`; a main-only rule blocks PR runs.
 
-Node tests execute the actual workflow shell guards against synthetic GitHub/Git
-responses, including forks, stale SHA, invalid input and skipped-job cases. These
-are policy regressions, not real Apex evidence. Hosted scratch execution and the
+Node tests execute the actual workflow shell guards against synthetic GitHub/Git/
+Salesforce responses, including forks, stale SHA, invalid input, skipped jobs and
+authentication argument/stdin/output handling. Resolve Windows test Bash only from
+an installed Git root's `bin` or `usr/bin`, checking all discovered Git paths so
+the tests also run from Git Bash without selecting the Windows WSL launcher. These
+are policy/plumbing regressions, not real Apex evidence. Hosted scratch execution and the
 maintainer's required-check settings must also be verified before the phase passes.
 The builder never approves its own environment run, publishes a gate verdict,
 changes main or merges a PR to get past missing configuration.

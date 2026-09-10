@@ -66,6 +66,12 @@ trusted harness. Salesforce metadata is checked out separately at the PR head; n
 PR JavaScript or npm scripts run in the credentialed job. A harness update requires
 an explicitly reviewed pin change. Approval still requires inspection of YAML.
 
+Authentication pipes the environment secret directly to the pinned CLI with
+`--sfdx-url-stdin -`. The explicit `-` is required: without it the CLI can consume
+the following `--alias` flag as the stdin option's value and reject the command.
+CLI output stays suppressed on both success and failure; never print an auth URL
+to diagnose a failed run. A failed authentication run supplies no Apex evidence.
+
 Runs serialize per PR without cancelling an active scratch lifecycle. A changed
 head queues a fresh run; the older run cleans up then fails its stale-head check.
 Failures, missing coverage, <85% coverage and cleanup errors fail the Apex job. The
@@ -91,10 +97,14 @@ separately reviewed trusted status publisher; no write-token permission is added
 ### Workflow policy regressions
 
 `npm test` includes `scripts/salesforce-workflow.test.mjs`. These tests execute the
-actual inline Bash guards using synthetic GitHub/Git responses. They cover valid
-PR/dispatch inputs, forks, stale SHA, mismatched checkout, invalid inputs and the
-final fail-closed gate. Windows uses Bash from Git for Windows. These tests validate
-policy only; they do not authenticate to Salesforce or replace hosted scratch tests.
+actual inline Bash guards using synthetic GitHub/Git/Salesforce responses. They
+cover valid PR/dispatch inputs, forks, stale SHA, mismatched checkout, invalid inputs,
+authentication arguments/stdin, missing credentials, suppressed CLI diagnostics and
+the final fail-closed gate. Windows resolves Bash from the Git for Windows root's
+`bin` or `usr/bin`, including when Git Bash exposes `mingw64/bin/git.exe` first.
+Resolver fixtures also run on Linux. These tests validate policy and command
+plumbing only; they do not authenticate to Salesforce or replace hosted scratch
+tests.
 
 See ADR 0005 for Bill's approval and the security trade-offs. GitHub documents
 [environment approval and ref rules](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)
