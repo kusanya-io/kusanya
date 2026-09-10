@@ -1,0 +1,120 @@
+﻿{
+    "name":  "gfsurveys__ContactGroup__c",
+    "label":  "Group",
+    "fields":  [
+                   {
+                       "name":  "Id",
+                       "label":  "Record ID",
+                       "type":  "id",
+                       "length":  18,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "OwnerId",
+                       "label":  "Owner ID",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "Group",
+                                           "User"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "Name",
+                       "label":  "Group Name",
+                       "type":  "string",
+                       "length":  80,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Description__c",
+                       "label":  "Description",
+                       "type":  "textarea",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Status__c",
+                       "label":  "Status",
+                       "type":  "picklist",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+                                        "Active",
+                                        "Inactive"
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__MemberCount__c",
+                       "label":  "Member Count",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  true
+                   },
+                   {
+                       "name":  "gfsurveys__SurveyCount__c",
+                       "label":  "Survey Count",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  true
+                   }
+               ]
+}

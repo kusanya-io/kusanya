@@ -1,0 +1,898 @@
+﻿{
+    "name":  "gfsurveys__Question__c",
+    "label":  "Question",
+    "fields":  [
+                   {
+                       "name":  "Id",
+                       "label":  "Record ID",
+                       "type":  "id",
+                       "length":  18,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "Name",
+                       "label":  "Question Name",
+                       "type":  "string",
+                       "length":  80,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Survey__c",
+                       "label":  "Form",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__Survey__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  false,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__API_External_Id__c",
+                       "label":  "API External Id",
+                       "type":  "string",
+                       "length":  100,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__AllowSelfIntersectingPolygon__c",
+                       "label":  "Allow Users to Save Invalid Polygons",
+                       "type":  "boolean",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__AllowTapToCaptureGPSCoordinate__c",
+                       "label":  "Allow Tap To Capture GPS Coordinate",
+                       "type":  "boolean",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Caption__c",
+                       "label":  "Caption",
+                       "type":  "string",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__CascadingLevel__c",
+                       "label":  "Cascading Level",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__CascadingLevel__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__CascadingSelect__c",
+                       "label":  "Cascading Select",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__CascadingSelect__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__ControllingQuestion__c",
+                       "label":  "Controlling Question",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__Question__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__CurrentTime__c",
+                       "label":  "Use current date/time as default",
+                       "type":  "boolean",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__DoAfter__c",
+                       "label":  "DoAfter",
+                       "type":  "textarea",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__DoBefore__c",
+                       "label":  "DoBefore",
+                       "type":  "textarea",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__DynamicOperationType__c",
+                       "label":  "Dynamic Operation Type",
+                       "type":  "picklist",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+                                        "Calculation",
+                                        "Validation"
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__DynamicOperation__c",
+                       "label":  "Dynamic Operation",
+                       "type":  "textarea",
+                       "length":  50000,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Dynamic_Operation_Test_Data__c",
+                       "label":  "Dynamic Operation Test Data",
+                       "type":  "textarea",
+                       "length":  131072,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__FromVersion__c",
+                       "label":  "First Version",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Hidden__c",
+                       "label":  "Hidden",
+                       "type":  "boolean",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Hint__c",
+                       "label":  "Supporting text / Instructions",
+                       "type":  "textarea",
+                       "length":  2000,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__IsRemoteEditable__c",
+                       "label":  "Can be edited in downloaded form",
+                       "type":  "boolean",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__IsRepeatInTable__c",
+                       "label":  "Display Repeat Section as a Table",
+                       "type":  "boolean",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__MaxInstance__c",
+                       "label":  "MaxInstance",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Maximum__c",
+                       "label":  "Maximum",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Media_Duration_Seconds__c",
+                       "label":  "Live Media Duration in Seconds",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Media_Upload_Folder_Link__c",
+                       "label":  "Media Upload Folder Link",
+                       "type":  "string",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__MinimumRequiredArea__c",
+                       "label":  "Minimum Required Area (Hectares)",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__MinimumRequiredPerimeter__c",
+                       "label":  "Minimum Required Perimeter (Meters)",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Minimum__c",
+                       "label":  "Minimum",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Parent__c",
+                       "label":  "Parent",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__Question__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Position__c",
+                       "label":  "Position",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__PpiResultsField__c",
+                       "label":  "Poverty-assessment Tools Result Field",
+                       "type":  "picklist",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+                                        "ClientId__c",
+                                        "Gender__c",
+                                        "Age__c",
+                                        "HouseholdSize__c",
+                                        "JoinedDate__c",
+                                        "Geolocation__c",
+                                        "AnswerOne__c",
+                                        "AnswerTwo__c",
+                                        "AnswerThree__c",
+                                        "AnswerFour__c",
+                                        "AnswerFive__c",
+                                        "AnswerSix__c",
+                                        "AnswerSeven__c",
+                                        "AnswerEight__c",
+                                        "AnswerNine__c",
+                                        "AnswerTen__c"
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Preserve_Media_File_After_Upload__c",
+                       "label":  "Preserve Media File After Upload",
+                       "type":  "boolean",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__PreviousVersionQuestion__c",
+                       "label":  "Previous version",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__Question__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__PrintAnswer__c",
+                       "label":  "Print Answer",
+                       "type":  "boolean",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__RemoteId__c",
+                       "label":  "Remote Id",
+                       "type":  "string",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__RemoteServerId__c",
+                       "label":  "Remote Server Id",
+                       "type":  "string",
+                       "length":  20,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__RepeatCondition__c",
+                       "label":  "Repeat Condition",
+                       "type":  "picklist",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+                                        "undetermined",
+                                        "fixed",
+                                        "previews_answer"
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__RepeatSourceValue__c",
+                       "label":  "Repeat Source Value",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__Question__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__RepeatTimes__c",
+                       "label":  "ZZDeprecated_Repeat Times",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__RepeatValue__c",
+                       "label":  "Repeat Value",
+                       "type":  "string",
+                       "length":  80,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Require_Live_Photo__c",
+                       "label":  "Require Live Photo or Video",
+                       "type":  "boolean",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Required__c",
+                       "label":  "Required",
+                       "type":  "boolean",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__ResponseValidationExample__c",
+                       "label":  "Example of Valid Response",
+                       "type":  "string",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__ResponseValidation__c",
+                       "label":  "Response Validation",
+                       "type":  "string",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__SamePage__c",
+                       "label":  "Show all questions on one page",
+                       "type":  "boolean",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__SkipLogicBehavior__c",
+                       "label":  "SkipLogicBehavior",
+                       "type":  "picklist",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+                                        "Show",
+                                        "Hide"
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__SkipLogicOperator__c",
+                       "label":  "SkipLogicOperator",
+                       "type":  "picklist",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+                                        "All",
+                                        "Any"
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__SurveyLibrary__c",
+                       "label":  "Remote Library",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__SurveyLibrary__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__SurveyVersion__c",
+                       "label":  "Form Version",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__SurveyVersion__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Test_Dynamic_Operations__c",
+                       "label":  "Test Dynamic Operations",
+                       "type":  "boolean",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__ToVersion__c",
+                       "label":  "Last Version",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Type__c",
+                       "label":  "Type",
+                       "type":  "picklist",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+                                        "section",
+                                        "repeat",
+                                        "text",
+                                        "text-short",
+                                        "text-long",
+                                        "number",
+                                        "number-integer",
+                                        "number-decimal",
+                                        "date",
+                                        "date-date",
+                                        "date-datetime",
+                                        "radio",
+                                        "checkbox",
+                                        "static-content",
+                                        "end_of_survey",
+                                        "barcode",
+                                        "gps-location",
+                                        "gps-geoshape",
+                                        "picture",
+                                        "signature",
+                                        "video",
+                                        "audio",
+                                        "file",
+                                        "cascading-select",
+                                        "cascading-level"
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__IsDraft__c",
+                       "label":  "Can be edited",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  true
+                   }
+               ]
+}

@@ -1,0 +1,169 @@
+﻿{
+    "name":  "gfsurveys__JobTemplate__c",
+    "label":  "Job",
+    "fields":  [
+                   {
+                       "name":  "Id",
+                       "label":  "Record ID",
+                       "type":  "id",
+                       "length":  18,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "OwnerId",
+                       "label":  "Owner ID",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "Group",
+                                           "User"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "Name",
+                       "label":  "Job Name",
+                       "type":  "string",
+                       "length":  80,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__CloseReason__c",
+                       "label":  "Close Reason",
+                       "type":  "picklist",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+                                        "Automatically Closed"
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Hierarchy__c",
+                       "label":  "Hierarchy",
+                       "type":  "textarea",
+                       "length":  16000,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Instructions__c",
+                       "label":  "Instructions",
+                       "type":  "textarea",
+                       "length":  500,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__PublishedDate__c",
+                       "label":  "Published Date",
+                       "type":  "date",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Status__c",
+                       "label":  "Status",
+                       "type":  "picklist",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+                                        "Draft",
+                                        "Published",
+                                        "Closed"
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__TWFolder__c",
+                       "label":  "TWFolder",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__TWFolder__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__TasksNumber__c",
+                       "label":  "Tasks Number",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  true
+                   }
+               ]
+}

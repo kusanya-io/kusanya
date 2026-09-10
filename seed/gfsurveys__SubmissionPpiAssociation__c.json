@@ -1,0 +1,151 @@
+﻿{
+    "name":  "gfsurveys__SubmissionPpiAssociation__c",
+    "label":  "Submission PAT Association",
+    "fields":  [
+                   {
+                       "name":  "Id",
+                       "label":  "Record ID",
+                       "type":  "id",
+                       "length":  18,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "OwnerId",
+                       "label":  "Owner ID",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "Group",
+                                           "User"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "Name",
+                       "label":  "Junction Number",
+                       "type":  "string",
+                       "length":  80,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__PpiResult__c",
+                       "label":  "Poverty-assessment Tools Result",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__PpiResult__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__PpiTableLine__c",
+                       "label":  "Poverty-assessment Tools Table Line",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__PPITableLine__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Submission__c",
+                       "label":  "Submission",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__Submission__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__PovertyLineIdentifier__c",
+                       "label":  "Poverty Line Identifier",
+                       "type":  "string",
+                       "length":  1300,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  true
+                   },
+                   {
+                       "name":  "gfsurveys__PovertyLineName__c",
+                       "label":  "Poverty Line Name",
+                       "type":  "string",
+                       "length":  1300,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  true
+                   },
+                   {
+                       "name":  "gfsurveys__Probability__c",
+                       "label":  "Probability",
+                       "type":  "percent",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  true
+                   }
+               ]
+}

@@ -1,0 +1,167 @@
+﻿{
+    "name":  "gfsurveys__PPITableLine__c",
+    "label":  "Poverty-assessment Tools Table Line",
+    "fields":  [
+                   {
+                       "name":  "Id",
+                       "label":  "Record ID",
+                       "type":  "id",
+                       "length":  18,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "OwnerId",
+                       "label":  "Owner ID",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "Group",
+                                           "User"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "Name",
+                       "label":  "Poverty-assessment Tools Table Line Numb",
+                       "type":  "string",
+                       "length":  80,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__From__c",
+                       "label":  "From",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__PPITableDataSet__c",
+                       "label":  "Poverty-assessment Tools Table Data Set",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__PPITableDataSet__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__PpiTable__c",
+                       "label":  "Poverty-assessment Tools Table",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__PPITable__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Probability__c",
+                       "label":  "Probability",
+                       "type":  "percent",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__RemoteId__c",
+                       "label":  "Remote Id",
+                       "type":  "string",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__SurveyLibrary__c",
+                       "label":  "Remote Library",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__SurveyLibrary__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__To__c",
+                       "label":  "To",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   }
+               ]
+}

@@ -1,0 +1,313 @@
+﻿{
+    "name":  "gfsurveys__Submission__c",
+    "label":  "Submission",
+    "fields":  [
+                   {
+                       "name":  "Id",
+                       "label":  "Record ID",
+                       "type":  "id",
+                       "length":  18,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "Name",
+                       "label":  "Submission Name",
+                       "type":  "string",
+                       "length":  80,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Survey__c",
+                       "label":  "Form",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__Survey__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  true,
+                       "updateable":  false,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Assignment__c",
+                       "label":  "Assignment Group",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__ContactGroupSurveyAssignment__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Date__c",
+                       "label":  "Date",
+                       "type":  "date",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Device__c",
+                       "label":  "Device",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__Device__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Interviewee__c",
+                       "label":  "Respondent",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "Contact"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Mobile_User__c",
+                       "label":  "Mobile User",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "User"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__PPIScore__c",
+                       "label":  "Poverty-assessment Tools Score",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Status__c",
+                       "label":  "Status",
+                       "type":  "picklist",
+                       "length":  255,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+                                        "Uploading",
+                                        "Uploaded",
+                                        "Uploaded - Processed after Survey Automatically Closed",
+                                        "Uploaded After Survey Closed"
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__SubmissionXMLMD5__c",
+                       "label":  "Submission XML MD5",
+                       "type":  "string",
+                       "length":  24,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__SurveyVersion__c",
+                       "label":  "FormVersion",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "gfsurveys__SurveyVersion__c"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__Surveyor__c",
+                       "label":  "ZZDeprecated_Mobile User",
+                       "type":  "reference",
+                       "length":  18,
+                       "referenceTo":  [
+                                           "Contact"
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__endDate__c",
+                       "label":  "endDate",
+                       "type":  "datetime",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__gps_approximation__c",
+                       "label":  "gps Approximation",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__gps_x__c",
+                       "label":  "gps x",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__gps_y__c",
+                       "label":  "gps y",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__startDate__c",
+                       "label":  "startDate",
+                       "type":  "datetime",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  true,
+                       "createable":  true,
+                       "calculated":  false
+                   },
+                   {
+                       "name":  "gfsurveys__AnswersCount__c",
+                       "label":  "Answers count",
+                       "type":  "double",
+                       "length":  0,
+                       "referenceTo":  [
+
+                                       ],
+                       "picklist":  [
+
+                                    ],
+                       "required":  false,
+                       "updateable":  false,
+                       "createable":  false,
+                       "calculated":  true
+                   }
+               ]
+}
