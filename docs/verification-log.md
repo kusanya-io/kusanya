@@ -57,3 +57,14 @@ Collector stamp, no Salesforce user or sharing for collectors, API batching, ten
 Becomes `PASS` when: the branch is published and the hosted CI run is green; findings 2 and 3 are fixed; finding 4 is fixed or deferred with Bill's word. Finding 1 does not block the merge, because the Salesforce workflow must exist on `main` before it can run at all. It blocks the gate.
 
 `PHASE 0: HOLD` pending finding 1 and a green hosted run.
+
+### Addendum, same day: pull request #3 published, head `7974e25e8fa5855ca015bf01123282b744367f2e`
+
+Two commits were added after the review: a quoting fix to the Postgres health command in `ci.yml` (the first hosted run failed on it), and the removal of `scripts/publish-phase0.ps1`, which closes finding 2. The reviewed code is otherwise unchanged, so the test evidence above stands.
+
+- Hosted CI run 34485172831 on the head: both jobs green. Unit and integration tests ran four times (locally on the runner and inside the container): 8, 2, 8, 2 passed, none skipped.
+- Findings posted as review comments on #3: 1, 3, 4 and notes 5 to 7. Finding 8 is Bill's call and was not posted.
+
+`HOLD: PR #3, 3 findings` (1 blocks the gate, 3 and 4 block the merge).
+
+`PHASE 0: HOLD` pending finding 1.
