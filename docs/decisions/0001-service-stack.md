@@ -28,6 +28,12 @@ process liveness; `/readyz` checks PostgreSQL availability. These operational
 endpoints carry no tenant or submission data. Tenant-facing APIs, migrations,
 OpenRosa, authentication and Salesforce calls are not implemented in this phase.
 
+Review refinement (2026-09-10, PR #3 finding 4): preserve integer 4xx request-error
+statuses with a generic `Request rejected` message; collapse other unhandled errors
+to 500 with `Internal server error`. Do not reflect the original message, payload,
+URL or stack. Explicit readiness 503 and not-found responses keep their contracts.
+Parser regression tests exercise 413, 400 and 415 without adding business routes.
+
 ## Alternatives considered
 
 - Python/FastAPI is suitable, but TypeScript keeps the service and future LWC

@@ -17,6 +17,11 @@ Keep one repository with `salesforce/`, `service/` and `mobile/`. Apply the exis
 root Apache-2.0 licence to Kusanya's original service code as well as the Salesforce
 and future mobile code. Document direct dependency licences in `docs/licences.md`.
 
+Use the root Prettier configuration and locked tooling across shared files and
+service source/tests, alongside the service's typed ESLint rules. Exclude generated
+output, dependencies and supplied reference material. A second service formatter
+installation would duplicate version/configuration management without a need.
+
 ## Alternatives considered
 
 Three repositories provide independent release permissions but complicate changes

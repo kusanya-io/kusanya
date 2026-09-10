@@ -23,3 +23,8 @@ Decisions still due before their corresponding implementation: exact Collect/Enk
 versions, tenant OAuth flow, namespace availability, XML/queue/transaction strategy,
 API-call budget, storage drivers and measured Cobitech upload bandwidth. Packaging
 choice and paid dependencies require Bill's approval under C12.
+
+Before creating the first Phase 1 object, check availability of the brief's `ksny`
+namespace and commit the namespace decision ADR. This prerequisite is not fulfilled
+by the empty namespace in the Phase 0 scratch scaffold. Do not start Phase 1 until
+Claude passes the Phase 0 gate.

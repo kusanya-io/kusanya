@@ -29,7 +29,7 @@ Regenerate it when either lockfile changes with `node scripts/dependency-licence
 ## Integration and build tools
 
 Salesforce CLI is an external build tool; CI pins its version. GitHub Actions pins
-the checkout/setup-node/upload-artifact actions to reviewed commit hashes (MIT).
+the checkout/setup-node actions to reviewed commit hashes (MIT).
 The container retains upstream licences/notices. Recheck the full image inventory
 before a release, including operating-system packages and copied npm notices.
 

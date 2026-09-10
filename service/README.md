@@ -18,7 +18,10 @@ npm test
 
 The unit suite checks invalid configuration, credential-safe errors, liveness during
 database failure, readiness recovery, pool shutdown, HEAD probes and absent business
-routes. No C10 product acceptance test is claimed.
+routes. It also checks oversized bodies (413), malformed JSON (400), unsupported
+media (415), and sanitized fallback errors. No C10 product acceptance test is claimed.
+From the repository root, `npm run format:check` checks service formatting as well
+as shared files; `npm run format` applies the shared Prettier configuration.
 
 For an existing disposable PostgreSQL 17 database, inject `DATABASE_URL`, set
 `DATABASE_SSL` for that database, and set `REQUIRE_DATABASE_TESTS=true`, then run:
@@ -55,6 +58,12 @@ CA. `DATABASE_TIMEOUT_MS` defaults to 3000 (maximum 30000); `DATABASE_POOL_MAX`
 defaults to 10 (maximum 100). `PORT` defaults to 3000 and `LOG_LEVEL` to info.
 Configuration errors name settings without printing their values. Deployed HTTP
 requires the environment's approved TLS ingress.
+
+The request error handler preserves integer 4xx statuses and returns only
+`{"error":"Request rejected"}`. Other unhandled errors return 500 with
+`{"error":"Internal server error"}`. Error details, request bodies and URLs are
+not reflected. This does not change explicit 404 responses or readiness's 503
+dependency status, and does not add POST or OpenRosa routes.
 
 ## Containers
 

@@ -52,7 +52,8 @@ verified TLS. See `service/README.md` for image builds and container test comman
 ## Style, dependencies and tests
 
 Use TypeScript strict mode, ESLint and original neutral names. Root Prettier checks
-docs, CI, scripts and Apex; the service uses its own typed lint configuration. Every
+docs, CI, scripts, Apex and service source/tests; generated service output is excluded.
+The service also uses its own typed lint configuration. Every
 Apex class needs a responsibility header, and every future object/field a description.
 No application model exists in Phase 0. Health probes must not disclose credentials.
 

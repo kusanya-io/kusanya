@@ -2,7 +2,7 @@ seed/
 docs/brief.md
 docs/verification.md
 LICENSE
-service/
+service/dist/
 node_modules/
 work/
 coverage/

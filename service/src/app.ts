@@ -43,9 +43,20 @@ export function createApp(config: Config, database: Database, logging = true) {
   app.setNotFoundHandler((_request, reply) =>
     reply.code(404).send({ error: 'Not found' }),
   );
-  app.setErrorHandler((_error, _request, reply) =>
-    reply.code(500).send({ error: 'Internal server error' }),
-  );
+  app.setErrorHandler((error, _request, reply) => {
+    const status =
+      typeof error === 'object' && error !== null && 'statusCode' in error
+        ? error.statusCode
+        : undefined;
+    const clientError =
+      typeof status === 'number' &&
+      Number.isInteger(status) &&
+      status >= 400 &&
+      status < 500;
+    return reply.code(clientError ? status : 500).send({
+      error: clientError ? 'Request rejected' : 'Internal server error',
+    });
+  });
   app.get(
     '/healthz',
     { schema: { response: { 200: statusSchema('ok') } } },

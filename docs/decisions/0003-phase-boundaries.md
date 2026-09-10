@@ -19,6 +19,8 @@ Enketo for the web path. Reserve `mobile/` for the Kotlin/JavaRosa client in C11
 Phase 6; Phase 0 does not create a second form renderer. Define client version
 targets in ADRs before their first integration. Define OAuth flow, tenant identity,
 namespace availability and API-call budget in ADRs before those designs are built.
+Specifically, the `ksny` availability check and namespace ADR must land before the
+first Phase 1 object is created; neither is claimed complete by this scaffold.
 
 Deliberately exclude PPI, mobile money, survey libraries, contact groups, client
 assignation and identified-interviewee features per C4/C12. Preserve generic
