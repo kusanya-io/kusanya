@@ -23,8 +23,11 @@ format and registration are deferred. The brief's `ksny` prefix remains subject
 to an availability check and ADR; no package Id is claimed. Every Apex class carries
 a responsibility header. The smoke test checks the version and zero SOQL/DML.
 
-CI's `salesforce-verify.yml` must first exist on the trusted default branch. Configure
-required reviewers and the Dev Hub secret on environment `salesforce-ci`, following
-[the CI runbook](../docs/ci.md). Only trusted harness code runs locally with the
-credential; the reviewed PR supplies Salesforce metadata. Never paste auth URLs in
-source, issue comments or terminal output.
+CI's `salesforce-verify.yml` automatically requests protected-environment approval
+for same-repository PRs. Configure `salesforce-ci` reviewers, allowed refs and its
+Dev Hub secret, then require `Salesforce verification gate` on main, following
+[the CI runbook](../docs/ci.md). An immutable reviewed harness runs against separately
+checked-out PR metadata. Approvers must inspect the workflow as well as the exact
+source SHA. Fork changes need a reviewed same-repository PR; manual dispatch from
+main remains available once the workflow lands there. Never paste auth URLs in
+source, issues, chat or terminal output. Missing configuration is not passing Apex.

@@ -1,9 +1,14 @@
 # ADR 0004: Separate public CI from approved Salesforce validation
 
-- Status: Accepted (implementation decision; phase gate pending verification)
+- Status: Superseded in part by ADR 0005 (trigger and harness-selection policy)
 - Date: 2026-09-10
 - Brief sections: C8, C11 Phase 0, C12, C13; verification protocol
 - Decision owner: Cobitech Solutions
+
+Historical first implementation below. Bill approved the automatic same-repository
+PR approach on 2026-09-10 after Claude's finding 1. ADR 0005 and `docs/ci.md` describe
+the current policy; the manual-only bootstrap limitation below is no longer the
+intended design. Environment/secret/required-check setup still needs a maintainer.
 
 ## Context
 

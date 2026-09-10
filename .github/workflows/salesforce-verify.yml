@@ -1,8 +1,11 @@
 name: Salesforce verification
-# Dispatch trusted default-branch code after reviewing the exact source SHA.
-# Configure required reviewers and Dev Hub secret in environment salesforce-ci.
-# Never use pull_request_target or expose credentials to PR executable scripts.
+# Bill approved automatic same-repository PR validation on 2026-09-10.
+# Review the workflow and exact head before approving environment salesforce-ci.
+# Never use pull_request_target or execute PR scripts beside Dev Hub credentials.
 on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
       pull_request:
@@ -16,8 +19,16 @@ on:
 permissions:
   contents: read
   pull-requests: read
+concurrency:
+  group: salesforce-${{ github.event.pull_request.number || inputs.pull_request }}
+  # Let the previous run clean up its scratch org instead of cancelling it.
+  cancel-in-progress: false
 jobs:
   apex:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     name: Scratch org tests and 85 percent coverage
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -26,39 +37,63 @@ jobs:
       SF_DISABLE_LOG_FILE: 'true'
       SF_DISABLE_TELEMETRY: 'true'
       KUSANYA_DEV_HUB: Kusanya-CI-DevHub
+      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pull_request }}
+      REVIEWED_SHA: ${{ github.event.pull_request.head.sha || inputs.reviewed_sha }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
     steps:
       - name: Confirm reviewed commit and trusted workflow
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ inputs.pull_request }}
-          REVIEWED_SHA: ${{ inputs.reviewed_sha }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
-          [[ "$GITHUB_REF_NAME" == "$DEFAULT_BRANCH" ]] || { echo 'Dispatch this workflow from the trusted default branch.'; exit 1; }
           [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo 'Invalid PR number.'; exit 1; }
           [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'A full reviewed SHA is required.'; exit 1; }
+          case "$GITHUB_EVENT_NAME" in
+            pull_request)
+              [[ "$GITHUB_BASE_REF" == "$DEFAULT_BRANCH" ]] || { echo 'PR must target the default branch.'; exit 1; }
+              [[ "$GITHUB_REF" == "refs/pull/$PR_NUMBER/merge" ]] || { echo 'Unexpected PR ref.'; exit 1; }
+              ;;
+            workflow_dispatch)
+              [[ "$GITHUB_REF" == "refs/heads/$DEFAULT_BRANCH" ]] || { echo 'Dispatch from the trusted default branch.'; exit 1; }
+              ;;
+            *) echo 'Unsupported workflow event.'; exit 1 ;;
+          esac
           current_sha="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)"
           source_repo="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.repo.full_name)"
-          [[ "$current_sha" == "$REVIEWED_SHA" && "$source_repo" == "$GITHUB_REPOSITORY" ]] || { echo 'PR head changed or fork source refused. Review the same-repository head first.'; exit 1; }
+          base_branch="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .base.ref)"
+          pr_state="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .state)"
+          [[ "$current_sha" == "$REVIEWED_SHA" && "$source_repo" == "$GITHUB_REPOSITORY" && "$base_branch" == "$DEFAULT_BRANCH" && "$pr_state" == open ]] || { echo 'PR changed, closed or fork source refused. Stage reviewed fork contributions in a same-repository PR.'; exit 1; }
+          printf 'Verifying PR %s at head %s\n' "$PR_NUMBER" "$REVIEWED_SHA"
       - name: Checkout trusted verification harness
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.sha }}
+          # Immutable harness already inspected in Claude's first PR #3 review.
+          # This bootstrap pin avoids needing to merge PR #3 before its Apex run.
+          # Update only after explicitly reviewing changes to the harness.
+          ref: 7974e25e8fa5855ca015bf01123282b744367f2e
           path: trusted
           persist-credentials: false
+          sparse-checkout: scripts
       - name: Checkout reviewed metadata as data only
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ inputs.reviewed_sha }}
+          ref: ${{ env.REVIEWED_SHA }}
           path: reviewed
           persist-credentials: false
+          sparse-checkout: salesforce
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
       - name: Install pinned Salesforce CLI
         run: npm install --global @salesforce/cli@2.135.7
         working-directory: ${{ runner.temp }}
+      - name: Recheck exact head immediately before authentication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$(git -C reviewed rev-parse HEAD)" == "$REVIEWED_SHA" ]] || { echo 'Checked-out source does not match the reviewed SHA.'; exit 1; }
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)" == "$REVIEWED_SHA" ]] || { echo 'PR head changed; approve a fresh run.'; exit 1; }
       - name: Authenticate dedicated Dev Hub without printing its auth URL
         env:
           SF_DEV_HUB_AUTH_URL: ${{ secrets.SF_DEV_HUB_AUTH_URL }}
@@ -73,6 +108,25 @@ jobs:
         env:
           KUSANYA_SALESFORCE_DIR: ${{ github.workspace }}/reviewed/salesforce
         run: node trusted/scripts/verify-salesforce.mjs
+      - name: Reject a stale successful run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)" == "$REVIEWED_SHA" ]] || { echo 'PR changed during testing; this result cannot verify the new head.'; exit 1; }
       - name: Remove Dev Hub authentication from the ephemeral runner
         if: always()
         run: sf org logout --target-org Kusanya-CI-DevHub --no-prompt >/dev/null 2>&1
+  gate:
+    name: Salesforce verification gate
+    needs: apex
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require actual Apex success, never a skipped job
+        env:
+          APEX_RESULT: ${{ needs.apex.result }}
+        run: |
+          set -euo pipefail
+          [[ "$APEX_RESULT" == success ]] || { echo 'Apex did not pass. Configure/approve the environment; stage fork contributions in a reviewed same-repository PR.'; exit 1; }

@@ -17,7 +17,8 @@ a Salesforce licence per collector. Keep customer fields as mapping metadata.
 ## Prerequisites
 
 Node.js 24, npm, Salesforce CLI 2.135.7, an authorised dedicated Dev Hub, and Docker
-for container checks. PostgreSQL 17 is required for the live integration test.
+for container checks. Bash (included in Git for Windows) runs the workflow-policy
+regression tests. PostgreSQL 17 is required for the live integration test.
 Developer source work and disposable CI tests do not change C12a hosting: application
 development/staging run on Cobitech and production runs on Azure.
 
