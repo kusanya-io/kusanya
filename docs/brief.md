@@ -267,6 +267,21 @@ Phases; do not start one until the previous passes its tests.
 
 Keep `docs/` current: architecture, data model, the service's OpenAPI contract, the OpenRosa endpoints implemented, the ADRs. Every object and field carries a description; every Apex class states its responsibility in a header. Store nothing about collectors or submissions outside the customer's org and service database. Ask before choosing between unlocked and managed packaging, or adding a paid dependency. Decide and record the service language and framework, the database, the ODK Collect and Enketo versions to target, the Salesforce OAuth flow for tenant connections, and the namespace prefix. Never introduce a design that requires a Salesforce licence per collector; if something seems to need one, stop and ask. Where this brief conflicts with the ODK XForms specification, the specification wins and an ADR notes it. Do not build PPI, mobile money, the survey library or contact groups; note in an ADR that they were excluded on purpose.
 
+### C12a. Environments and infrastructure
+
+Confirmed facts, read from the machine on 10 September 2026: Cobitech runs an HP server on Ubuntu Server 24.04, 8 cores (Intel i7-1165G7), 15 GB memory, 414 GB free disk, Docker Engine 29 and Docker Compose 5, reachable by the maintainers over Tailscale (SSH alias `cobitech-edge`), with public hostnames served through a Cloudflare Tunnel rather than port forwarding. It already hosts three WordPress sites (each its own Compose project with Nginx, PHP-FPM and MariaDB), an Ollama model with Open WebUI, and Uptime Kuma. Local daily backups, weekly verification, encrypted off-site copies with 30-day retention and email alerts are in place.
+
+Environments:
+
+- **Development and staging run on that server**, as one Compose project per environment (`kusanya-dev`, `kusanya-staging`), each on its own Docker network with its own Postgres, MinIO (S3-compatible object storage), Enketo and the service. They share nothing with the WordPress stacks: no MariaDB, no Nginx container, no volumes. Every Kusanya container carries CPU and memory limits (start at 3 cores and 4 GB for the whole staging project) so the other workloads are never starved.
+- **Staging is public through the existing Cloudflare Tunnel** on one hostname the maintainers assign (for example `kusanya-staging.cobitechsolutions.com`), so phones in the field can reach it; development is private over Tailscale only.
+- **Production is Azure**: Container Apps for the service and Enketo, Azure Database for PostgreSQL, Azure Blob Storage for attachments. The server never hosts a production tenant: it is a single machine on a residential connection with no SLA, shared with other workloads.
+- **Portability rules that make the move possible:** object storage behind one interface with an S3 driver (MinIO) and an Azure Blob driver; every setting from environment variables with an `.env.example` committed and real `.env` files never committed; no host paths in the service; migrations run as a one-shot container; the same image runs in every environment.
+- **Deployment:** a `deploy/` folder holds the Compose files per environment and the Azure definition. GitHub Actions deploys to staging on merge to `main` by connecting to the server through the Tailscale GitHub Action with an ephemeral auth key and running `docker compose pull && docker compose up -d`; never a self-hosted runner on this public repository. Production deploys are manual from a tagged release.
+- **Operations on the server:** Kusanya volumes are added to the existing backup job and to the weekly restore verification; Uptime Kuma gets checks on the service health endpoint and on Enketo; logs go to the Docker log driver with rotation.
+- **Not needed until justified:** Redis or any separate queue (the brief's durable queue lives in Postgres); a custom PWA front end (the browser path is Enketo).
+- **Verify before relying on it:** the server's upload bandwidth, which bounds photo sync during a field test; measure it and record it in an ADR.
+
 ### C13. Distribution: open source first, AppExchange later if ever
 
 The product is built in the open from the first commit, in the manner of community Salesforce projects such as SalesforceDocGen (Apache-2.0, SFDX source, CONTRIBUTING and a code of conduct, issues, pull requests and discussions on GitHub).
