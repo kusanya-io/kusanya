@@ -45,6 +45,12 @@ Phase 0. Later-phase tests are listed as unimplemented, not represented by stubs
   against the upstream release asset digest.
 - Both npm installs reported zero audit vulnerabilities at validation time.
 - Runtime Docker base tag verified to publish a Linux amd64 image.
+- [Hosted public CI run 34484972208](https://github.com/kusanya-io/kusanya/actions/runs/34484972208):
+  passed for implementation commit `23c509b9f8892db7ea19b8e2a93bcef293c075f0`.
+  Both jobs passed, including eight unit and two live PostgreSQL integration tests
+  inside the Linux test container, plus the production runtime image build.
+  The initial run caught a PostgreSQL health-command quoting error; this run
+  confirms the corrected runner configuration.
 
 ## Reproduction
 
@@ -83,8 +89,6 @@ docker build -t kusanya-service:phase0 ./service
 
 ## Known gaps and deviations
 
-- Hosted CI and container checks still require execution; a static workflow check
-  and local test pass are not substitutes for a green hosted run.
 - A new Salesforce dispatch workflow must first exist on the trusted default
   branch. Its protected environment, required reviewers and dedicated secret need
   maintainer configuration. This temporary manual/local Apex gate is recorded in
