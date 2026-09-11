@@ -322,3 +322,31 @@ New findings:
 `SAFE TO APPROVE: run 34601412466 at head c635566`. Approval is safe for the credential but not recommended yet. If authentication fails again, finding 19 locks this head and finding 20 leaves no diagnosis. Fixing both first means one run on the final head.
 
 `HOLD: PR #6, 2 findings` (19 and 20). Issue #5 stays open.
+
+## 2026-09-11: Re-verification of PR #6 head `d675e01` before approving run 34619677398
+
+Scope: findings 19 and 20, the new pin b4df0b1, and whether Bill may cancel the stale run and approve the new one. No scratch orgs were created, and no credential was handled.
+
+What was checked:
+
+- Identity. The pin differs from the head only in its two pin lines. The merge ref cd5a0ae matches the head for workflows, scripts, `salesforce/` and `service/`. Salesforce metadata, the service and all settings are unchanged. Dev Hub at 16:13 UTC: 3 of 3 active and 4 of 6 daily free, with no active orgs.
+- Tests. 141 of 141 in Git Bash and PowerShell, plus format, scaffold and whitespace checks. actionlint 1.7.12 with ShellCheck 0.11.0 is clean, and public CI 34619677236 is green.
+- Runs. Stale run 34601412466, for head c635566, is waiting for approval and holds the shared Salesforce concurrency slot. Run 34619677398's Apex job is therefore queued as pending and cannot reach approval.
+- Finding 19 is closed for pull request runs. A completed, failed Apex job whose Jobs API steps show the verify step completed and skipped now counts as a retryable infrastructure failure within the daily budget. GitHub recorded exactly that shape for run 34587333623's authentication failure.
+- The authentication step was tested with its real script against a fake CLI in 15 hostile cases. They covered secret echoes in both streams, a secret as the name, malformed, nested, duplicate-key and prototype JSON, a 3 MB output, and success output carrying tokens. The fake credential never appeared, allowlisted names printed exactly, and success stayed silent.
+- The pinned CLI 2.135.7 was run with fake inputs in an isolated home. An unreachable host and a rejected token both report the top-level name `RefreshTokenAuthError`. The underlying cause appears only inside `message` and a `cause` string, and no literal code field exists.
+
+Findings:
+
+- Finding 20 remains open, should fix before PR #6 merges. The allowlist never matches a real refresh failure, because the CLI wraps both network and token errors as `RefreshTokenAuthError`. The step would print `unrecognized` for exactly the failure it exists to diagnose. Fix: allow `RefreshTokenAuthError`, and for it classify `message` and `cause` with fixed patterns into fixed labels only:
+  - `dns` for ENOTFOUND, EAI_AGAIN or getaddrinfo;
+  - `timeout` for ETIMEDOUT or timed out;
+  - `connection` for ECONNRESET, ECONNREFUSED or socket hang up;
+  - `token-rejected` for expired access/refresh token or invalid_grant;
+  - `other` for anything else.
+- Finding 21, should fix before PR #6 merges. For a manual dispatch, the reader needs the `Verifying PR` subject line. The first Apex step prints it only after its live head, source, base and state checks. If the PR changes between dispatch and approval, or a `gh api` call fails, that step exits before printing. The reader then throws for every head, because it reads dispatch runs before filtering by head. Salesforce verification would stay blocked for the whole repository until that run is deleted. Fix: print the subject right after the inputs pass their format checks, before the live checks, and add a test.
+- Finding 22, should fix before PR #6 merges. The new exception requires a failed job. A job cancelled after it starts but before verification, for example by Bill during CLI install, has its verify step skipped but a `cancelled` conclusion. The reader throws and locks that head. No org can exist in that state, so it should be treated like the failed case or like a zero-step cancellation.
+
+`SAFE TO APPROVE: run 34619677398 at head d675e01`, after Bill cancels stale run 34601412466. Cancelling is safe: that run's Apex job has zero steps and belongs to a superseded head. Approval is recommended now. A repeat authentication failure no longer locks this head, and this run gives the first live evidence of the journal, cleanup and silent-success paths. The fixes for findings 20 to 22 will need one more run on the final head.
+
+`HOLD: PR #6, 3 findings` (20, 21 and 22). Issue #5 stays open.
