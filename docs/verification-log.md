@@ -396,3 +396,11 @@ Merge order: merge PR #6 before PR #4. `main` requires branches to be up to date
 `PASS: PR #6 may be merged`
 
 Issue #5 may close when PR #6 merges.
+
+## 2026-09-11: PR #6 merged and issue #5 closed
+
+- PR #6 was squash-merged by `cobitechsolutions` at 17:16 UTC as 87b008a. The merged tree is identical to the verified head 715661c. `main`'s scripts are identical to the pin 1d0edc1, and its workflow pins 1d0edc1. The PASS in review 5181512246 therefore applies to `main`'s content.
+- Issue #5 was closed by the verifier, with a comment listing the resolved findings, the live evidence, and the limitations that stay true.
+- Still not proven live: fallback recovery after a failed or cancelled verification, the pre-verification retry exceptions, and the authentication diagnostic labels. Runner loss and remote requests that outlive their CLI process still need private reconciliation. The daily reset time is unconfirmed, and the CI-only Dev Hub is not provisioned.
+- This branch, PR #4, was brought up to date with `main` by a merge commit, keeping every entry. It changes only this file, so its Salesforce gate uses the approved documentation exemption, with no approval and no scratch org.
+- Still due before Phase 1: the `ksny` namespace availability check and its ADR, and Bill's confirmation or revision of the Apache-2.0 service licence in ADR 0002.
