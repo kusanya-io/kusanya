@@ -1,11 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { SalesforceCommandError } from './salesforce-client.mjs';
 
-const DAY = 24 * 60 * 60 * 1000;
 const integer = (value) => Number.isSafeInteger(value) && value >= 0;
-const isoDateTime =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+-]\d{2}:?\d{2})$/;
-const statuses = new Set(['New', 'Creating', 'Active', 'Error', 'Deleted']);
 const safeHub = (value) =>
   typeof value === 'string' && /^[A-Za-z0-9@._+-]+$/.test(value);
 const salesforceId = (value, prefix) =>
@@ -17,6 +13,10 @@ const sameId = (left, right) =>
   left.slice(0, 15) === right.slice(0, 15);
 const tagPattern =
   /^kusanya-(ci|verifier)-v1__([A-Za-z0-9][A-Za-z0-9-]{0,31})__([a-f0-9]{12})__([a-f0-9]{12})$/;
+const rejectedWithoutOrg = (row) =>
+  row?.Status === 'Error' &&
+  Object.hasOwn(row, 'ScratchOrg') &&
+  (row.ScratchOrg === null || row.ScratchOrg === '');
 
 export class LifecycleError extends Error {
   constructor(code = 'INVALID_INPUT') {
@@ -28,6 +28,8 @@ export class LifecycleError extends Error {
       'RECONCILIATION_REQUIRED',
       'CLEANUP_FAILED',
       'CREATION_FAILED',
+      'CREATION_REJECTED',
+      'JOURNAL_UNAVAILABLE',
     ];
     super(
       `Scratch lifecycle failed (${allowed.includes(code) ? code : 'INVALID_INPUT'}); raw Salesforce details withheld.`,
@@ -83,7 +85,7 @@ function query(sf, devHub, soql) {
   return result.records;
 }
 
-/** Read-only rolling-quota preflight. It reserves no slots; creation can still race. */
+/** Read-only current-quota preflight. It reserves no slots; creation can still race. */
 export function preflight(sf, { devHub, needed = 1, now = new Date() }) {
   if (
     !safeHub(devHub) ||
@@ -114,45 +116,10 @@ export function preflight(sf, { devHub, needed = 1, now = new Date() }) {
   };
   const active = read('ActiveScratchOrgs');
   const daily = read('DailyScratchOrgs');
-  const records = query(
-    sf,
-    devHub,
-    'SELECT Id, Status, CreatedDate FROM ScratchOrgInfo WHERE CreatedDate = LAST_N_DAYS:1 ORDER BY CreatedDate ASC',
-  );
-  const created = [];
-  const seen = new Set();
-  for (const record of records) {
-    const timestamp =
-      typeof record.CreatedDate === 'string' &&
-      isoDateTime.test(record.CreatedDate)
-        ? Date.parse(record.CreatedDate)
-        : NaN;
-    if (
-      !salesforceId(record.Id, '2SR') ||
-      seen.has(record.Id.slice(0, 15)) ||
-      !Number.isFinite(timestamp) ||
-      timestamp > now.getTime() ||
-      !statuses.has(record.Status)
-    )
-      throw new LifecycleError('INVALID_QUERY');
-    seen.add(record.Id.slice(0, 15));
-    if (
-      timestamp > now.getTime() - DAY &&
-      ['Active', 'Deleted'].includes(record.Status)
-    )
-      created.push(timestamp);
-  }
-  created.sort((a, b) => a - b);
-  const deficit = needed - daily.remaining;
-  // A next slot is only an estimate supported by a complete matching usage history.
-  // Active-slot shortages need release/expiry evidence we do not have here.
-  const nextSlotUtc =
-    active.remaining >= needed &&
-    deficit > 0 &&
-    created.length === daily.max - daily.remaining &&
-    created.length >= deficit
-      ? new Date(created[deficit - 1] + DAY).toISOString()
-      : null;
+  // Daily capacity is not a rolling 24-hour window. Until a provider reset
+  // schedule is independently confirmed, creation history cannot predict it.
+  // Authoritative live Remaining values alone admit or block this attempt.
+  const nextSlotUtc = null;
   const report = { active, daily, needed, nextSlotUtc };
   if (active.remaining < needed || daily.remaining < needed)
     throw new QuotaBlockedError(report);
@@ -255,6 +222,66 @@ export function cleanupOwnedOrgs(sf, receipts) {
   return { deleted, alreadyDeleted };
 }
 
+/** Reconciles only this exact run's persisted intent allowlist, never broad discovery. */
+export function cleanupRunIntents(
+  sf,
+  { devHub, role, runId, sha, tags, rejectedTags = [] },
+) {
+  validateIdentity({ role, runId, sha });
+  if (
+    !safeHub(devHub) ||
+    !Array.isArray(tags) ||
+    tags.length > 2 ||
+    new Set(tags).size !== tags.length ||
+    !Array.isArray(rejectedTags) ||
+    new Set(rejectedTags).size !== rejectedTags.length ||
+    rejectedTags.some((tag) => !tags.includes(tag))
+  )
+    throw new LifecycleError('OWNERSHIP_MISMATCH');
+  // Validate the complete allowlist before any Salesforce read or write.
+  for (const tag of tags) {
+    const parsed = typeof tag === 'string' && tagPattern.exec(tag);
+    if (
+      !parsed ||
+      parsed[1] !== role ||
+      parsed[2] !== runId ||
+      parsed[3] !== sha.slice(0, 12)
+    )
+      throw new LifecycleError('OWNERSHIP_MISMATCH');
+  }
+  const receipts = [];
+  let alreadyDeleted = 0;
+  let rejected = 0;
+  let unresolved = false;
+  for (const tag of tags) {
+    const intent = { devHub, role, runId, sha, tag };
+    try {
+      const row = readOwned(sf, intent);
+      if (row?.Status === 'Active') {
+        receipts.push({ ...intent, requestId: row.Id, orgId: row.ScratchOrg });
+      } else if (row?.Status === 'Deleted') {
+        alreadyDeleted += 1;
+      } else if (
+        rejectedWithoutOrg(row) ||
+        (!row && rejectedTags.includes(tag))
+      ) {
+        rejected += 1;
+      } else {
+        unresolved = true;
+      }
+    } catch {
+      unresolved = true;
+    }
+  }
+  const cleanup = cleanupOwnedOrgs(sf, receipts);
+  if (unresolved) throw new LifecycleError('RECONCILIATION_REQUIRED');
+  return {
+    deleted: cleanup.deleted,
+    alreadyDeleted: alreadyDeleted + cleanup.alreadyDeleted,
+    rejected,
+  };
+}
+
 /** One Phase-0 org by default; count two is atomic acquisition, not a C10 claim. */
 export function acquireScratchOrgs(sf, options) {
   const {
@@ -267,11 +294,15 @@ export function acquireScratchOrgs(sf, options) {
     currentTime = () => new Date(),
     nonce = () => randomUUID().replaceAll('-', '').slice(0, 12),
     onEvent = () => {},
+    onIntent = () => {},
+    onRejected = () => {},
   } = options;
   validateIdentity({ role, runId, sha });
   if (
     !safeHub(devHub) ||
     ![1, 2].includes(count) ||
+    typeof onIntent !== 'function' ||
+    typeof onRejected !== 'function' ||
     Object.hasOwn(options, 'targetOrg') ||
     Object.hasOwn(options, 'existingOrg')
   )
@@ -292,6 +323,16 @@ export function acquireScratchOrgs(sf, options) {
       if (readOwned(sf, receipt))
         throw new LifecycleError('OWNERSHIP_MISMATCH');
       onEvent(`Fresh scratch ownership tag: ${tag}.`);
+      // Persistence is synchronous and must succeed before a creation can start.
+      const notify = (callback) => {
+        try {
+          const returned = callback({ devHub, role, runId, sha, tag });
+          if (returned?.then) throw new LifecycleError();
+        } catch {
+          throw new LifecycleError('RECONCILIATION_REQUIRED');
+        }
+      };
+      notify(onIntent);
       let creationError;
       try {
         sf('scratch-create', [
@@ -309,21 +350,10 @@ export function acquireScratchOrgs(sf, options) {
           '--duration-days',
           '1',
           '--wait',
-          '15',
+          '5',
         ]);
       } catch (error) {
         creationError = error;
-        if (
-          error instanceof SalesforceCommandError &&
-          error.code === 'SCRATCH_QUOTA'
-        ) {
-          const current = preflight(sf, {
-            devHub,
-            needed: count - index,
-            now: currentTime(),
-          });
-          throw new QuotaBlockedError(current);
-        }
         if (error instanceof SalesforceCommandError && error.jobId)
           receipt.requestId = error.jobId;
       }
@@ -342,11 +372,23 @@ export function acquireScratchOrgs(sf, options) {
         receipts.push(receipt);
         if (creationError) throw creationError;
       } else if (
-        creationError &&
-        row &&
-        ['Error', 'Deleted'].includes(row.Status)
+        rejectedWithoutOrg(row) ||
+        (!row &&
+          creationError instanceof SalesforceCommandError &&
+          ['SCRATCH_QUOTA', 'CREATION_REJECTED'].includes(creationError.code))
       ) {
-        throw creationError;
+        notify(onRejected);
+        if (creationError?.code === 'SCRATCH_QUOTA') {
+          const current = preflight(sf, {
+            devHub,
+            needed: count - index,
+            now: currentTime(),
+          });
+          throw new QuotaBlockedError(current);
+        }
+        throw new LifecycleError('CREATION_REJECTED');
+      } else if (row?.Status === 'Deleted') {
+        throw creationError ?? new LifecycleError('CREATION_FAILED');
       } else {
         // A request may finish after a CLI timeout. Do not retry creation, adopt an
         // unknown org, or pretend cleanup succeeded; the ended-run janitor can reconcile it.

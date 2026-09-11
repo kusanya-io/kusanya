@@ -1,6 +1,6 @@
 # ADR 0006: Quota-aware development and independent verification
 
-- Status: Approved by Bill; implementation and phase gate await Claude verification
+- Status: Approved by Bill; Phase 0 passed; issue #5 amendments await Claude verification
 - Date: 2026-09-10
 - Brief sections: C8, C10, C11 Phase 0, C12, C13; verification protocol
 - Decision owner: Cobitech Solutions
@@ -8,11 +8,17 @@
 
 ## Context and approval
 
-The shared Developer Edition Dev Hub exhausted its six successful creations in a
-rolling 24-hour window on 10 September: one setup smoke test, three builder runs
-and two verifier runs. All were deleted, but deletion restored active capacity,
+The shared Developer Edition Dev Hub exhausted its six daily creations on
+10 September: one setup smoke test, three builder runs and two verifier runs.
+All were deleted, but deletion restored active capacity,
 not daily capacity. Hosted run `34499943255` authenticated successfully and then
 failed before scratch creation. No hosted Apex evidence resulted.
+
+Correction (issue #5 note 16, 11 September): the daily limit is **not** a rolling
+24-hour allocation. At 09:00 UTC the hub reported six of six remaining while the
+previous six creations were less than 24 hours old. The actual reset time is not
+confirmed. Neither this ADR nor the tooling assumes midnight Pacific or another
+reset time; live remaining counts are authoritative and next-slot time is unavailable.
 
 Claude's [design review 5171295026](https://github.com/kusanya-io/kusanya/pull/3#pullrequestreview-5171295026)
 recommended adjustments A1–A11 and identified finding 10. Bill explicitly approved
@@ -76,29 +82,105 @@ returns, within the same retry budget and only after another preflight. Read
 complete GitHub attempt history and the exact run/head's sanitized harness outcome;
 missing or contradictory history is not permission to retry. A quota check is
 advisory, never a reservation against other operators.
-Count the UTC day of the trusted harness's actual start timestamp, not GitHub's
-workflow or job start metadata (both can include waiting for approval). Manual
+For executed verification, count the UTC day of the trusted harness's actual start
+timestamp, not GitHub's workflow or job start metadata. Manual
 dispatch evidence must bind its reviewed head from the trusted
 subject log, not confuse it with main's dispatch SHA. Ambiguous legacy logs and
 history beyond the bounded complete reader require investigation, not exemption.
 
-Until CI has its separate hub, reserve the first returning 11 September slot
-(11:33 UTC) for Phase 0 CI and the second (13:20 UTC) for Claude. Hold the next two
-for infrastructure recovery. No builder org is created before those verification
-runs finish. Recheck actual limits before relying on the estimated times.
+Issue #5 amendment: repeat the immutable budget reader inside the Apex job after
+its exact-head recheck and before authentication, using its actual admission UTC
+day. The early policy job remains a fast check, not authorization for a later
+partial rerun or next-day approval. The Apex job receives only read permissions
+for contents, pull requests and Actions; its GitHub token remains step-scoped.
+Completed, identity-validated zero-step skipped/cancelled Apex jobs consume no
+allocation and need no unavailable log. Other jobs are not covered by that
+zero-allocation exemption, including manual dispatches.
+
+Finding 19 amendment: a completed failed Apex job whose Jobs API steps contain
+exactly one completed, skipped `Verify reviewed metadata using only trusted
+harness code` step proves the harness did not run. Classify it as
+`failed-infrastructure`, `retryable: true`, without requiring an outcome marker.
+Count it against the same initial-attempt-plus-one-retry daily budget; it is not
+a free attempt or passing verification. With no harness timestamp, use the
+validated completed job's UTC `started_at` for this pre-verification exception.
+PR attribution still requires exact run/attempt/head identity; manual dispatch
+still requires the trusted subject log to identify the reviewed PR head.
+Missing, duplicate, incomplete or non-skipped verify steps do not qualify and
+retain the marker requirement. Contradictory job completion fails closed.
+No automatic retry or new approval authority is introduced.
+
+Finding 21 amendment: emit the single `Verifying PR ... at head ...` subject
+immediately after validating the PR number and full SHA formats, before event or
+live API checks. It records the requested subject, not a successful live check or
+permission to authenticate. A stale head or failed API lookup remains a failed
+check but no longer loses dispatch attribution. Invalid-format inputs still emit
+no subject. Legacy or otherwise unattributable dispatches continue to fail closed;
+never delete history or guess their subject to regain budget.
+
+Finding 22 amendment: count cancellation after job execution began but before
+verification like the failed case, rather than granting a free cancellation.
+Require the same unique completed/skipped verify step plus an actually executed,
+completed step. Keep the real `cancelled` conclusion, and derive
+`verificationNotStarted: true` only from the validated Jobs API evidence. The
+budget permits cancelled infrastructure evidence only with that proof and
+`retryable: true`; an outcome marker cannot assert this exception. The same
+initial-plus-one daily budget applies. Zero-step cancellation remains excluded;
+success with skipped verification, incomplete evidence, and cancellation after
+verification started remain refused. No cleanup or test-failure restriction changes.
+
+Until CI has its separate hub, coordinate live available slots between CI and
+Claude, reserving room for explicitly authorized infrastructure recovery. The
+original 11 September slot estimates were withdrawn by note 16. Phase 0 CI and
+independent verification have finished; no development org is created merely to
+exercise this hardening PR. Recheck live limits before any authorized allocation.
 
 ### Safe diagnostics and cleanup
 
 Read remaining active/daily allocations before creating anything. On insufficient
 capacity, report `BLOCKED` and exit 75, naming the limiting allocation, maximum,
-remaining count, required count and estimated next daily slot. Compute slot times
-from creation history plus 24 hours; explicitly report unavailable estimates when
-history cannot establish a time. Malformed limits, failed queries and unknown
+remaining count, required count and next daily slot as unavailable. Creation
+timestamps do not establish the daily reset. Do not add a forecast until an
+independently confirmed reset rule is recorded in an ADR. The preflight does not
+need a creation-history query to read live limits. Malformed limits, failed queries and unknown
 errors fail closed. Never print raw Salesforce output, usernames or authorization.
+
+Finding 20 amendment: capture authentication `--json` stdout only in an unexported
+shell variable; discard stderr. On failure, parse one JSON object and disclose
+only its exact top-level `name` if allowlisted: `ENOTFOUND`, `ETIMEDOUT`,
+`ECONNRESET`, `ECONNREFUSED`, `EAI_AGAIN`, `invalid_grant`,
+`INVALID_SFDX_AUTH_URL`, `AuthDecryptError`, or `RequestError`. Also accept
+`RefreshTokenAuthError`, the wrapper observed by Claude with pinned CLI 2.135.7
+for network and rejected-token failures. For that exact name only, inspect the
+top-level string `message` and string `cause` against fixed patterns and emit
+`RefreshTokenAuthError/<label>` using a literal label:
+
+- `dns`: `ENOTFOUND`, `EAI_AGAIN`, or `getaddrinfo`.
+- `timeout`: `ETIMEDOUT` or `timed out`.
+- `connection`: `ECONNRESET`, `ECONNREFUSED`, or `socket hang up`.
+- `token-rejected`: `expired access/refresh token` or `invalid_grant`.
+- `other`: no recognized pattern or usable string.
+
+Match case-insensitively in that fixed precedence order; never print captured or
+matched text. Do not inspect nested objects or stringify non-string values.
+Unknown top-level names still disclose only `unrecognized`. Never print messages,
+nested data, URLs, instances, raw JSON
+or parser diagnostics. Success remains silent. Clear the variable before reporting;
+do not persist, export, upload or cache the captured output. The secret remains
+scoped to the single authentication step. The diagnostic class is evidence to
+investigate, not proof a retry will work or authority to rotate a credential.
 
 `BLOCKED` fails the required gate. It never becomes a successful skip and never
 falls back to an existing org. A recognized creation-time quota error follows the
 same diagnostic path, since capacity can change after preflight.
+
+Recognized creation rejection is distinct from a pending/unknown request or cleanup
+failure. A terminal provider rejection with a confirmed absent exact request, or
+a terminal Error record explicitly showing no org, is nonretryable
+`failed-creation-rejected`. Narrowly recognized quota rejection remains `BLOCKED`.
+Unknown errors, missing timeout records and pending requests require reconciliation;
+absence alone never proves rejection. Sanitized codes omit raw provider messages.
+No deliberate quota exhaustion is permitted to test this classification.
 
 Tag disposable orgs with role, run ID, short head SHA and a unique suffix. After a
 creation timeout, reconcile the exact job ID or ownership tag before another
@@ -110,6 +192,53 @@ The Phase 0 janitor is an injected, default-dry-run lifecycle helper, not an
 automatic scheduler or complete administrative command. Its caller must establish
 authoritative ended-run evidence; pending unknown creations require private
 operator reconciliation before new allocation. This operational gap is explicit.
+
+### Bounded verification and current-attempt recovery (issue #5)
+
+Keep the 45-minute Apex job, with explicit step deadlines totalling 40 minutes and
+five minutes of job slack. Verification has 20 minutes, fallback cleanup five, and
+logout one. Each create/deploy/test CLI wait is five minutes. The CLI adapter also
+enforces six-minute direct-process timeouts for those stages and 30 seconds for
+reads and deletes. The hosted Linux job runs `sf` directly; this does not promise
+termination of every descendant or a remote Salesforce request. In particular,
+Windows uses a `cmd.exe` wrapper and cannot claim a process-tree kill guarantee.
+
+The primary harness still cleans up in `finally`. Before creation it durably
+records each exact role/run-attempt/full-head/tag intent in a small, private JSON
+file at the fixed runner-temp path `kusanya-scratch-intents.json`. Exclusive initial
+creation rejects stale files; fsync and atomic replacement preserve an earlier
+valid intent if interrupted. The journal contains no credentials, org usernames,
+submission data or raw CLI output and is never cached or uploaded.
+
+A separate pinned `cleanup-salesforce.mjs` step uses `always()` after authenticated
+verification failure/cancellation only, before logout. It accepts no target-org
+input. It binds the CI identity to GitHub's run ID and attempt, validates the complete
+journal identity and tag allowlist, then rechecks each exact remote ownership record
+and active-org ID before deleting. It cannot discover and sweep another run, role
+or attempt. An already deleted org is a no-op; an absent request is safe only with
+an explicitly recorded, confirmed rejection. Missing/malformed journals, pending
+or ambiguous requests, and failed deletions fail the job. Recovery never turns
+failed tests or an interrupted run into a pass.
+
+Finding 17 amendment: skip the fallback when verification succeeded. Success
+already requires primary cleanup in `finally`; an additional read can introduce
+an eventually-consistent or transient failure after the passed marker and create
+a contradiction in retry history. Preserve the primary success evidence without
+this redundant read. The fallback remains mandatory after failure/cancellation.
+
+Note 18 amendment: failure to initialize the journal precedes allocation by this
+invocation. Label it `JOURNAL_UNAVAILABLE` and report nonretryable infrastructure
+failure, not failed cleanup. Persistence failures during acquisition and errors
+reading the recovery journal remain reconciliation failures. No retry is granted
+and no potentially stale ownership evidence is discarded.
+
+This is a current-attempt finalizer, not the ended-run janitor: the workflow itself
+establishes the verification step ended and the job is still alive to clean up.
+It does not falsely mark a running job completed. Runner loss or force cancellation
+can prevent any finalizer; private ownership-based reconciliation is still required
+then. ShellCheck-enabled actionlint and synthetic interruption fixtures verify the
+implementation before Claude reviews it; only a later approved hosted run can
+establish live execution evidence for the changed harness.
 
 ### Narrow documentation-only exception to C13
 

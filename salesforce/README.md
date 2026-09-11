@@ -51,6 +51,15 @@ exact job/tag reconciliation. See the CI runbook for retry and cleanup restricti
 Pair-acquisition unit tests prepare for C10 test 14; the Phase 0 runner and source
 still implement only the one-org smoke suite. No tenant acceptance test is claimed.
 
+Hosted verification also persists safe ownership intents at the fixed
+`RUNNER_TEMP/kusanya-scratch-intents.json` path before allocation. The trusted
+`cleanup-salesforce.mjs` always-run step uses that journal only for the exact
+authenticated CI run/attempt, after the bounded verification step fails or is
+cancelled and before logout. Successful verification already confirmed primary
+cleanup and skips this fallback. It is not a manual target-org deletion tool or a verifier-org selector.
+Pending/unknown requests still need private reconciliation; runner loss can prevent
+the finalizer. See ADR 0006 and `docs/ci.md` for limits and the cleanup contract.
+
 API 64.0 is a conservative metadata baseline. Namespace is empty because package
 format and registration are deferred. The brief's `ksny` prefix remains subject
 to an availability check and ADR; no package Id is claimed. Every Apex class carries

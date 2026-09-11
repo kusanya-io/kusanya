@@ -95,8 +95,24 @@ credentialed job. Approval still requires inspection of YAML and its dependencie
 Authentication pipes the environment secret directly to the pinned CLI with
 `--sfdx-url-stdin -`. The explicit `-` is required: without it the CLI can consume
 the following `--alias` flag as the stdin option's value and reject the command.
-CLI output stays suppressed on both success and failure; never print an auth URL
-to diagnose a failed run. A failed authentication run supplies no Apex evidence.
+Raw CLI output stays suppressed on both success and failure. Authentication JSON
+stdout is captured only in an unexported shell variable, never an artifact, cache
+or file; stderr remains discarded. On failure, a real JSON parser permits only an
+exact top-level `name` from this allowlist: `ENOTFOUND`, `ETIMEDOUT`, `ECONNRESET`,
+`ECONNREFUSED`, `EAI_AGAIN`, `invalid_grant`, `INVALID_SFDX_AUTH_URL`,
+`AuthDecryptError`, `RequestError`. The observed CLI wrapper `RefreshTokenAuthError`
+is also recognized. Only for that exact name, top-level string `message` and
+string `cause` are classified through fixed patterns into a literal suffix:
+`dns`, `timeout`, `connection`, `token-rejected`, or `other`. The output is, for
+example, `RefreshTokenAuthError/dns`, never any matched text. ADR 0006 lists the
+patterns and precedence; labels are heuristic diagnostics, not proof of root cause.
+Non-string fields and nested objects are not inspected. Anything else, including
+an unknown top-level name, malformed JSON or non-object output, reports
+`unrecognized`. Messages, nested data, URLs, instances
+and parser diagnostics are never printed; success remains silent. The captured
+variable is cleared before reporting. Never print an auth URL to diagnose a run.
+A failed authentication run supplies no Apex evidence, and an error class alone
+is not a reason to rotate the secret. See finding 20 in ADR 0006.
 
 The Apex job serializes across all PRs using the CI hub, without cancelling an
 active scratch lifecycle. A replaced pending run has consumed no org; its skipped
@@ -126,9 +142,12 @@ PR #3 is not exempt. Main's required check is still present for exempt PRs.
 ### Quota, retries and cleanup
 
 Read-only preflight checks both active and daily capacity before creation. Daily
-capacity is a rolling 24-hour allocation; deleting an org frees active capacity,
-not daily capacity. `BLOCKED` exits 75 with limit/remaining/required counts and the
-next daily slot estimate from creation history, or an explicit unavailable estimate.
+capacity is a daily allocation, not a rolling 24-hour window; deleting an org frees
+active capacity, not daily capacity. The observed reset time is still unconfirmed
+(issue #5 note 16). `BLOCKED` exits 75 with limit/remaining/required counts and
+`next UTC slot unavailable`. Never infer a reset by adding 24 hours to creation
+timestamps or assume midnight Pacific. Preflight uses live limits without querying
+creation history; any future reset forecast needs independently confirmed ADR evidence.
 Malformed limits and failed queries fail closed. A race can still exhaust quota
 after preflight: recognized limit errors receive the same blocked treatment.
 The gate fails for BLOCKED; it never skips or substitutes the development org.
@@ -143,15 +162,52 @@ infrastructure recovery per head per UTC day; capacity recovery consumes that
 retry budget and must pass preflight again. Test/coverage failures need a new fixed
 head. A successful head is not rerun for duplicate evidence. Unknown outcomes,
 incomplete logs and failed cleanup require investigation, not presumed permission.
-Only a unique, sanitized harness marker matching run/attempt/head establishes the
-previous outcome. The marker is also subject to finding 10's explicit-review rule.
+The early policy check is repeated inside Apex, after approval and its exact-head
+recheck, immediately before authentication. Partial reruns cannot reuse the early
+job's permission, and the current UTC admission date is recomputed. The reader must
+finish within its bounded step or fail closed without authentication. Completed
+zero-step skipped/cancelled Apex jobs with valid run/attempt/head identity never
+allocated an org; the reader does not request their unavailable logs. Other jobs
+do not get that zero-allocation exemption.
+
+Finding 19 adds a distinct, counted pre-verification failure: a validated completed
+failed Apex job with exactly one completed, skipped step named
+`Verify reviewed metadata using only trusted harness code` is
+`failed-infrastructure`, `retryable: true`. The harness never ran, so an outcome
+marker cannot exist. The reader uses Jobs API evidence without a log for PR runs,
+counts the attempt against the existing daily budget, and still needs Bill's
+explicit approval for any retry. It never makes the failed gate green. Missing,
+duplicate, incomplete or non-skipped verify steps retain the marker requirement;
+contradictory completion is refused.
+
+Finding 22 extends this counted exception to a completed cancelled job with the
+same skipped-verify proof and at least one completed, executed step. The reader
+retains `conclusion: cancelled` and derives `verificationNotStarted: true` from
+Jobs API evidence, never from an outcome marker. Only that proof plus retryable
+infrastructure failure permits cancellation through the budget; it consumes the
+same daily attempt allowance. Zero-step cancellations remain free, not passing.
+All-skipped nonzero jobs, success with skipped verify, and cancellation after
+verification started still fail closed. This does not authorize automatic retries.
+
+For executed verification, only a unique, sanitized harness marker matching
+run/attempt/head establishes the previous outcome. Both the marker and step-based
+exception are subject to finding 10's explicit-review rule.
 Manual dispatch uses main's workflow SHA, so history is enumerated without a SHA
 filter and its reviewed head is bound by the trusted `Verifying PR ... at head ...`
-log line. The trusted harness's actual start timestamp determines the UTC retry
-day; GitHub timestamps a job even while it is waiting for approval, so neither
-workflow nor job start metadata is used for this counter. Unidentified legacy dispatches or missing logs fail closed and
-need investigation; they are not silently excluded. The history reader caps at
+log line, including pre-verification failures. The trusted harness's actual start
+timestamp determines the UTC retry day when verification ran. For the skipped
+verify exception only, there is no harness timestamp: use the validated completed
+job's UTC `started_at`. Workflow queue time is never used. Unidentified legacy
+dispatches or missing required logs fail closed and need investigation; they are
+not silently excluded. The history reader caps at
 1,000 workflow runs and refuses incomplete history rather than resetting budget.
+
+Finding 21 moves the subject line immediately after PR number/full SHA format
+validation, before event checks or live `gh api` calls. It records only the
+requested head: it does not assert the head is still current or approve execution.
+This preserves dispatch attribution when a later live check fails. Invalid-format
+inputs still emit no subject. A dispatch with missing/ambiguous subject evidence
+remains blocked for investigation; do not delete run history to bypass the budget.
 
 Tag each disposable org with role, run ID, short head SHA and a unique suffix.
 Reconcile creation timeouts by exact job ID or tag before another create. Delete
@@ -167,10 +223,63 @@ cleanup. A pending/unknown creation result requires private reconciliation of it
 exact logged tag; this PR does not automate that operator investigation.
 
 The dedicated CI hub is approved but not provisioned by this PR. Until migration,
-CI and Claude coordinate the shared hub: the first returning 11 September slot at
-11:33 UTC is reserved for Phase 0 CI; the second at 13:20 for Claude; the next two
-are held for recovery. Check actual allocations before relying on those estimates.
-No builder org is created until the Phase 0 runs finish.
+CI and Claude coordinate the shared hub using live allocations and reserve recovery
+capacity. The original 11 September slot estimates were withdrawn in issue #5 note 16. Phase 0 CI and independent runs are complete; this hardening work consumes no
+builder org. Check actual limits before each authorized fresh run.
+
+### Timeout recovery and truthful failures (issue #5)
+
+The Apex job stays at 45 minutes. Its explicit step deadlines total 40, retaining
+five minutes of slack: 20 for verification, five for recovery cleanup, one for
+logout, and 14 for the other bounded steps. Each creation/deploy/test wait is five
+minutes. The CLI adapter bounds those direct processes to six minutes and other
+calls to 30 seconds. A killed CLI does not prove its remote request stopped, nor
+does killing Windows' `cmd.exe` wrapper guarantee all descendants were killed.
+
+The harness creates a private journal at
+`RUNNER_TEMP/kusanya-scratch-intents.json`, recording only this run's identity and
+exact tag intents before allocation. No credentials, usernames or raw results
+enter it; no artifact/cache uploads it. Existing, malformed, off-run or symlinked
+journals fail closed. Creation cannot start until its intent was persisted.
+
+The primary `finally` cleanup remains. An additional pinned `always()` step runs
+`node trusted/scripts/cleanup-salesforce.mjs` only after authenticated verification
+failed or was cancelled. It does not run after success: the harness has already
+confirmed primary cleanup before emitting its passed marker (finding 17). This
+avoids a redundant remote read failing a successful job or contradicting that marker.
+It requires GitHub's
+current CI run ID and attempt to match the journal, revalidates every allowed tag
+and remote org ID, and deletes only this attempt's positively owned orgs. Already
+deleted orgs are a no-op. It accepts no existing-target input or cross-run selector.
+It runs before Dev Hub logout and does not turn a failed verification into success.
+
+Initial journal admission failure is `JOURNAL_UNAVAILABLE`, reported as
+`failed-infrastructure` with `retryable: false` (note 18), since this invocation has
+not allocated an org. It still blocks the gate. Later journal persistence failures
+or recovery reads remain reconciliation/cleanup failures; this change grants no
+retry or permission to ignore an existing journal.
+
+Confirmed provider creation rejection with no org reports nonretryable
+`failed-creation-rejected`, not a fictitious cleanup failure. The classifier uses
+the narrow `RemoteOrgSignupFailed` case from
+[Salesforce core](https://github.com/forcedotcom/sfdx-core/blob/main/src/org/scratchOrgErrorCodes.ts)
+plus an exact remote read; a terminal Error record must explicitly have no org.
+Recognized quota rejection remains `BLOCKED` (75). Unknown errors, pending requests
+and absent timeout records are not rejection evidence; they require reconciliation.
+Real quota-error classification is not claimed live-tested by synthetic fixtures.
+Do not consume capacity to manufacture a quota rejection.
+
+The fallback fails if the journal is missing or ambiguous, or cleanup cannot be
+confirmed. Total runner loss/force cancellation may prevent all cleanup steps;
+privately reconcile the logged ownership tag before another attempt. This current
+attempt finalizer does not pretend the whole job is ended, and does not expand the
+separate ended-run janitor's authority. ADR 0006 records these decisions; ADR 0007
+records Bill's limited Phase 0 deferral. Issue #5 stays open until Claude verifies.
+
+Run `actionlint` with an installed ShellCheck executable, not `-shellcheck=`.
+For example, when both are on PATH: `actionlint -shellcheck shellcheck`.
+CI policy/harness/workflow changes require Claude's explicit security review before
+Bill approves their first Salesforce execution, even when public fixtures pass.
 
 ### Fork contributions and manual dispatch
 
@@ -192,7 +301,8 @@ separately reviewed trusted status publisher; no write-token permission is added
 `npm test` includes `scripts/salesforce-workflow.test.mjs`. These tests execute the
 actual inline Bash guards using synthetic GitHub/Git/Salesforce responses. They
 cover valid PR/dispatch inputs, forks, stale SHA, mismatched checkout, invalid inputs,
-authentication arguments/stdin, missing credentials, suppressed CLI diagnostics and
+authentication arguments/stdin, missing credentials, allowlisted error names,
+suppression of synthetic credentials in both CLI streams, malformed/nested output and
 the final fail-closed gate. Windows resolves Bash from the Git for Windows root's
 `bin` or `usr/bin`, including when Git Bash exposes `mingw64/bin/git.exe` first.
 Resolver fixtures also run on Linux. These tests validate policy and command
