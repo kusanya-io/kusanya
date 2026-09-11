@@ -1,6 +1,6 @@
 # ADR 0008: Select the ksny namespace and separate registration from packaging
 
-- Status: Accepted; registration verified by builder; Dev Hub linking blocked by OAuth error; Claude review pending
+- Status: Accepted; registration verified by builder; Claude diagnosis recorded; Dev Hub linking blocked; prerequisite review pending
 - Date: 2026-09-11
 - Brief sections: C11 Phase 1 prerequisites, C12, C13
 - Decision owner: Cobitech Solutions
@@ -123,6 +123,46 @@ a challenge to the popup URL alone is not evidence of a correct end-to-end fix.
 No new namespace-org browser login or OAuth consent, package creation, scratch
 creation, CI change or project-namespace source change was performed in this link
 attempt. The read-only queries used existing authenticated CLI connections.
+
+## Claude's independent diagnosis (2026-09-11, 19:23 UTC)
+
+Bill relayed Claude's read-only diagnosis, explicitly issued **without a verdict**.
+The observations below are attributed to that report; the builder did not repeat
+Claude's metadata retrieval or represent the diagnosis as a completed link:
+
+- The namespace-holder still reported `NamespacePrefix = ksny`, Developer Edition
+  and not sandbox. The approved existing Dev Hub had zero Namespace Registry rows.
+- `Settings:OauthOidc` retrieved from both orgs had `isPkceRequired = false`.
+  Claude ruled out the org-wide PKCE requirement in those checked settings; this
+  does not establish the connected app's own PKCE requirement.
+- The Dev Hub's only connected app was `SalesforceDX Namespace Registry`, created
+  by Automated Process on 10 September at 11:30 UTC. Claude could not retrieve it
+  as metadata or read its PKCE flag through the API. No external client apps were
+  found in that inspection.
+- `NamespaceRegistry.NamespaceOrg` was not createable. The inspection established
+  no direct API creation path for the link; it does not authorize attempts to
+  insert registry records or bypass the supported linking flow.
+- Because the error occurs before login, Claude considers client-app enforcement,
+  most likely an app-level PKCE requirement unmet by the Environment Hub flow,
+  the leading diagnosis. The specific setting remains unconfirmed until Bill
+  views the app's OAuth settings. This is not a confirmed Salesforce defect.
+
+Bill's relay identifies verification-log entry PR #7. That verifier-owned log is
+separate from this local ADR and does not constitute a PASS for this prerequisite.
+
+The older blank-page Known Issue `a028c00000qQ0CBAA0` concerns a soma-callback
+connected app. Its connected-app-creation workaround is outside the approved
+scope and is not established as a fix for this PKCE error. Disabling PKCE is not
+an established Salesforce-supported remedy for this failure.
+
+The next operator steps are for Bill to view the app's OAuth settings read-only
+and send the drafted Support request. Any PKCE or connected-app change requires
+Bill's separate approval and Claude's explicit review before and after the change.
+No security-setting change, new connected app, Support submission or credential
+disclosure is authorized by this diagnosis. Keep the prerequisite PR incomplete
+until the link is verified; keep namespaced Phase 1 objects and the source
+namespace change on hold. The remaining multi-hub, dedicated CI hub and packaging
+approval boundaries above are unchanged.
 
 ## Alternatives considered
 
