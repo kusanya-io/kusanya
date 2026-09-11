@@ -187,8 +187,9 @@ export function isUtf8Prose(bytes) {
   }
 }
 
-// Caller authenticates outcomes against the trusted CI harness log for this
-// exact run/attempt/head. PR bodies and uploaded artifacts are not proof.
+// Caller authenticates outcomes against the trusted CI harness log or positive
+// Jobs API skipped-verification proof for this exact run/attempt/head.
+// PR bodies and uploaded artifacts are not proof.
 export function decideInfrastructureRetry({
   headSha,
   utcDay,
@@ -263,9 +264,19 @@ export function decideInfrastructureRetry({
       return deny(
         'Cleanup failure requires human recovery before another attempt.',
       );
+    if (outcome === 'failed-creation-rejected')
+      return deny(
+        'A proven creation rejection is non-retryable; diagnose and correct the cause before a newly reviewed head.',
+      );
+    // The collector alone establishes this proof from completed Jobs API
+    // metadata; outcome logs cannot grant a cancelled attempt this exception.
+    const cancelledBeforeVerification =
+      previous.conclusion === 'cancelled' &&
+      previous.verificationNotStarted === true &&
+      outcome === 'failed-infrastructure';
     if (
       !['failed-infrastructure', 'blocked-quota'].includes(outcome) ||
-      previous.conclusion !== 'failure' ||
+      (previous.conclusion !== 'failure' && !cancelledBeforeVerification) ||
       previous.retryable !== true
     )
       return deny(

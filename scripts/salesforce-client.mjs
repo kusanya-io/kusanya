@@ -9,6 +9,7 @@ const codes = new Set([
   'NETWORK',
   'TIMEOUT',
   'SCRATCH_QUOTA',
+  'CREATION_REJECTED',
 ]);
 const transientStages = new Set([
   'quota-read',
@@ -41,6 +42,9 @@ export class SalesforceCommandError extends Error {
   }
 }
 function classify(parsed, processError, stage) {
+  if (processError?.code === 'ETIMEDOUT') return 'TIMEOUT';
+  // A transport/process failure cannot establish a positive provider rejection.
+  if (processError) parsed = null;
   const name = parsed?.name ?? parsed?.code ?? processError?.code;
   const message = typeof parsed?.message === 'string' ? parsed.message : '';
   if (
@@ -51,6 +55,11 @@ function classify(parsed, processError, stage) {
     )
   )
     return 'SCRATCH_QUOTA';
+  // Salesforce core emits this only after ScratchOrgInfo reaches Error with
+  // a recognized signup ErrorCode. Still reconcile the exact request/tag before
+  // deciding cleanup is unnecessary; a generic CLI failure proves nothing.
+  if (stage === 'scratch-create' && name === 'RemoteOrgSignupFailed')
+    return 'CREATION_REJECTED';
   if (
     [
       'ScratchOrgInfoTimeoutError',
@@ -117,6 +126,12 @@ export function createSalesforceClient({
             SF_DISABLE_TELEMETRY: 'true',
           },
           maxBuffer: 20 * 1024 * 1024,
+          timeout: ['scratch-create', 'source-deploy', 'apex-tests'].includes(
+            stage,
+          )
+            ? 6 * 60 * 1000
+            : 30 * 1000,
+          killSignal: 'SIGKILL',
         },
       );
     } catch {

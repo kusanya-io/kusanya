@@ -30,6 +30,8 @@ test('client preserves quoted SOQL as one Linux argument without a shell', () =>
   assert.equal(call[0], 'sf');
   assert.equal(call[2].shell, false);
   assert.equal(call[2].env.SF_DISABLE_LOG_FILE, 'true');
+  assert.equal(call[2].timeout, 30_000);
+  assert.equal(call[2].killSignal, 'SIGKILL');
 });
 test('Windows command quotes safe SOQL including spaces, single quotes and colons', () => {
   let call;
@@ -132,6 +134,22 @@ test('only allowlisted transient setup errors are retryable; tests and auth are 
   assert.equal(command('invalid_grant', 'scratch-create').retryable, false);
   assert.equal(command('UnknownFailure', 'source-deploy').retryable, false);
   assert.equal(
+    command('RemoteOrgSignupFailed', 'scratch-create').code,
+    'CREATION_REJECTED',
+  );
+  assert.equal(
+    command('RemoteOrgSignupFailed', 'scratch-create').retryable,
+    false,
+  );
+  assert.equal(
+    command('RemoteOrgSignupFailed', 'source-deploy').code,
+    'CLI_FAILED',
+  );
+  assert.equal(
+    command('signupFailedUnknown', 'scratch-create').code,
+    'CLI_FAILED',
+  );
+  assert.equal(
     command('ScratchOrgInfoTimeoutError', 'scratch-create').jobId,
     '2SR000000000001',
   );
@@ -159,4 +177,45 @@ test('only allowlisted transient setup errors are retryable; tests and auth are 
     command('ScratchOrgLimitExceeded', 'scratch-create').retryable,
     false,
   );
+});
+test('all CLI operations have bounded hard-kill timeouts', () => {
+  for (const stage of [
+    'quota-read',
+    'scratch-read',
+    'scratch-cleanup',
+    'scratch-create',
+    'source-deploy',
+    'apex-tests',
+  ]) {
+    let config;
+    const sf = createSalesforceClient({
+      cwd: '.',
+      platform: 'linux',
+      spawn: (_command, _args, options) => {
+        config = options;
+        return {
+          status: null,
+          error: { code: 'ETIMEDOUT', message: secret },
+          // A killed process may leave buffered output; it cannot prove a
+          // confirmed rejection or override the process-level timeout.
+          stdout: JSON.stringify({ status: 1, name: 'RemoteOrgSignupFailed' }),
+        };
+      },
+    });
+    assert.throws(
+      () => sf(stage, ['fixture']),
+      (error) => {
+        assert.equal(error.code, 'TIMEOUT');
+        assert.ok(!error.message.includes(secret));
+        return true;
+      },
+    );
+    assert.equal(
+      config.timeout,
+      ['scratch-create', 'source-deploy', 'apex-tests'].includes(stage)
+        ? 360_000
+        : 30_000,
+    );
+    assert.equal(config.killSignal, 'SIGKILL');
+  }
 });

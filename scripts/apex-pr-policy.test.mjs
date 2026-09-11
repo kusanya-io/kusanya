@@ -447,11 +447,12 @@ test('UTC date boundary resets only the infrastructure attempt count', () => {
     'initial',
   );
 });
-test('test failures, prior passes and cleanup failures on the same head never authorize a retry', () => {
+test('test failures, prior passes, cleanup failures and creation rejections on the same head never authorize a retry', () => {
   for (const verificationOutcome of [
     'failed-tests',
     'passed',
     'failed-cleanup',
+    'failed-creation-rejected',
   ]) {
     for (const startedAt of ['2026-09-11T12:00:00Z', '2026-09-12T12:00:00Z']) {
       assert.equal(
@@ -504,6 +505,42 @@ test('only explicitly retryable infrastructure markers authorize retry', () => {
     'timed_out',
   ])
     assert.equal(budget([attempt({ conclusion })]).allowed, false);
+});
+test('only collector-proven pre-verification cancellations share the counted infrastructure retry budget', () => {
+  const cancelled = attempt({
+    conclusion: 'cancelled',
+    verificationNotStarted: true,
+  });
+  assert.equal(budget([cancelled]).kind, 'infrastructure-retry');
+  assert.equal(budget([cancelled, attempt({ runId: '101' })]).allowed, false);
+  assert.equal(
+    budget([cancelled, { ...cancelled, runId: '101' }]).allowed,
+    false,
+  );
+  assert.equal(
+    budget([{ ...cancelled, startedAt: '2026-09-11T23:59:59Z' }]).kind,
+    'initial',
+  );
+  for (const verificationNotStarted of [undefined, false, null, 'true', 1])
+    assert.equal(
+      budget([{ ...cancelled, verificationNotStarted }]).allowed,
+      false,
+    );
+  for (const retryable of [undefined, false, null, 'true'])
+    assert.equal(budget([{ ...cancelled, retryable }]).allowed, false);
+  for (const verificationOutcome of [
+    'blocked-quota',
+    'passed',
+    'failed-tests',
+    'failed-cleanup',
+    'failed-creation-rejected',
+  ])
+    assert.equal(
+      budget([{ ...cancelled, verificationOutcome }]).allowed,
+      false,
+    );
+  for (const conclusion of [undefined, 'success', 'timed_out', 'skipped'])
+    assert.equal(budget([{ ...cancelled, conclusion }]).allowed, false);
 });
 test('missing history, malformed timestamps, active attempts and duplicates deny consumption', () => {
   for (const historyComplete of [false, undefined, null])

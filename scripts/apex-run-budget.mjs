@@ -4,10 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { decideInfrastructureRetry } from './apex-pr-policy.mjs';
 
 const jobName = 'Scratch org tests and 85 percent coverage';
+const verificationStepName =
+  'Verify reviewed metadata using only trusted harness code';
 const outcomes = new Set([
   'passed',
   'failed-tests',
   'failed-infrastructure',
+  'failed-creation-rejected',
   'blocked-quota',
   'failed-cleanup',
 ]);
@@ -43,7 +46,12 @@ export function readVerificationMarker(log, { runId, attempt, headSha }) {
     new Date(record.startedAt).toISOString() !== record.startedAt ||
     !outcomes.has(record.outcome) ||
     typeof record.retryable !== 'boolean' ||
-    (['passed', 'failed-tests', 'failed-cleanup'].includes(record.outcome) &&
+    ([
+      'passed',
+      'failed-tests',
+      'failed-cleanup',
+      'failed-creation-rejected',
+    ].includes(record.outcome) &&
       record.retryable)
   )
     throw new Error('Verification marker does not match this exact attempt.');
@@ -76,7 +84,7 @@ export function readVerificationSubject(log) {
   return subjects[0];
 }
 
-/** Read complete workflow history; never grant budget from missing logs or pages. */
+/** Read complete history; require positive Jobs API proof or trusted outcome logs. */
 export function collectAttempts({
   api,
   readLog,
@@ -158,31 +166,101 @@ export function collectAttempts({
       if (matching.length !== 1)
         throw new Error('Historical Apex job is ambiguous.');
       const job = matching[0];
-      // A wholly skipped job never entered the credentialed lifecycle.
       if (
-        job.conclusion === 'skipped' &&
-        Array.isArray(job.steps) &&
+        !Number.isSafeInteger(job.id) ||
+        job.id < 1 ||
+        job.run_id !== run.id ||
+        job.run_attempt !== number ||
+        job.head_sha !== run.head_sha ||
+        job.status !== 'completed' ||
+        !Array.isArray(job.steps)
+      )
+        throw new Error(
+          'Historical Apex job identity or completion is incomplete.',
+        );
+      // GitHub records cancellation while awaiting environment approval as a
+      // completed, zero-step job without a log. Like an entirely skipped job,
+      // it never entered the credentialed lifecycle, including on dispatches
+      // whose reviewed PR subject was therefore never logged. Validate its
+      // enclosing run/attempt and job identity before granting this exception.
+      if (
+        ['skipped', 'cancelled'].includes(job.conclusion) &&
         job.steps.length === 0
       )
         continue;
       if (
-        !Number.isSafeInteger(job.id) ||
-        job.id < 1 ||
-        job.status !== 'completed' ||
-        !Number.isFinite(Date.parse(job.started_at))
+        typeof job.started_at !== 'string' ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(
+          job.started_at,
+        ) ||
+        !Number.isFinite(Date.parse(job.started_at)) ||
+        new Date(job.started_at).toISOString().slice(0, 10) !==
+          job.started_at.slice(0, 10)
       )
-        throw new Error('Historical Apex job has not finished.');
-      const log = readLog(run.id, number, job.id);
+        throw new Error('Historical Apex job start is incomplete.');
+      // Dispatch head_sha identifies the workflow on main, not the reviewed
+      // PR. Even when the harness never starts, only its trusted subject line
+      // can attribute the failed attempt to a head.
+      const log =
+        run.event === 'workflow_dispatch'
+          ? readLog(run.id, number, job.id)
+          : undefined;
       const reviewedHead =
         run.event === 'workflow_dispatch'
           ? readVerificationSubject(log).headSha
           : run.head_sha;
       if (reviewedHead !== headSha) continue;
-      const marker = readVerificationMarker(log, {
-        runId: String(run.id),
-        attempt: number,
-        headSha: reviewedHead,
-      });
+      const verificationSteps = job.steps.filter(
+        (step) => step?.name === verificationStepName,
+      );
+      const verificationSkipped =
+        verificationSteps.length === 1 &&
+        verificationSteps[0].status === 'completed' &&
+        verificationSteps[0].conclusion === 'skipped';
+      let marker;
+      if (verificationSkipped) {
+        if (!['failure', 'cancelled'].includes(job.conclusion))
+          throw new Error(
+            'Skipped verification requires a failed or cancelled Apex job.',
+          );
+        if (
+          job.conclusion === 'cancelled' &&
+          !job.steps.some(
+            (step) =>
+              typeof step?.name === 'string' &&
+              step.status === 'completed' &&
+              ['success', 'failure', 'cancelled', 'timed_out'].includes(
+                step.conclusion,
+              ),
+          )
+        )
+          throw new Error(
+            'Cancelled Apex job needs positive executed-step evidence.',
+          );
+        // A failed/cancelled setup step cannot emit a harness marker. GitHub's
+        // completed/skipped verification step proves the harness did not run.
+        // Unlike a zero-step cancellation this consumes the normal attempt
+        // budget, dated by the executing job rather than its workflow queue.
+        marker = {
+          verificationOutcome: 'failed-infrastructure',
+          retryable: true,
+          startedAt: job.started_at,
+          // Reserved collector proof; readVerificationMarker never imports
+          // this field from a log. Preserve the actual job conclusion below.
+          verificationNotStarted: true,
+        };
+      } else {
+        // Missing, duplicate, incomplete or executed verification steps cannot
+        // use the exception; retain exact-attempt outcome-marker requirements.
+        marker = readVerificationMarker(
+          log ?? readLog(run.id, number, job.id),
+          {
+            runId: String(run.id),
+            attempt: number,
+            headSha: reviewedHead,
+          },
+        );
+      }
       if (
         (marker.verificationOutcome === 'passed') !==
         (job.conclusion === 'success')
