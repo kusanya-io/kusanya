@@ -404,3 +404,27 @@ Issue #5 may close when PR #6 merges.
 - Still not proven live: fallback recovery after a failed or cancelled verification, the pre-verification retry exceptions, and the authentication diagnostic labels. Runner loss and remote requests that outlive their CLI process still need private reconciliation. The daily reset time is unconfirmed, and the CI-only Dev Hub is not provisioned.
 - This branch, PR #4, was brought up to date with `main` by a merge commit, keeping every entry. It changes only this file, so its Salesforce gate uses the approved documentation exemption, with no approval and no scratch org.
 - Still due before Phase 1: the `ksny` namespace availability check and its ADR, and Bill's confirmation or revision of the Apache-2.0 service licence in ADR 0002.
+
+## 2026-09-11: Read-only diagnosis of the ksny namespace-link failure
+
+Scope: the builder's request to confirm the `ksny` registration and the absent Dev Hub link, and to diagnose the Link Namespace error `invalid_request: missing required code challenge`. There is no pull request yet; the builder's branch `docs/service-licence-confirmation` is unpushed at acbd7b2. No settings, connected apps, credentials, scratch orgs, CI or support cases were touched.
+
+Confirmed read-only at 19:23 UTC:
+
+- The holder org 00Dbm00000yxbH7EAI, under local alias `Kusanya-Namespace`, is a Developer Edition, non-sandbox org on USA876 with `NamespacePrefix = ksny`.
+- The Dev Hub 00Dbm00000yeiz3EAA has zero `NamespaceRegistry` rows for any prefix, so the link is absent.
+- Both orgs' `OauthOidc` settings metadata show `isPkceRequired = false`, so the org-wide PKCE requirement is off in each.
+- The Dev Hub has exactly one connected application, "SalesforceDX Namespace Registry". Automated Process created it at 11:30 UTC on 10 September, when Dev Hub was enabled. It is not listed as retrievable `ConnectedApp` metadata, and its standard fields expose no PKCE setting. No external client apps exist.
+- `NamespaceRegistry.NamespaceOrg` is not createable through the API, so no API path exists to write a link.
+
+Diagnosis:
+
+- The error arrives before any namespace-org sign-in, so neither org's policy can apply yet. The requirement must come from the connected app named in the popup's request.
+- With org-wide PKCE off in both orgs, the likely cause is that the Dev Hub's automatically created "SalesforceDX Namespace Registry" app requires PKCE while the Salesforce-generated Environment Hub flow sends no code challenge. That makes it a Salesforce-side incompatibility.
+- The app's PKCE flag is not readable by API, so this is an inference until Bill views the app's OAuth settings.
+- Salesforce's Known Issue a028c00000qQ0CBAA0 confirms Link Namespace depends on a Dev Hub connected app with callback `/environmenthub/soma-callback.apexp`. Its workaround creates such an app, which is outside the approved scope. In 2026 that is also constrained by connected-app creation and security changes.
+- A third-party article suggests unticking PKCE on the app. That is not a Salesforce-supported remedy, and it is the change the approval forbids.
+
+Recommendation: Bill views the app's OAuth settings read-only, then Salesforce Support is asked for a supported fix. Any change to the app's PKCE flag, or the Known Issue workaround, needs Bill's separate approval and verifier review before and after. The drafted support request was given to Bill and not sent.
+
+No verdict applies. Linking stays incomplete, and ADR 0008's Phase 1 prerequisite is still open.
