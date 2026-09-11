@@ -696,6 +696,7 @@ const skippedVerification = () => ({
 
 function preHarnessFailureHistory({
   failedStep = 'auth',
+  stepFailureConclusion = 'failure',
   event = 'pull_request',
   workflowHead = event === 'workflow_dispatch' ? 'b'.repeat(40) : headSha,
   jobChanges = {},
@@ -733,12 +734,14 @@ function preHarnessFailureHistory({
           {
             name: 'Install pinned Salesforce CLI',
             status: 'completed',
-            conclusion: failedStep === 'install' ? 'failure' : 'success',
+            conclusion:
+              failedStep === 'install' ? stepFailureConclusion : 'success',
           },
           {
             name: 'Authenticate dedicated Dev Hub without printing its auth URL',
             status: 'completed',
-            conclusion: failedStep === 'install' ? 'skipped' : 'failure',
+            conclusion:
+              failedStep === 'install' ? 'skipped' : stepFailureConclusion,
           },
           skippedVerification(),
         ],
@@ -768,6 +771,7 @@ test('auth and CLI install failures with completed/skipped verification consume 
         verificationOutcome: 'failed-infrastructure',
         retryable: true,
         startedAt: '2026-09-10T12:00:00Z',
+        verificationNotStarted: true,
       },
     ]);
     assert.equal(
@@ -792,7 +796,6 @@ test('skipped-verification exception retains exact failed job identity and compl
     { conclusion: undefined },
     { conclusion: 'success' },
     { conclusion: 'skipped' },
-    { conclusion: 'cancelled' },
     { conclusion: 'timed_out' },
   ])
     assert.throws(() =>
@@ -970,6 +973,199 @@ test('skipped dispatch verification still requires trusted reviewed-subject iden
   const wrongPrHead = preHarnessFailureHistory({
     workflowHead: 'c'.repeat(40),
   });
+  assert.deepEqual(collectAttempts(wrongPrHead), []);
+  assert.deepEqual(wrongPrHead.logReads, []);
+});
+
+function cancelledSetupHistory(changes = {}) {
+  return preHarnessFailureHistory({
+    failedStep: 'install',
+    stepFailureConclusion: 'cancelled',
+    ...changes,
+    jobChanges: { conclusion: 'cancelled', ...changes.jobChanges },
+  });
+}
+
+test('cancellation during CLI installation consumes an attempt while retaining the cancelled job conclusion', () => {
+  const history = cancelledSetupHistory();
+  history.readLog = () =>
+    assert.fail('Skipped PR verification needs no marker log.');
+  assert.deepEqual(collectAttempts(history), [
+    {
+      runId: '11',
+      attempt: 1,
+      headSha,
+      status: 'completed',
+      conclusion: 'cancelled',
+      verificationOutcome: 'failed-infrastructure',
+      retryable: true,
+      startedAt: '2026-09-10T12:00:00Z',
+      verificationNotStarted: true,
+    },
+  ]);
+  assert.equal(
+    runBudget({
+      ...history,
+      env: budgetEnv(),
+      now: new Date('2026-09-10T13:00:00Z'),
+    }).kind,
+    'infrastructure-retry',
+  );
+});
+
+test('cancelled pre-harness jobs use the same daily limit and reset as failed attempts', () => {
+  const history = rerunHistory({ runAttempt: 3 });
+  const originalApi = history.api;
+  history.api = (path) => {
+    const result = originalApi(path);
+    if (path.includes('/jobs?')) {
+      result.jobs[0].conclusion = 'cancelled';
+      result.jobs[0].steps = [
+        {
+          name: 'Install pinned Salesforce CLI',
+          status: 'completed',
+          conclusion: 'cancelled',
+        },
+        skippedVerification(),
+      ];
+    }
+    return result;
+  };
+  history.readLog = () =>
+    assert.fail('Skipped PR verification needs no outcome log.');
+  const env = budgetEnv({ GITHUB_RUN_ID: '11', GITHUB_RUN_ATTEMPT: '3' });
+  assert.deepEqual(
+    collectAttempts(history).map((value) => value.conclusion),
+    ['cancelled', 'cancelled'],
+  );
+  const sameDay = runBudget({
+    ...history,
+    env,
+    now: new Date('2026-09-10T13:00:00Z'),
+  });
+  assert.equal(sameDay.allowed, false);
+  assert.match(sameDay.reason, /already consumed/);
+  assert.equal(
+    runBudget({ ...history, env, now: new Date('2026-09-11T00:00:00Z') }).kind,
+    'initial',
+  );
+});
+
+test('cancelled job skipped-verification exception requires positive executed-step evidence', () => {
+  for (const extraSteps of [
+    [],
+    [null],
+    [
+      {
+        name: 'Install pinned Salesforce CLI',
+        status: 'completed',
+        conclusion: 'skipped',
+      },
+    ],
+    [
+      {
+        name: 'Install pinned Salesforce CLI',
+        status: 'in_progress',
+        conclusion: 'cancelled',
+      },
+    ],
+    [
+      {
+        name: 'Install pinned Salesforce CLI',
+        status: 'completed',
+        conclusion: undefined,
+      },
+    ],
+  ])
+    assert.throws(
+      () =>
+        collectAttempts(
+          cancelledSetupHistory({
+            jobChanges: { steps: [...extraSteps, skippedVerification()] },
+          }),
+        ),
+      /positive executed-step evidence/,
+    );
+  assert.throws(
+    () =>
+      collectAttempts(
+        cancelledSetupHistory({
+          jobChanges: { conclusion: 'success' },
+          log: marker({ outcome: 'passed', retryable: false }),
+        }),
+      ),
+    /failed or cancelled Apex job/,
+  );
+});
+
+test('cancelled job without unique completed/skipped verification cannot import proof from a harness marker', () => {
+  for (const verificationSteps of [
+    [],
+    [skippedVerification(), skippedVerification()],
+    [{ ...skippedVerification(), status: 'in_progress' }],
+    [{ ...skippedVerification(), conclusion: 'cancelled' }],
+    [{ ...skippedVerification(), conclusion: 'failure' }],
+  ]) {
+    const jobChanges = {
+      steps: [
+        {
+          name: 'Install pinned Salesforce CLI',
+          status: 'completed',
+          conclusion: 'success',
+        },
+        ...verificationSteps,
+      ],
+    };
+    const absent = cancelledSetupHistory({ jobChanges, log: '' });
+    assert.throws(() => collectAttempts(absent), /outcome marker/);
+    const forgedProof = cancelledSetupHistory({
+      jobChanges,
+      log: marker({ verificationNotStarted: true }),
+    });
+    const [evidence] = collectAttempts(forgedProof);
+    assert.equal(evidence.conclusion, 'cancelled');
+    assert.equal(Object.hasOwn(evidence, 'verificationNotStarted'), false);
+    assert.equal(
+      runBudget({
+        ...forgedProof,
+        env: budgetEnv(),
+        now: new Date('2026-09-10T13:00:00Z'),
+      }).allowed,
+      false,
+    );
+  }
+});
+
+test('pre-harness cancellation retains exact dispatch-subject attribution', () => {
+  const history = cancelledSetupHistory({ event: 'workflow_dispatch' });
+  assert.equal(collectAttempts(history)[0].headSha, headSha);
+  assert.deepEqual(history.logReads, [[11, 1, 100]]);
+  assert.equal(
+    runBudget({
+      ...history,
+      env: budgetEnv(),
+      now: new Date('2026-09-10T13:00:00Z'),
+    }).kind,
+    'infrastructure-retry',
+  );
+  for (const log of ['', `${subject()}\n${subject()}`])
+    assert.throws(
+      () =>
+        collectAttempts(
+          cancelledSetupHistory({ event: 'workflow_dispatch', log }),
+        ),
+      /subject/,
+    );
+  assert.deepEqual(
+    collectAttempts(
+      cancelledSetupHistory({
+        event: 'workflow_dispatch',
+        log: subject('c'.repeat(40)),
+      }),
+    ),
+    [],
+  );
+  const wrongPrHead = cancelledSetupHistory({ workflowHead: 'c'.repeat(40) });
   assert.deepEqual(collectAttempts(wrongPrHead), []);
   assert.deepEqual(wrongPrHead.logReads, []);
 });

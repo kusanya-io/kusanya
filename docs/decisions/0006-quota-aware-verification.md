@@ -110,6 +110,25 @@ Missing, duplicate, incomplete or non-skipped verify steps do not qualify and
 retain the marker requirement. Contradictory job completion fails closed.
 No automatic retry or new approval authority is introduced.
 
+Finding 21 amendment: emit the single `Verifying PR ... at head ...` subject
+immediately after validating the PR number and full SHA formats, before event or
+live API checks. It records the requested subject, not a successful live check or
+permission to authenticate. A stale head or failed API lookup remains a failed
+check but no longer loses dispatch attribution. Invalid-format inputs still emit
+no subject. Legacy or otherwise unattributable dispatches continue to fail closed;
+never delete history or guess their subject to regain budget.
+
+Finding 22 amendment: count cancellation after job execution began but before
+verification like the failed case, rather than granting a free cancellation.
+Require the same unique completed/skipped verify step plus an actually executed,
+completed step. Keep the real `cancelled` conclusion, and derive
+`verificationNotStarted: true` only from the validated Jobs API evidence. The
+budget permits cancelled infrastructure evidence only with that proof and
+`retryable: true`; an outcome marker cannot assert this exception. The same
+initial-plus-one daily budget applies. Zero-step cancellation remains excluded;
+success with skipped verification, incomplete evidence, and cancellation after
+verification started remain refused. No cleanup or test-failure restriction changes.
+
 Until CI has its separate hub, coordinate live available slots between CI and
 Claude, reserving room for explicitly authorized infrastructure recovery. The
 original 11 September slot estimates were withdrawn by note 16. Phase 0 CI and
@@ -130,8 +149,22 @@ Finding 20 amendment: capture authentication `--json` stdout only in an unexport
 shell variable; discard stderr. On failure, parse one JSON object and disclose
 only its exact top-level `name` if allowlisted: `ENOTFOUND`, `ETIMEDOUT`,
 `ECONNRESET`, `ECONNREFUSED`, `EAI_AGAIN`, `invalid_grant`,
-`INVALID_SFDX_AUTH_URL`, `AuthDecryptError`, or `RequestError`. Otherwise disclose
-only `unrecognized`. Never print messages, nested data, URLs, instances, raw JSON
+`INVALID_SFDX_AUTH_URL`, `AuthDecryptError`, or `RequestError`. Also accept
+`RefreshTokenAuthError`, the wrapper observed by Claude with pinned CLI 2.135.7
+for network and rejected-token failures. For that exact name only, inspect the
+top-level string `message` and string `cause` against fixed patterns and emit
+`RefreshTokenAuthError/<label>` using a literal label:
+
+- `dns`: `ENOTFOUND`, `EAI_AGAIN`, or `getaddrinfo`.
+- `timeout`: `ETIMEDOUT` or `timed out`.
+- `connection`: `ECONNRESET`, `ECONNREFUSED`, or `socket hang up`.
+- `token-rejected`: `expired access/refresh token` or `invalid_grant`.
+- `other`: no recognized pattern or usable string.
+
+Match case-insensitively in that fixed precedence order; never print captured or
+matched text. Do not inspect nested objects or stringify non-string values.
+Unknown top-level names still disclose only `unrecognized`. Never print messages,
+nested data, URLs, instances, raw JSON
 or parser diagnostics. Success remains silent. Clear the variable before reporting;
 do not persist, export, upload or cache the captured output. The secret remains
 scoped to the single authentication step. The diagnostic class is evidence to

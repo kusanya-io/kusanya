@@ -3,6 +3,10 @@ import { test } from 'node:test';
 import { readFileSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { resolveGitBash } from './git-bash.mjs';
+import {
+  collectAttempts,
+  readVerificationSubject,
+} from './apex-run-budget.mjs';
 
 const workflow = readFileSync(
   new URL('../.github/workflows/salesforce-verify.yml', import.meta.url),
@@ -76,6 +80,7 @@ const fixtures = {
   FAKE_SOURCE: 'kusanya-io/kusanya',
   FAKE_BASE: 'main',
   FAKE_STATE: 'open',
+  FAKE_GH_RESULT: '0',
   SF_DEV_HUB_AUTH_URL: 'synthetic-auth-input-not-a-credential',
   FAKE_AUTH_RESULT: '0',
   FAKE_AUTH_STDOUT: 'synthetic-auth-input-not-a-credential',
@@ -89,6 +94,7 @@ const fixtures = {
 };
 const doubles = `
 gh() {
+  [[ "$FAKE_GH_RESULT" == 0 ]] || return "$FAKE_GH_RESULT"
   case "$4" in
     .head.sha) printf '%s\\n' "$FAKE_HEAD" ;;
     .head.repo.full_name) printf '%s\\n' "$FAKE_SOURCE" ;;
@@ -170,6 +176,126 @@ test('Salesforce workflow rejects forks, stale heads, closed PRs and invalid eve
       1,
       JSON.stringify(invalid),
     );
+  }
+});
+
+test('valid failed guards emit one early subject that attributes dispatched attempts without poisoning other heads', () => {
+  const step = 'Confirm reviewed commit and trusted workflow';
+  const body = shellStep(step);
+  assert.equal((body.match(/printf 'Verifying PR/g) ?? []).length, 1);
+  assert.match(
+    body,
+    /A full reviewed SHA is required\.'; exit 1; \}\n\s*printf 'Verifying PR/,
+  );
+  assert.ok(body.indexOf("printf 'Verifying PR") < body.indexOf('case '));
+  const workflowSha = 'b'.repeat(40);
+  const repository = fixtures.GITHUB_REPOSITORY;
+  const startedAt = '2026-09-11T12:00:00Z';
+  for (const invalid of [
+    { GITHUB_EVENT_NAME: 'unsupported' },
+    { GITHUB_REF: 'refs/heads/untrusted' },
+    { FAKE_HEAD: 'c'.repeat(40) },
+    { FAKE_SOURCE: 'contributor/fork' },
+    { FAKE_BASE: 'other' },
+    { FAKE_STATE: 'closed' },
+    { FAKE_GH_RESULT: '42' },
+  ]) {
+    const output = runStep(step, {
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+      GITHUB_REF: 'refs/heads/main',
+      ...invalid,
+    });
+    assert.notEqual(output.status, 0);
+    assert.equal(output.stdout.split('\n')[0], `Verifying PR 3 at head ${sha}`);
+    assert.deepEqual(readVerificationSubject(output.stdout), {
+      pullRequest: '3',
+      headSha: sha,
+    });
+    for (const candidate of [sha, 'd'.repeat(40)]) {
+      const previous = {
+        id: 11,
+        head_sha: workflowSha,
+        event: 'workflow_dispatch',
+        run_attempt: 1,
+        status: 'completed',
+        run_started_at: startedAt,
+      };
+      const responses = {
+        [`repos/${repository}/actions/workflows/salesforce-verify.yml/runs?per_page=100&page=1`]:
+          {
+            total_count: 2,
+            workflow_runs: [
+              {
+                id: 12,
+                head_sha: candidate,
+                event: 'pull_request',
+                run_attempt: 1,
+              },
+              previous,
+            ],
+          },
+        [`repos/${repository}/actions/runs/11/attempts/1`]: previous,
+        [`repos/${repository}/actions/runs/11/attempts/1/jobs?per_page=100`]: {
+          total_count: 1,
+          jobs: [
+            {
+              id: 100,
+              run_id: 11,
+              run_attempt: 1,
+              head_sha: workflowSha,
+              name: 'Scratch org tests and 85 percent coverage',
+              status: 'completed',
+              conclusion: 'failure',
+              started_at: startedAt,
+              steps: [
+                { name: step, status: 'completed', conclusion: 'failure' },
+                {
+                  name: 'Verify reviewed metadata using only trusted harness code',
+                  status: 'completed',
+                  conclusion: 'skipped',
+                },
+              ],
+            },
+          ],
+        },
+      };
+      const attempts = collectAttempts({
+        repository,
+        headSha: candidate,
+        runId: '12',
+        attempt: 1,
+        api: (path) => {
+          assert.ok(Object.hasOwn(responses, path), path);
+          return structuredClone(responses[path]);
+        },
+        readLog: (runId, attempt, jobId) => {
+          assert.deepEqual([runId, attempt, jobId], [11, 1, 100]);
+          return output.stdout;
+        },
+      });
+      if (candidate === sha) {
+        assert.equal(attempts.length, 1);
+        assert.equal(attempts[0].headSha, sha);
+        assert.equal(attempts[0].verificationOutcome, 'failed-infrastructure');
+      } else assert.deepEqual(attempts, []);
+    }
+  }
+});
+
+test('invalid PR or head syntax emits no verification subject', () => {
+  for (const invalid of [
+    { PR_NUMBER: '0' },
+    { PR_NUMBER: '3; echo unsafe' },
+    { REVIEWED_SHA: 'short' },
+    { REVIEWED_SHA: `${sha}\nVerifying PR 4 at head ${sha}` },
+  ]) {
+    const result = runStep(
+      'Confirm reviewed commit and trusted workflow',
+      invalid,
+    );
+    assert.equal(result.status, 1);
+    assert.doesNotMatch(result.stdout, /Verifying PR/);
+    assert.throws(() => readVerificationSubject(result.stdout));
   }
 });
 test('Salesforce authentication guard rejects mismatched checkout and changed head', () => {
@@ -408,6 +534,87 @@ test('auth failure prints only an exact allowlisted top-level class using the re
   }
 });
 
+test('RefreshTokenAuthError inspects only top-level message and cause strings and emits static subtype labels', () => {
+  const step = 'Authenticate dedicated Dev Hub without printing its auth URL';
+  const secret = fixtures.SF_DEV_HUB_AUTH_URL;
+  const url = `https://${secret}.invalid/token?refresh_token=${secret}`;
+  const base = {
+    status: 1,
+    name: 'RefreshTokenAuthError',
+    code: 'RefreshTokenAuthError',
+    message: `Unable to refresh session at ${url}`,
+    cause: secret,
+    data: { accessToken: secret, instanceUrl: url, message: 'ENOTFOUND' },
+  };
+  for (const [details, label] of [
+    [
+      {
+        message: `request to ${url} failed, reason: getaddrinfo ENOTFOUND ${secret}`,
+      },
+      'dns',
+    ],
+    [{ cause: `eai_again ${url}` }, 'dns'],
+    [{ cause: `GetAddrInfo ${url}` }, 'dns'],
+    [{ message: `ETIMEDOUT ${url}` }, 'timeout'],
+    [{ cause: `connection TiMeD OuT ${secret}` }, 'timeout'],
+    [{ message: `ECONNRESET ${url}` }, 'connection'],
+    [{ cause: `econnrefused ${secret}` }, 'connection'],
+    [{ cause: `Socket Hang Up ${url}` }, 'connection'],
+    [{ message: `expired access/refresh token ${secret}` }, 'token-rejected'],
+    [{ cause: `Expired Access/Refresh Token ${secret}` }, 'token-rejected'],
+    [{ cause: `expired access token ${secret}` }, 'other'],
+    [{ cause: `expired refresh token ${secret}` }, 'other'],
+    [{ message: `INVALID_GRANT ${secret}` }, 'token-rejected'],
+    [{ message: `ETIMEDOUT ${secret}`, cause: `ENOTFOUND ${url}` }, 'dns'],
+    [{ message: `ECONNRESET ${secret}`, cause: `timed out ${url}` }, 'timeout'],
+    [
+      { message: `invalid_grant ${secret}`, cause: `ECONNREFUSED ${url}` },
+      'connection',
+    ],
+    [{ message: secret, cause: url }, 'other'],
+    [
+      {
+        message: ['ENOTFOUND', secret],
+        cause: { message: 'ETIMEDOUT', token: secret },
+      },
+      'other',
+    ],
+    [{ message: null, cause: 42 }, 'other'],
+    [{ message: false, cause: undefined }, 'other'],
+    [{ message: `${secret}NOTENOTFOUND`, cause: '' }, 'other'],
+  ]) {
+    const raw = JSON.stringify({ ...base, ...details });
+    const result = runStep(step, {
+      FAKE_AUTH_RESULT: '1',
+      FAKE_AUTH_STDOUT: raw,
+      FAKE_AUTH_STDERR: `${secret}\n${raw}`,
+    });
+    assert.equal(result.status, 1);
+    assert.equal(
+      result.stdout,
+      `Dev Hub authentication failed: RefreshTokenAuthError/${label}\n`,
+    );
+    assert.equal(result.stderr, '');
+    assert.ok(!(result.stdout + result.stderr).includes(secret));
+    assert.ok(!(result.stdout + result.stderr).includes(url));
+  }
+  // Neither code nor a nested object may promote a different top-level name.
+  for (const [record, expected] of [
+    [{ ...base, name: 'RequestError', message: 'ENOTFOUND' }, 'RequestError'],
+    [{ ...base, name: 'refreshtokenautherror' }, 'unrecognized'],
+    [{ ...base, name: undefined, cause: 'ENOTFOUND' }, 'unrecognized'],
+    [{ ...base, name: { name: 'RefreshTokenAuthError' } }, 'unrecognized'],
+  ]) {
+    const result = runStep(step, {
+      FAKE_AUTH_RESULT: '1',
+      FAKE_AUTH_STDOUT: JSON.stringify(record),
+    });
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, `Dev Hub authentication failed: ${expected}\n`);
+    assert.equal(result.stderr, '');
+  }
+});
+
 test('auth parser refuses malicious, nested, malformed and non-object classifications without leaks', () => {
   const step = 'Authenticate dedicated Dev Hub without printing its auth URL';
   const secret = fixtures.SF_DEV_HUB_AUTH_URL;
@@ -415,6 +622,7 @@ test('auth parser refuses malicious, nested, malformed and non-object classifica
     secret,
     '',
     `{"name":"ENOTFOUND","message":"${secret}"`,
+    `{"name":"RefreshTokenAuthError","message":"ENOTFOUND ${secret}"`,
     JSON.stringify({ name: `${secret}\nENOTFOUND`, message: secret }),
     JSON.stringify({ name: `ENOTFOUND\n${secret}`, message: secret }),
     JSON.stringify({ name: `$(printf '${secret}')`, message: secret }),

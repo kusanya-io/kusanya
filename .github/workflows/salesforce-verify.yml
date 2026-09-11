@@ -129,6 +129,7 @@ jobs:
           set -euo pipefail
           [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo 'Invalid PR number.'; exit 1; }
           [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'A full reviewed SHA is required.'; exit 1; }
+          printf 'Verifying PR %s at head %s\n' "$PR_NUMBER" "$REVIEWED_SHA"
           case "$GITHUB_EVENT_NAME" in
             pull_request)
               [[ "$GITHUB_BASE_REF" == "$DEFAULT_BRANCH" ]] || { echo 'PR must target the default branch.'; exit 1; }
@@ -144,7 +145,6 @@ jobs:
           base_branch="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .base.ref)"
           pr_state="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .state)"
           [[ "$current_sha" == "$REVIEWED_SHA" && "$source_repo" == "$GITHUB_REPOSITORY" && "$base_branch" == "$DEFAULT_BRANCH" && "$pr_state" == open ]] || { echo 'PR changed, closed or fork source refused. Stage reviewed fork contributions in a same-repository PR.'; exit 1; }
-          printf 'Verifying PR %s at head %s\n' "$PR_NUMBER" "$REVIEWED_SHA"
       - name: Checkout trusted verification harness
         timeout-minutes: 1
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -200,13 +200,24 @@ jobs:
               const allowed = new Set([
                 "ENOTFOUND", "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED",
                 "EAI_AGAIN", "invalid_grant", "INVALID_SFDX_AUTH_URL",
-                "AuthDecryptError", "RequestError"
+                "AuthDecryptError", "RequestError", "RefreshTokenAuthError"
               ]);
               let name = "unrecognized";
               try {
                 const value = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
                 if (value && typeof value === "object" && !Array.isArray(value) &&
-                    allowed.has(value.name)) name = value.name;
+                    allowed.has(value.name)) {
+                  name = value.name;
+                  if (name === "RefreshTokenAuthError") {
+                    const details = [value.message, value.cause].filter(item => typeof item === "string");
+                    let category = "other";
+                    if (details.some(item => /\b(?:ENOTFOUND|EAI_AGAIN|getaddrinfo)\b/i.test(item))) category = "dns";
+                    else if (details.some(item => /\bETIMEDOUT\b|timed out/i.test(item))) category = "timeout";
+                    else if (details.some(item => /\b(?:ECONNRESET|ECONNREFUSED)\b|socket hang up/i.test(item))) category = "connection";
+                    else if (details.some(item => /expired access\/refresh token|\binvalid_grant\b/i.test(item))) category = "token-rejected";
+                    name = "RefreshTokenAuthError/" + category;
+                  }
+                }
               } catch {}
               process.stdout.write(name);
             ' 2>/dev/null)" || auth_name=unrecognized

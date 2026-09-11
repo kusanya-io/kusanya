@@ -100,8 +100,15 @@ stdout is captured only in an unexported shell variable, never an artifact, cach
 or file; stderr remains discarded. On failure, a real JSON parser permits only an
 exact top-level `name` from this allowlist: `ENOTFOUND`, `ETIMEDOUT`, `ECONNRESET`,
 `ECONNREFUSED`, `EAI_AGAIN`, `invalid_grant`, `INVALID_SFDX_AUTH_URL`,
-`AuthDecryptError`, `RequestError`. Anything else, including malformed JSON or
-non-object output, reports `unrecognized`. Messages, nested data, URLs, instances
+`AuthDecryptError`, `RequestError`. The observed CLI wrapper `RefreshTokenAuthError`
+is also recognized. Only for that exact name, top-level string `message` and
+string `cause` are classified through fixed patterns into a literal suffix:
+`dns`, `timeout`, `connection`, `token-rejected`, or `other`. The output is, for
+example, `RefreshTokenAuthError/dns`, never any matched text. ADR 0006 lists the
+patterns and precedence; labels are heuristic diagnostics, not proof of root cause.
+Non-string fields and nested objects are not inspected. Anything else, including
+an unknown top-level name, malformed JSON or non-object output, reports
+`unrecognized`. Messages, nested data, URLs, instances
 and parser diagnostics are never printed; success remains silent. The captured
 variable is cleared before reporting. Never print an auth URL to diagnose a run.
 A failed authentication run supplies no Apex evidence, and an error class alone
@@ -173,6 +180,15 @@ explicit approval for any retry. It never makes the failed gate green. Missing,
 duplicate, incomplete or non-skipped verify steps retain the marker requirement;
 contradictory completion is refused.
 
+Finding 22 extends this counted exception to a completed cancelled job with the
+same skipped-verify proof and at least one completed, executed step. The reader
+retains `conclusion: cancelled` and derives `verificationNotStarted: true` from
+Jobs API evidence, never from an outcome marker. Only that proof plus retryable
+infrastructure failure permits cancellation through the budget; it consumes the
+same daily attempt allowance. Zero-step cancellations remain free, not passing.
+All-skipped nonzero jobs, success with skipped verify, and cancellation after
+verification started still fail closed. This does not authorize automatic retries.
+
 For executed verification, only a unique, sanitized harness marker matching
 run/attempt/head establishes the previous outcome. Both the marker and step-based
 exception are subject to finding 10's explicit-review rule.
@@ -185,6 +201,13 @@ job's UTC `started_at`. Workflow queue time is never used. Unidentified legacy
 dispatches or missing required logs fail closed and need investigation; they are
 not silently excluded. The history reader caps at
 1,000 workflow runs and refuses incomplete history rather than resetting budget.
+
+Finding 21 moves the subject line immediately after PR number/full SHA format
+validation, before event checks or live `gh api` calls. It records only the
+requested head: it does not assert the head is still current or approve execution.
+This preserves dispatch attribution when a later live check fails. Invalid-format
+inputs still emit no subject. A dispatch with missing/ambiguous subject evidence
+remains blocked for investigation; do not delete run history to bypass the budget.
 
 Tag each disposable org with role, run ID, short head SHA and a unique suffix.
 Reconcile creation timeouts by exact job ID or tag before another create. Delete

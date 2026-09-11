@@ -506,6 +506,42 @@ test('only explicitly retryable infrastructure markers authorize retry', () => {
   ])
     assert.equal(budget([attempt({ conclusion })]).allowed, false);
 });
+test('only collector-proven pre-verification cancellations share the counted infrastructure retry budget', () => {
+  const cancelled = attempt({
+    conclusion: 'cancelled',
+    verificationNotStarted: true,
+  });
+  assert.equal(budget([cancelled]).kind, 'infrastructure-retry');
+  assert.equal(budget([cancelled, attempt({ runId: '101' })]).allowed, false);
+  assert.equal(
+    budget([cancelled, { ...cancelled, runId: '101' }]).allowed,
+    false,
+  );
+  assert.equal(
+    budget([{ ...cancelled, startedAt: '2026-09-11T23:59:59Z' }]).kind,
+    'initial',
+  );
+  for (const verificationNotStarted of [undefined, false, null, 'true', 1])
+    assert.equal(
+      budget([{ ...cancelled, verificationNotStarted }]).allowed,
+      false,
+    );
+  for (const retryable of [undefined, false, null, 'true'])
+    assert.equal(budget([{ ...cancelled, retryable }]).allowed, false);
+  for (const verificationOutcome of [
+    'blocked-quota',
+    'passed',
+    'failed-tests',
+    'failed-cleanup',
+    'failed-creation-rejected',
+  ])
+    assert.equal(
+      budget([{ ...cancelled, verificationOutcome }]).allowed,
+      false,
+    );
+  for (const conclusion of [undefined, 'success', 'timed_out', 'skipped'])
+    assert.equal(budget([{ ...cancelled, conclusion }]).allowed, false);
+});
 test('missing history, malformed timestamps, active attempts and duplicates deny consumption', () => {
   for (const historyComplete of [false, undefined, null])
     assert.equal(budget([], { historyComplete }).allowed, false);

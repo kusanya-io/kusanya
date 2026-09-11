@@ -219,9 +219,25 @@ export function collectAttempts({
         verificationSteps[0].conclusion === 'skipped';
       let marker;
       if (verificationSkipped) {
-        if (job.conclusion !== 'failure')
-          throw new Error('Skipped verification requires a failed Apex job.');
-        // A failed setup/auth step cannot emit a harness marker. GitHub's
+        if (!['failure', 'cancelled'].includes(job.conclusion))
+          throw new Error(
+            'Skipped verification requires a failed or cancelled Apex job.',
+          );
+        if (
+          job.conclusion === 'cancelled' &&
+          !job.steps.some(
+            (step) =>
+              typeof step?.name === 'string' &&
+              step.status === 'completed' &&
+              ['success', 'failure', 'cancelled', 'timed_out'].includes(
+                step.conclusion,
+              ),
+          )
+        )
+          throw new Error(
+            'Cancelled Apex job needs positive executed-step evidence.',
+          );
+        // A failed/cancelled setup step cannot emit a harness marker. GitHub's
         // completed/skipped verification step proves the harness did not run.
         // Unlike a zero-step cancellation this consumes the normal attempt
         // budget, dated by the executing job rather than its workflow queue.
@@ -229,6 +245,9 @@ export function collectAttempts({
           verificationOutcome: 'failed-infrastructure',
           retryable: true,
           startedAt: job.started_at,
+          // Reserved collector proof; readVerificationMarker never imports
+          // this field from a log. Preserve the actual job conclusion below.
+          verificationNotStarted: true,
         };
       } else {
         // Missing, duplicate, incomplete or executed verification steps cannot
