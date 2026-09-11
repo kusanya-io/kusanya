@@ -374,3 +374,25 @@ Findings:
 `SAFE TO APPROVE: run 34623685881 at head 715661c`. Capacity at 17:00 UTC was 3 of 3 active and 3 of 6 daily free.
 
 `HOLD: PR #6, 0 findings, awaiting hosted Apex on 715661c`. The verdict becomes `PASS: PR #6 may be merged` once that run passes with coverage and cleanup confirmed by its log and a Dev Hub audit. Issue #5 can close when PR #6 merges.
+
+## 2026-09-11: PR #6 verdict, head `715661c`
+
+Final hosted evidence for issue #5 hardening. Nothing has changed since the review of this head: the head, pin, merge ref 8e18406, settings, Salesforce metadata and service are identical.
+
+| Check                                       | Result                                                                                                                                                                                                                                                                     |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Salesforce run 34623685881, attempt 1       | Success, approved by `cobitechsolutions` for `salesforce-ci`. Apex job 103343579965 succeeded in every step. The fallback cleanup was skipped after success, as designed. The gate succeeded.                                                                              |
+| Budget admission                            | The admission JSON appears in the policy job and again in the in-Apex recheck before authentication.                                                                                                                                                                       |
+| Harness evidence                            | Tag `kusanya-ci-v1__34623685881-1__715661c10168__4687f565462e`. 1 test passed with 2 of 2 executable lines (100.00%). 1 owned scratch org deleted, 0 already deleted. The marker shows outcome `passed` for the full head and run 34623685881-1, started 17:06:33.725 UTC. |
+| Credential safety                           | 950 log lines across three jobs contain no auth URL, token, username or instance host. The one `RefreshTokenAuthError/` match is the step's echoed script. No authentication failure line was printed.                                                                     |
+| Dev Hub audit, 17:11 UTC                    | The tagged ScratchOrgInfo record is Deleted, with no error code. The setup audit trail logged `deleteScratchOrg` at 17:07:00 for the same org ID. No scratch orgs are active, and 2 of 6 daily slots remain. The CLI refresh at 17:06:33 matches the authentication step.  |
+| Required checks on the head                 | Scaffold and lint, Service and container tests, and Salesforce verification gate all succeeded. The PR is mergeable and clean.                                                                                                                                             |
+| Tests at this head, from the previous entry | 150 of 150 in Git Bash and PowerShell. actionlint with ShellCheck 0.11.0 is clean. The service tree is identical to the Phase 0 container run.                                                                                                                             |
+
+Findings 11 to 13 and 17 to 22 are closed, and notes 14 to 16 are addressed. Two things are not proven live: fallback recovery after a failed or cancelled verification, and the pre-verification retry exceptions. Their regression tests use real GitHub job shapes and real CLI error shapes.
+
+Merge order: merge PR #6 before PR #4. `main` requires branches to be up to date, so merging PR #4 first would force a new PR #6 head and void this Apex evidence.
+
+`PASS: PR #6 may be merged`
+
+Issue #5 may close when PR #6 merges.
