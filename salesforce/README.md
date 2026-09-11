@@ -54,8 +54,9 @@ still implement only the one-org smoke suite. No tenant acceptance test is claim
 Hosted verification also persists safe ownership intents at the fixed
 `RUNNER_TEMP/kusanya-scratch-intents.json` path before allocation. The trusted
 `cleanup-salesforce.mjs` always-run step uses that journal only for the exact
-authenticated CI run/attempt, after the bounded verification step and before
-logout. It is not a manual target-org deletion tool or a verifier-org selector.
+authenticated CI run/attempt, after the bounded verification step fails or is
+cancelled and before logout. Successful verification already confirmed primary
+cleanup and skips this fallback. It is not a manual target-org deletion tool or a verifier-org selector.
 Pending/unknown requests still need private reconciliation; runner loss can prevent
 the finalizer. See ADR 0006 and `docs/ci.md` for limits and the cleanup contract.
 

@@ -143,6 +143,8 @@ export function createCleanupJournal({ env = process.env, identity }) {
       onRejected: (receipt) => update(receipt, true),
     };
   } catch {
-    refuse();
+    // Initial journal admission precedes any allocation by this invocation.
+    // Callback/read failures later still require ownership reconciliation.
+    throw new LifecycleError('JOURNAL_UNAVAILABLE');
   }
 }

@@ -191,11 +191,33 @@ test('hosted verification cannot start without a usable exclusive cleanup journa
     errorLog: () => {},
   });
   assert.equal(result.exitCode, 1);
+  assert.equal(result.result.outcome, 'failed-infrastructure');
+  assert.equal(result.result.retryable, false);
   assert.equal(calls, 0);
   assert.throws(() =>
     createCleanupJournal({ env: { GITHUB_ACTIONS: 'true' }, identity }),
   );
   assert.equal(createCleanupJournal({ env: {}, identity }), null);
+});
+
+test('initial journal configuration failure is nonretryable pre-allocation infrastructure, not cleanup', (t) => {
+  const { env } = setup(t);
+  let calls = 0;
+  const logs = [];
+  const result = runVerification({
+    env: { ...env, KUSANYA_CLEANUP_JOURNAL: 'relative-private-fixture' },
+    sf: () => {
+      calls += 1;
+    },
+    log: (line) => logs.push(line),
+    errorLog: (line) => logs.push(line),
+  });
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.result.outcome, 'failed-infrastructure');
+  assert.equal(result.result.retryable, false);
+  assert.equal(calls, 0);
+  assert.match(logs.join('\n'), /JOURNAL_UNAVAILABLE/);
+  assert.ok(!logs.join('\n').includes('relative-private-fixture'));
 });
 
 test('hosted harness persists before create and the separate finalizer is idempotent after success or test failure', (t) => {

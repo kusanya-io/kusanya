@@ -154,7 +154,7 @@ valid intent if interrupted. The journal contains no credentials, org usernames,
 submission data or raw CLI output and is never cached or uploaded.
 
 A separate pinned `cleanup-salesforce.mjs` step uses `always()` after authenticated
-verification success/failure/cancellation, before logout. It accepts no target-org
+verification failure/cancellation only, before logout. It accepts no target-org
 input. It binds the CI identity to GitHub's run ID and attempt, validates the complete
 journal identity and tag allowlist, then rechecks each exact remote ownership record
 and active-org ID before deleting. It cannot discover and sweep another run, role
@@ -162,6 +162,18 @@ or attempt. An already deleted org is a no-op; an absent request is safe only wi
 an explicitly recorded, confirmed rejection. Missing/malformed journals, pending
 or ambiguous requests, and failed deletions fail the job. Recovery never turns
 failed tests or an interrupted run into a pass.
+
+Finding 17 amendment: skip the fallback when verification succeeded. Success
+already requires primary cleanup in `finally`; an additional read can introduce
+an eventually-consistent or transient failure after the passed marker and create
+a contradiction in retry history. Preserve the primary success evidence without
+this redundant read. The fallback remains mandatory after failure/cancellation.
+
+Note 18 amendment: failure to initialize the journal precedes allocation by this
+invocation. Label it `JOURNAL_UNAVAILABLE` and report nonretryable infrastructure
+failure, not failed cleanup. Persistence failures during acquisition and errors
+reading the recovery journal remain reconciliation failures. No retry is granted
+and no potentially stale ownership evidence is discarded.
 
 This is a current-attempt finalizer, not the ended-run janitor: the workflow itself
 establishes the verification step ended and the job is still alive to clean up.

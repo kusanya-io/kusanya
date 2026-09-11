@@ -29,6 +29,7 @@ export class LifecycleError extends Error {
       'CLEANUP_FAILED',
       'CREATION_FAILED',
       'CREATION_REJECTED',
+      'JOURNAL_UNAVAILABLE',
     ];
     super(
       `Scratch lifecycle failed (${allowed.includes(code) ? code : 'INVALID_INPUT'}); raw Salesforce details withheld.`,

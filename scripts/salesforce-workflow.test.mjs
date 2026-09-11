@@ -283,8 +283,9 @@ test('Apex step deadlines reserve separate owned cleanup and five minutes of job
   assert.match(cleanup, /timeout-minutes: 5/);
   assert.match(cleanup, /run: node trusted\/scripts\/cleanup-salesforce\.mjs/);
   assert.match(cleanup, /always\(\) && steps\.auth\.outcome == 'success'/);
-  for (const outcome of ['success', 'failure', 'cancelled'])
+  for (const outcome of ['failure', 'cancelled'])
     assert.ok(cleanup.includes(`steps.verify.outcome == '${outcome}'`));
+  assert.doesNotMatch(cleanup, /steps\.verify\.outcome == 'success'/);
   assert.doesNotMatch(cleanup, /steps\.verify\.outcome == 'skipped'/);
   assert.doesNotMatch(
     cleanup,
@@ -304,6 +305,43 @@ test('Apex step deadlines reserve separate owned cleanup and five minutes of job
     apexJob.indexOf("Clean up this authenticated run's owned scratch intents") <
       apexJob.indexOf('Remove Dev Hub authentication'),
   );
+});
+test('fallback only runs for failed or cancelled verification, never after a passed cleanup marker', () => {
+  const cleanup = stepConfig(
+    "Clean up this authenticated run's owned scratch intents",
+  );
+  const expression = cleanup
+    .match(/        if: >-\n([\s\S]*?)        timeout-minutes:/)?.[1]
+    .trim();
+  assert.ok(expression);
+  const expected =
+    "always() && steps.auth.outcome == 'success' && (steps.verify.outcome == 'failure' || steps.verify.outcome == 'cancelled')";
+  assert.equal(expression.replace(/\s+/g, ' '), expected);
+  // Exercise the actual workflow boolean guard, whose operators have the same
+  // semantics in Bash [[ ]]. always() is true even after a step failure.
+  const shell = expression
+    .replace(/\s+/g, ' ')
+    .replace('always()', '-n always')
+    .replaceAll('steps.auth.outcome', '"$AUTH_RESULT"')
+    .replaceAll('steps.verify.outcome', '"$VERIFY_RESULT"');
+  for (const auth of ['success', 'failure', 'skipped', 'cancelled']) {
+    for (const verify of ['success', 'failure', 'cancelled', 'skipped', '']) {
+      const result = runShell(
+        `if [[ ${shell} ]]; then printf 'fallback'; else printf 'skipped'; fi`,
+        {
+          AUTH_RESULT: auth,
+          VERIFY_RESULT: verify,
+        },
+      );
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(
+        result.stdout,
+        auth === 'success' && ['failure', 'cancelled'].includes(verify)
+          ? 'fallback'
+          : 'skipped',
+      );
+    }
+  }
 });
 test('Salesforce authentication passes the explicit stdin marker and suppresses CLI output', () => {
   const result = runStep(

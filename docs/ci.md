@@ -198,12 +198,21 @@ enter it; no artifact/cache uploads it. Existing, malformed, off-run or symlinke
 journals fail closed. Creation cannot start until its intent was persisted.
 
 The primary `finally` cleanup remains. An additional pinned `always()` step runs
-`node trusted/scripts/cleanup-salesforce.mjs` after authenticated verification was
-attempted, even if that bounded step failed or was cancelled. It requires GitHub's
+`node trusted/scripts/cleanup-salesforce.mjs` only after authenticated verification
+failed or was cancelled. It does not run after success: the harness has already
+confirmed primary cleanup before emitting its passed marker (finding 17). This
+avoids a redundant remote read failing a successful job or contradicting that marker.
+It requires GitHub's
 current CI run ID and attempt to match the journal, revalidates every allowed tag
 and remote org ID, and deletes only this attempt's positively owned orgs. Already
 deleted orgs are a no-op. It accepts no existing-target input or cross-run selector.
 It runs before Dev Hub logout and does not turn a failed verification into success.
+
+Initial journal admission failure is `JOURNAL_UNAVAILABLE`, reported as
+`failed-infrastructure` with `retryable: false` (note 18), since this invocation has
+not allocated an org. It still blocks the gate. Later journal persistence failures
+or recovery reads remain reconciliation/cleanup failures; this change grants no
+retry or permission to ignore an existing journal.
 
 Confirmed provider creation rejection with no org reports nonretryable
 `failed-creation-rejected`, not a fictitious cleanup failure. The classifier uses

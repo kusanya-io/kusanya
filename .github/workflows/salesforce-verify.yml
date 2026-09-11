@@ -218,8 +218,7 @@ jobs:
       - name: Clean up this authenticated run's owned scratch intents
         if: >-
           always() && steps.auth.outcome == 'success' &&
-          (steps.verify.outcome == 'success' || steps.verify.outcome == 'failure' ||
-           steps.verify.outcome == 'cancelled')
+          (steps.verify.outcome == 'failure' || steps.verify.outcome == 'cancelled')
         timeout-minutes: 5
         env:
           KUSANYA_CLEANUP_JOURNAL: ${{ runner.temp }}/kusanya-scratch-intents.json
