@@ -264,3 +264,32 @@ Open items carried forward, none blocking Phase 0:
 `PASS: PR #3 may be merged`
 
 `PHASE 0: PASS`
+
+## 2026-09-11: Security review before approving run 34587333623, PR #6 head `7fcfee2`
+
+Scope: whether Bill may approve Salesforce run 34587333623 for PR #6. The PR implements issue #5 (findings 11 to 13, notes 14 to 16) with a new harness pin, 6e6eb94. No scratch orgs were created.
+
+What was checked:
+
+- Identity. PR #3 merged as f579da9. PR #6 adds two commits on top. The pin 6e6eb94 is in the branch history and differs from the head only in the pin line. The merge ref 2510241 matches the head for workflows, scripts, `salesforce/` and `service/`. The service tree is identical to the Phase 0 container run, and Salesforce metadata is unchanged; only `salesforce/README.md` differs.
+- Credential path. The secret is still in scope for one step. The new budget recheck runs before authentication with a read-only token covering contents, pull requests and Actions. The new fallback cleanup step runs pinned code and holds no secret or GitHub token. It deletes only `ActiveScratchOrg` records whose tag carries this run ID, attempt and head, and only after rechecking the remote request and org IDs. Its journal lives at a fixed runner-temp path, is created exclusively and written only by the trusted harness, and holds no credentials or usernames.
+- Finding 11 answered. The budget is recomputed inside the Apex job on the approval day, and tests cover partial re-runs and a UTC date change.
+- Finding 12 answered. Completed zero-step skipped or cancelled jobs are exempt only when run, attempt and head identity match. Real GitHub job objects carry `run_id`, `run_attempt`, `head_sha` and an empty `steps` array, as run 34523279197 shows.
+- Finding 13 answered. Step deadlines total 40 of 45 minutes. CLI waits are 5 minutes, with 6-minute process kills. An always-run fallback cleans up this attempt's orgs if the harness is cut off.
+- Notes 14, 15 and 16 answered. SC2155 is fixed. A proven rejection is reported as `failed-creation-rejected`. The next-slot estimate is removed, and ADR 0006 and `docs/ci.md` are corrected.
+- Tests at the head: 130 of 130 in Git Bash and PowerShell, plus format, scaffold and whitespace checks. actionlint 1.7.12 with ShellCheck 0.11.0 is clean. Public CI 34587333746 is green.
+- Settings unchanged. The environment has one secret, last updated 10 September, no variables, reviewer `cobitechsolutions` and administrator bypass off. The default workflow token is read-only. The three required checks are on `main` with strict on.
+- Dev Hub at 12:14 UTC: 3 of 3 active and 4 of 6 daily free, and no active orgs.
+
+New items:
+
+- Finding 17, should fix before PR #6 merges. The fallback cleanup also runs when verification passed, even though the harness has already confirmed its own cleanup. If the fallback then fails, for example on a 30-second read timeout, the job fails while its log carries a `passed` marker. The budget reader treats that as a contradiction and refuses every later attempt on the head. Skip the fallback when verification succeeded, or record that case explicitly as a cleanup failure.
+- Note 18. A journal that cannot be created is reported as `failed-cleanup`, although no org exists at that point.
+
+Accepted residual risks, all documented in ADR 0006: runner loss, a remote request that continues after its CLI process is killed, and Windows process trees.
+
+The verifier plans no fresh org for PR #6. Salesforce metadata is unchanged since the Phase 0 runs, and only the hosted run can show the changed harness working. That evidence will come from its log and a Dev Hub audit.
+
+`SAFE TO APPROVE: run 34587333623 at head 7fcfee2`
+
+`HOLD: PR #6, 1 finding` (finding 17). Issue #5 stays open until the hosted run's log and the Dev Hub audit confirm admission, cleanup and the fallback working live.
