@@ -350,3 +350,27 @@ Findings:
 `SAFE TO APPROVE: run 34619677398 at head d675e01`, after Bill cancels stale run 34601412466. Cancelling is safe: that run's Apex job has zero steps and belongs to a superseded head. Approval is recommended now. A repeat authentication failure no longer locks this head, and this run gives the first live evidence of the journal, cleanup and silent-success paths. The fixes for findings 20 to 22 will need one more run on the final head.
 
 `HOLD: PR #6, 3 findings` (20, 21 and 22). Issue #5 stays open.
+
+## 2026-09-11: PR #6 live evidence at `d675e01` and re-verification of head `715661c`
+
+### Live evidence from run 34619677398 on head d675e01, independently checked
+
+- The run ran attempt 1, succeeded, and carries Bill's approval. Every Apex step succeeded. The fallback cleanup was skipped after success, as designed.
+- The budget admission JSON appears twice: once in the early policy job and once inside the Apex job before authentication. That is live evidence for finding 11.
+- The harness log shows ownership tag `kusanya-ci-v1__34619677398-1__d675e0131cd9__9233971acba0`, 1 test passed, 2 of 2 executable lines covered (100.00%), and 1 owned scratch org deleted with 0 already deleted. The marker shows outcome `passed` for the full head and run 34619677398-1.
+- None of the three job logs, 939 lines in total, contains an auth URL, token, username or instance host.
+- Dev Hub audit at 17:00 UTC. The tagged record is Deleted, and the setup audit trail logged the deletion at 16:36. No scratch orgs are active, and 3 of 6 daily slots remain. A successful CLI refresh at 16:35:50 matches the authentication step.
+- Not proven live: fallback recovery after a failed or cancelled verification, and the pre-verification exceptions. Their tests use the real GitHub job shapes and the real CLI error shapes.
+
+### Re-verification of head 715661c, pin 1d0edc1
+
+- Identity. The pin differs from the head only in its two pin lines. The merge ref 8e18406 matches the head for workflows, scripts, `salesforce/` and `service/`. Salesforce metadata, the service and all settings are unchanged. The stale run 34601412466 is cancelled, and run 34623685881 is the only one waiting.
+- Tests. 150 of 150 in Git Bash and PowerShell, plus format, scaffold and whitespace checks. actionlint 1.7.12 with ShellCheck 0.11.0 is clean. Public CI 34623685706 is green.
+- Finding 20 closed. The real CLI 2.135.7 error JSON, captured from fake inputs, was replayed through the extracted authentication step. It printed `RefreshTokenAuthError/dns` for an unreachable host and `RefreshTokenAuthError/token-rejected` for a rejected token. Fifteen cases, including secrets inside matching messages, pattern precedence, non-string and nested fields, a label planted inside the name, and success with tokens, never printed the synthetic credential or host.
+- Finding 21 closed. With a failing live head check, the extracted confirm step printed `Verifying PR 6 at head ...` before failing. An invalid SHA still printed no subject.
+- Finding 22 closed. A cancelled job counts against the daily budget only when its verify step is completed and skipped and at least one step executed. The `verificationNotStarted` flag is set only by the collector from Jobs API data, and the marker reader returns no such field. Zero-step cancellations stay free, and success with a skipped verify step still fails closed.
+- All issue #5 items are now answered: findings 11 to 13 and 17 to 22, and notes 14 to 16.
+
+`SAFE TO APPROVE: run 34623685881 at head 715661c`. Capacity at 17:00 UTC was 3 of 3 active and 3 of 6 daily free.
+
+`HOLD: PR #6, 0 findings, awaiting hosted Apex on 715661c`. The verdict becomes `PASS: PR #6 may be merged` once that run passes with coverage and cleanup confirmed by its log and a Dev Hub audit. Issue #5 can close when PR #6 merges.
