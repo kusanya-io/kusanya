@@ -1,0 +1,21 @@
+name: Bug report
+description: Report a reproducible defect without private data or credentials
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and observed behavior
+      description: Include the Kusanya version and affected component.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Use synthetic data; never paste credentials or collector/submission data.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence and relevant brief section

@@ -1,0 +1,221 @@
+name: Salesforce verification
+# Bill approved ADR 0006. This PR-controlled check is a tripwire, not a boundary.
+# Claude must review workflow/policy/harness changes before Bill approves the exact head.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Same-repository pull request number reviewed by the maintainer
+        required: true
+        type: string
+      reviewed_sha:
+        description: Full 40-character head SHA reviewed by the maintainer
+        required: true
+        type: string
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  policy:
+    name: Classify PR and check retry eligibility
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    outputs:
+      decision: ${{ steps.classify.outputs.decision }}
+      head_sha: ${{ steps.classify.outputs.head_sha }}
+      budget_allowed: ${{ steps.budget.outputs.allowed }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pull_request }}
+      REVIEWED_SHA: ${{ github.event.pull_request.head.sha || inputs.reviewed_sha }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      KUSANYA_POLICY_REPOSITORY: ${{ github.repository }}
+      KUSANYA_POLICY_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pull_request }}
+      KUSANYA_POLICY_HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.reviewed_sha }}
+      KUSANYA_POLICY_BASE_REF: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Checkout immutable policy
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: c8470cd3b63f775c719f8e61f2d8963275394623
+          path: trusted
+          persist-credentials: false
+          sparse-checkout: scripts
+      - name: Checkout exact source identity without running PR code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.REVIEWED_SHA }}
+          path: reviewed
+          persist-credentials: false
+          sparse-checkout: salesforce
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Classify complete reviewed diff
+        id: classify
+        run: |
+          set -euo pipefail
+          case "$GITHUB_EVENT_NAME" in
+            pull_request)
+              [[ "$GITHUB_BASE_REF" == "$DEFAULT_BRANCH" && "$GITHUB_REF" == "refs/pull/$PR_NUMBER/merge" ]] || exit 1
+              ;;
+            workflow_dispatch)
+              [[ "$GITHUB_REF" == "refs/heads/$DEFAULT_BRANCH" ]] || exit 1
+              ;;
+            *) exit 1 ;;
+          esac
+          export KUSANYA_POLICY_CHECKOUT_SHA="$(git -C reviewed rev-parse HEAD)"
+          policy="$(node trusted/scripts/apex-pr-policy.mjs classify)"
+          decision="$(jq -er '.decision | select(. == "documentation-exemption" or . == "full-apex")' <<< "$policy")"
+          [[ "$(jq -er .headSha <<< "$policy")" == "$REVIEWED_SHA" ]] || exit 1
+          printf 'decision=%s\nhead_sha=%s\n' "$decision" "$REVIEWED_SHA" >> "$GITHUB_OUTPUT"
+      - name: Enforce complete exact-head retry budget
+        id: budget
+        if: steps.classify.outputs.decision == 'full-apex'
+        run: |
+          set -euo pipefail
+          node trusted/scripts/apex-run-budget.mjs
+          printf 'allowed=true\n' >> "$GITHUB_OUTPUT"
+  apex:
+    name: Scratch org tests and 85 percent coverage
+    needs: policy
+    if: >-
+      needs.policy.result == 'success' &&
+      needs.policy.outputs.decision == 'full-apex' &&
+      needs.policy.outputs.budget_allowed == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: salesforce-ci
+    concurrency:
+      group: ${{ github.repository }}-salesforce-ci
+      cancel-in-progress: false
+    env:
+      SF_DISABLE_LOG_FILE: 'true'
+      SF_DISABLE_TELEMETRY: 'true'
+      KUSANYA_DEV_HUB: Kusanya-CI-DevHub
+      KUSANYA_VERIFY_ROLE: ci
+      KUSANYA_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+      KUSANYA_HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.reviewed_sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pull_request }}
+      REVIEWED_SHA: ${{ github.event.pull_request.head.sha || inputs.reviewed_sha }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Confirm reviewed commit and trusted workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo 'Invalid PR number.'; exit 1; }
+          [[ "$REVIEWED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'A full reviewed SHA is required.'; exit 1; }
+          case "$GITHUB_EVENT_NAME" in
+            pull_request)
+              [[ "$GITHUB_BASE_REF" == "$DEFAULT_BRANCH" ]] || { echo 'PR must target the default branch.'; exit 1; }
+              [[ "$GITHUB_REF" == "refs/pull/$PR_NUMBER/merge" ]] || { echo 'Unexpected PR ref.'; exit 1; }
+              ;;
+            workflow_dispatch)
+              [[ "$GITHUB_REF" == "refs/heads/$DEFAULT_BRANCH" ]] || { echo 'Dispatch from the trusted default branch.'; exit 1; }
+              ;;
+            *) echo 'Unsupported workflow event.'; exit 1 ;;
+          esac
+          current_sha="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)"
+          source_repo="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.repo.full_name)"
+          base_branch="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .base.ref)"
+          pr_state="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .state)"
+          [[ "$current_sha" == "$REVIEWED_SHA" && "$source_repo" == "$GITHUB_REPOSITORY" && "$base_branch" == "$DEFAULT_BRANCH" && "$pr_state" == open ]] || { echo 'PR changed, closed or fork source refused. Stage reviewed fork contributions in a same-repository PR.'; exit 1; }
+          printf 'Verifying PR %s at head %s\n' "$PR_NUMBER" "$REVIEWED_SHA"
+      - name: Checkout trusted verification harness
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Proposed immutable source pin; Claude must review it before first approval.
+          ref: c8470cd3b63f775c719f8e61f2d8963275394623
+          path: trusted
+          persist-credentials: false
+          sparse-checkout: scripts
+      - name: Checkout reviewed metadata as data only
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.REVIEWED_SHA }}
+          path: reviewed
+          persist-credentials: false
+          sparse-checkout: salesforce
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Install pinned Salesforce CLI
+        run: npm install --global @salesforce/cli@2.135.7
+        working-directory: ${{ runner.temp }}
+      - name: Recheck exact head immediately before authentication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$(git -C reviewed rev-parse HEAD)" == "$REVIEWED_SHA" ]] || { echo 'Checked-out source does not match the reviewed SHA.'; exit 1; }
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)" == "$REVIEWED_SHA" ]] || { echo 'PR head changed; approve a fresh run.'; exit 1; }
+      - name: Authenticate dedicated Dev Hub without printing its auth URL
+        env:
+          SF_DEV_HUB_AUTH_URL: ${{ secrets.SF_DEV_HUB_AUTH_URL }}
+        run: |
+          set -euo pipefail
+          [[ -n "$SF_DEV_HUB_AUTH_URL" ]] || { echo 'Missing environment secret SF_DEV_HUB_AUTH_URL. Apex verification is blocked.'; exit 1; }
+          if ! printf '%s' "$SF_DEV_HUB_AUTH_URL" | sf org login sfdx-url --sfdx-url-stdin - --alias Kusanya-CI-DevHub --set-default-dev-hub --json >/dev/null 2>&1; then
+            echo 'Dev Hub authentication failed; inspect the environment secret privately.'
+            exit 1
+          fi
+      - name: Verify reviewed metadata using only trusted harness code
+        env:
+          KUSANYA_SALESFORCE_DIR: ${{ github.workspace }}/reviewed/salesforce
+        run: node trusted/scripts/verify-salesforce.mjs
+      - name: Reject a stale successful run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)" == "$REVIEWED_SHA" ]] || { echo 'PR changed during testing; this result cannot verify the new head.'; exit 1; }
+      - name: Remove Dev Hub authentication from the ephemeral runner
+        if: always()
+        run: sf org logout --target-org Kusanya-CI-DevHub --no-prompt >/dev/null 2>&1
+  gate:
+    name: Salesforce verification gate
+    needs: [policy, apex]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require exact-head Apex or explicit documentation exemption
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pull_request }}
+          REVIEWED_SHA: ${{ github.event.pull_request.head.sha || inputs.reviewed_sha }}
+          POLICY_RESULT: ${{ needs.policy.result }}
+          POLICY_SHA: ${{ needs.policy.outputs.head_sha }}
+          POLICY_DECISION: ${{ needs.policy.outputs.decision }}
+          BUDGET_ALLOWED: ${{ needs.policy.outputs.budget_allowed }}
+          APEX_RESULT: ${{ needs.apex.result }}
+        run: |
+          set -euo pipefail
+          [[ "$POLICY_RESULT" == success && "$POLICY_SHA" == "$REVIEWED_SHA" ]] || { echo 'PR policy did not validate this exact head.'; exit 1; }
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)" == "$REVIEWED_SHA" ]] || { echo 'PR head changed; this result is stale.'; exit 1; }
+          case "$POLICY_DECISION" in
+            documentation-exemption)
+              [[ "$APEX_RESULT" == skipped ]] || { echo 'Unexpected Apex state for documentation exemption.'; exit 1; }
+              printf 'Apex not run—approved documentation-only exemption at %s. Not phase-gate Apex evidence.\n' "$REVIEWED_SHA"
+              ;;
+            full-apex)
+              [[ "$BUDGET_ALLOWED" == true && "$APEX_RESULT" == success ]] || { echo 'Apex did not pass. BLOCKED, failed, cancelled and skipped runs do not satisfy this gate.'; exit 1; }
+              ;;
+            *) echo 'Unknown verification policy; gate refused.'; exit 1 ;;
+          esac

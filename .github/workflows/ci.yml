@@ -1,0 +1,66 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  scaffold:
+    name: Scaffold and lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: node --test scripts/*.test.mjs
+      - run: node scripts/check-scaffold.mjs
+  service:
+    name: Service and container tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: kusanya_test
+          POSTGRES_USER: kusanya_test
+          POSTGRES_PASSWORD: synthetic-ci-only
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U kusanya_test -d kusanya_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://kusanya_test:synthetic-ci-only@127.0.0.1:5432/kusanya_test
+      DATABASE_SSL: 'false'
+      REQUIRE_DATABASE_TESTS: 'true'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: service/package-lock.json
+      - run: npm ci
+        working-directory: service
+      - run: npm run lint && npm run typecheck && npm test && npm run test:integration
+        working-directory: service
+      - name: Build and run tests in service container
+        run: |
+          docker build --target test --tag kusanya-service-tests ./service
+          docker run --rm --env NODE_ENV=test kusanya-service-tests
+          docker run --rm --network host --env NODE_ENV --env DATABASE_URL --env DATABASE_SSL --env REQUIRE_DATABASE_TESTS kusanya-service-tests npm run test:integration
+          docker build --tag kusanya-service:phase0 ./service

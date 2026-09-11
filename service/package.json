@@ -1,0 +1,31 @@
+{
+  "name": "@kusanya/service",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Kusanya multi-tenant field collection service - Phase 0 scaffold",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/main.js",
+    "lint": "eslint src test --max-warnings=0",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test \"dist/test/unit/*.test.js\"",
+    "test:integration": "npm run build && node --test \"dist/test/integration/*.test.js\""
+  },
+  "dependencies": {
+    "fastify": "5.12.3",
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.13.4",
+    "@types/pg": "8.23.1",
+    "eslint": "10.10.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.0"
+  }
+}

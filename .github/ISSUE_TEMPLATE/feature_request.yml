@@ -1,0 +1,16 @@
+name: Feature request
+description: Propose a capability and its acceptance criteria
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: User need
+      description: Who needs this and which task cannot they complete?
+    validations:
+      required: true
+  - type: textarea
+    id: criteria
+    attributes:
+      label: Observable acceptance criteria and brief section
+    validations:
+      required: true
