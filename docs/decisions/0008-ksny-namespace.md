@@ -1,6 +1,6 @@
 # ADR 0008: Select the ksny namespace and separate registration from packaging
 
-- Status: Accepted; registration verified by builder; Dev Hub linking and Claude review pending
+- Status: Accepted; registration verified by builder; Dev Hub linking blocked by OAuth error; Claude review pending
 - Date: 2026-09-11
 - Brief sections: C11 Phase 1 prerequisites, C12, C13
 - Decision owner: Cobitech Solutions
@@ -82,6 +82,47 @@ The local aliases above identify explicitly authenticated builder connections;
 they are not credentials or an instruction to reuse an unknown default org. Claude
 must independently check the intended org identity before using equivalent aliases.
 This is namespace configuration evidence, not Apex execution or a verifier verdict.
+
+## Approved link attempt and blocker (2026-09-11)
+
+Bill subsequently approved linking `ksny` from `Kusanya-Namespace` to the exact
+existing `Kusanya-DevHub` org identified in the builder conversation. The builder
+rechecked that hub's Organization ID against the approved ID before proceeding.
+This approval covers neither additional hubs nor changes to OAuth security policy.
+
+After Bill signed in to the Dev Hub himself, the builder opened Namespace
+Registries and clicked Link Namespace once. The Salesforce-generated authorization
+popup failed before presenting a namespace-org sign-in form:
+
+```text
+error=invalid_request&error_description=missing%20required%20code%20challenge
+```
+
+The generated request had no `code_challenge` or `code_challenge_method`. Its
+callback path was `/environmenthub/soma-callback.apexp`. Complete authorization
+URLs, OAuth state values and credentials are deliberately not included here.
+This establishes the observed PKCE input mismatch, not which org/app setting or
+Salesforce defect caused it. No specific vendor fix or resolution date is verified.
+
+At 19:16:38 UTC, read-only queries rechecked both approved org IDs: the holder still
+reported `NamespacePrefix = ksny`; the existing hub's standard Namespace Registry
+query still returned zero matching rows. Linking has not completed. The registry
+check was:
+
+```powershell
+sf data query --target-org Kusanya-DevHub --query "SELECT Id, NamespacePrefix, NamespaceOrg FROM NamespaceRegistry WHERE NamespacePrefix = 'ksny'" --json
+```
+
+Preserve security settings while obtaining independent diagnosis and a supported
+resolution. Do not disable PKCE, replace the built-in connected app, or manually
+rewrite authorization URLs as part of this approval. Any proposed security change
+requires separate explicit review and Bill's approval before implementation.
+Salesforce's [PKCE documentation](https://help.salesforce.com/s/articleView?id=sf.remoteaccess_pkce.htm&language=en_US&type=5)
+requires the authorization challenge and matching token-exchange verifier; adding
+a challenge to the popup URL alone is not evidence of a correct end-to-end fix.
+No new namespace-org browser login or OAuth consent, package creation, scratch
+creation, CI change or project-namespace source change was performed in this link
+attempt. The read-only queries used existing authenticated CLI connections.
 
 ## Alternatives considered
 
