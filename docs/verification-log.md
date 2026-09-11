@@ -237,3 +237,30 @@ Findings:
 `HOLD: PR #3, 0 findings, 1 verifier check outstanding`
 
 `PHASE 0: HOLD` until the verifier's own container run of the service at 8e1e2b7 passes on `cobitech-edge`. Every other gate requirement is met. When that run passes, the verdict becomes `PASS: PR #3 may be merged` and `PHASE 0: PASS`. If Bill waives the container run in writing, the verdict becomes PASS with the deviation recorded.
+
+## 2026-09-11: Phase 0 gate verdict, PR #3 head `8e1e2b7`
+
+The outstanding verifier container run is complete. Everything in the gate report above still applies: the head, `main`, the required checks and the check runs are unchanged, and no new runs exist.
+
+| Check                                                                                                             | Result                                                                                                                                                                                                                                                                                                                                                 |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Connectivity                                                                                                      | `cobitech-edge-01` was back online at 09:42 UTC, 2 minutes after booting. All 11 existing containers were up.                                                                                                                                                                                                                                          |
+| Source identity                                                                                                   | The service tree defcf88 was exported from 8e1e2b7 with `git archive` and is identical to the head.                                                                                                                                                                                                                                                    |
+| Unit tests in the test image                                                                                      | 11 of 11 passed, none skipped. This includes the 413, 400 and 415 handling added after the last verifier container run.                                                                                                                                                                                                                                |
+| Integration tests in the container against a disposable `postgres:17` (17.11), with `REQUIRE_DATABASE_TESTS=true` | 2 of 2 passed, none skipped.                                                                                                                                                                                                                                                                                                                           |
+| Negative control: `REQUIRE_DATABASE_TESTS=true` with no `DATABASE_URL`                                            | The database test fails with exit 1, so it cannot skip.                                                                                                                                                                                                                                                                                                |
+| Runtime image                                                                                                     | Runs as `node`, 83 MB.                                                                                                                                                                                                                                                                                                                                 |
+| Runtime probes                                                                                                    | `/readyz` 200 and `/healthz` 200, with `Cache-Control: no-store`. A 2 KB POST gets 413 with a generic body, and malformed JSON gets 400. With the database stopped, `/readyz` gives 503 while `/healthz` stays 200. No password or database user appears in the logs. Production refuses `DATABASE_SSL=false`, and SIGTERM stops the app in under 1 s. |
+| Isolation and cleanup                                                                                             | The run used its own network, database, containers, images and folder, and all were removed afterwards. The existing workload names were identical before and after. The `postgres:17` and `curl` images were kept for reuse.                                                                                                                          |
+
+Open items carried forward, none blocking Phase 0:
+
+- Issue #5 (findings 11 to 13, notes 14 to 16) goes in the first builder PR after Phase 0, before Phase 1 work.
+- The `ksny` namespace availability check and its ADR are due before the first Phase 1 objects.
+- ODK Collect and Enketo versions and the tenant OAuth flow are due before the phases that use them.
+- An ADR on measured upload bandwidth is due before staging (C12a), and the CI-only Dev Hub still has to be provisioned.
+- Bill still has to confirm the Apache-2.0 service licence.
+
+`PASS: PR #3 may be merged`
+
+`PHASE 0: PASS`
