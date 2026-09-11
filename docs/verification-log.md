@@ -180,3 +180,16 @@ Findings:
 `HOLD: PR #3, 4 findings` (1, 11, 12 and 13)
 
 `PHASE 0: HOLD`
+
+## 2026-09-11: Decision recorded and quota correction, PR #3 head `8e1e2b7`
+
+- Bill approved deferring findings 11, 12 and 13 to the first builder pull request after Phase 0, before any Phase 1 work. Issue #5 tracks them with the required fixes and tests, notes 14 and 15, and the operating constraints. The builder acknowledged each finding on its review thread. PR #3 head 8e1e2b7 and run 34523564584 are unchanged, and the run has no approvals.
+- Correction to the design review entry of 10 September: the daily scratch org limit is not a rolling 24-hour window. At 09:00 UTC on 11 September the Dev Hub reported 6 of 6 daily orgs remaining, although all six creations of the previous day were less than 24 hours old. The limit reset at a fixed time between 20:20 UTC on 10 September and 09:00 UTC on 11 September. The Dev Hub's time zone is America/Los_Angeles, so midnight Pacific, 07:00 UTC, is the likeliest reset time. That is not yet confirmed.
+- Consequences: the preflight's quota gate reads the live limits and stays correct. Its "next UTC slot" estimate is wrong, and so are the rolling-window statements in ADR 0006 and `docs/ci.md`. All three are added to issue #5 as note 16. The earlier condition to wait until 11:33 UTC no longer applies.
+- Capacity at 09:00 UTC: 3 of 3 active and 6 of 6 daily free, and no active scratch orgs.
+
+`SAFE TO APPROVE: run 34523564584 at head 8e1e2b7, now`
+
+`HOLD: PR #3, 1 finding` (finding 1; findings 11 to 13 deferred to issue #5 with Bill's approval)
+
+`PHASE 0: HOLD` until hosted Apex passes on 8e1e2b7, the verifier's fresh-org run passes, and the three checks are required on `main`.
