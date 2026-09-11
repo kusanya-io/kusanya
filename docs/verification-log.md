@@ -1,6 +1,6 @@
 # Verification log
 
-Every review and gate verdict, newest first. Written by the verifier only. The protocol is in `docs/verification.md`.
+Every review and gate verdict, oldest first. Written by the verifier only. The protocol is in `docs/verification.md`.
 
 ## 2026-09-10: Review 1 of Phase 0, branch `phase-0/repository-scaffold`
 
