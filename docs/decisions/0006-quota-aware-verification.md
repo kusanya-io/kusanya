@@ -1,6 +1,6 @@
 # ADR 0006: Quota-aware development and independent verification
 
-- Status: Approved by Bill; implementation and phase gate await Claude verification
+- Status: Approved by Bill; Phase 0 passed; issue #5 amendments await Claude verification
 - Date: 2026-09-10
 - Brief sections: C8, C10, C11 Phase 0, C12, C13; verification protocol
 - Decision owner: Cobitech Solutions
@@ -8,11 +8,17 @@
 
 ## Context and approval
 
-The shared Developer Edition Dev Hub exhausted its six successful creations in a
-rolling 24-hour window on 10 September: one setup smoke test, three builder runs
-and two verifier runs. All were deleted, but deletion restored active capacity,
+The shared Developer Edition Dev Hub exhausted its six daily creations on
+10 September: one setup smoke test, three builder runs and two verifier runs.
+All were deleted, but deletion restored active capacity,
 not daily capacity. Hosted run `34499943255` authenticated successfully and then
 failed before scratch creation. No hosted Apex evidence resulted.
+
+Correction (issue #5 note 16, 11 September): the daily limit is **not** a rolling
+24-hour allocation. At 09:00 UTC the hub reported six of six remaining while the
+previous six creations were less than 24 hours old. The actual reset time is not
+confirmed. Neither this ADR nor the tooling assumes midnight Pacific or another
+reset time; live remaining counts are authoritative and next-slot time is unavailable.
 
 Claude's [design review 5171295026](https://github.com/kusanya-io/kusanya/pull/3#pullrequestreview-5171295026)
 recommended adjustments A1–A11 and identified finding 10. Bill explicitly approved
@@ -82,23 +88,42 @@ dispatch evidence must bind its reviewed head from the trusted
 subject log, not confuse it with main's dispatch SHA. Ambiguous legacy logs and
 history beyond the bounded complete reader require investigation, not exemption.
 
-Until CI has its separate hub, reserve the first returning 11 September slot
-(11:33 UTC) for Phase 0 CI and the second (13:20 UTC) for Claude. Hold the next two
-for infrastructure recovery. No builder org is created before those verification
-runs finish. Recheck actual limits before relying on the estimated times.
+Issue #5 amendment: repeat the immutable budget reader inside the Apex job after
+its exact-head recheck and before authentication, using its actual admission UTC
+day. The early policy job remains a fast check, not authorization for a later
+partial rerun or next-day approval. The Apex job receives only read permissions
+for contents, pull requests and Actions; its GitHub token remains step-scoped.
+Completed, identity-validated zero-step skipped/cancelled Apex jobs consume no
+allocation and need no unavailable log. Executed, incomplete or ambiguous jobs
+are not covered by that exemption, including manual dispatches.
+
+Until CI has its separate hub, coordinate live available slots between CI and
+Claude, reserving room for explicitly authorized infrastructure recovery. The
+original 11 September slot estimates were withdrawn by note 16. Phase 0 CI and
+independent verification have finished; no development org is created merely to
+exercise this hardening PR. Recheck live limits before any authorized allocation.
 
 ### Safe diagnostics and cleanup
 
 Read remaining active/daily allocations before creating anything. On insufficient
 capacity, report `BLOCKED` and exit 75, naming the limiting allocation, maximum,
-remaining count, required count and estimated next daily slot. Compute slot times
-from creation history plus 24 hours; explicitly report unavailable estimates when
-history cannot establish a time. Malformed limits, failed queries and unknown
+remaining count, required count and next daily slot as unavailable. Creation
+timestamps do not establish the daily reset. Do not add a forecast until an
+independently confirmed reset rule is recorded in an ADR. The preflight does not
+need a creation-history query to read live limits. Malformed limits, failed queries and unknown
 errors fail closed. Never print raw Salesforce output, usernames or authorization.
 
 `BLOCKED` fails the required gate. It never becomes a successful skip and never
 falls back to an existing org. A recognized creation-time quota error follows the
 same diagnostic path, since capacity can change after preflight.
+
+Recognized creation rejection is distinct from a pending/unknown request or cleanup
+failure. A terminal provider rejection with a confirmed absent exact request, or
+a terminal Error record explicitly showing no org, is nonretryable
+`failed-creation-rejected`. Narrowly recognized quota rejection remains `BLOCKED`.
+Unknown errors, missing timeout records and pending requests require reconciliation;
+absence alone never proves rejection. Sanitized codes omit raw provider messages.
+No deliberate quota exhaustion is permitted to test this classification.
 
 Tag disposable orgs with role, run ID, short head SHA and a unique suffix. After a
 creation timeout, reconcile the exact job ID or ownership tag before another
@@ -110,6 +135,41 @@ The Phase 0 janitor is an injected, default-dry-run lifecycle helper, not an
 automatic scheduler or complete administrative command. Its caller must establish
 authoritative ended-run evidence; pending unknown creations require private
 operator reconciliation before new allocation. This operational gap is explicit.
+
+### Bounded verification and current-attempt recovery (issue #5)
+
+Keep the 45-minute Apex job, with explicit step deadlines totalling 40 minutes and
+five minutes of job slack. Verification has 20 minutes, fallback cleanup five, and
+logout one. Each create/deploy/test CLI wait is five minutes. The CLI adapter also
+enforces six-minute direct-process timeouts for those stages and 30 seconds for
+reads and deletes. The hosted Linux job runs `sf` directly; this does not promise
+termination of every descendant or a remote Salesforce request. In particular,
+Windows uses a `cmd.exe` wrapper and cannot claim a process-tree kill guarantee.
+
+The primary harness still cleans up in `finally`. Before creation it durably
+records each exact role/run-attempt/full-head/tag intent in a small, private JSON
+file at the fixed runner-temp path `kusanya-scratch-intents.json`. Exclusive initial
+creation rejects stale files; fsync and atomic replacement preserve an earlier
+valid intent if interrupted. The journal contains no credentials, org usernames,
+submission data or raw CLI output and is never cached or uploaded.
+
+A separate pinned `cleanup-salesforce.mjs` step uses `always()` after authenticated
+verification success/failure/cancellation, before logout. It accepts no target-org
+input. It binds the CI identity to GitHub's run ID and attempt, validates the complete
+journal identity and tag allowlist, then rechecks each exact remote ownership record
+and active-org ID before deleting. It cannot discover and sweep another run, role
+or attempt. An already deleted org is a no-op; an absent request is safe only with
+an explicitly recorded, confirmed rejection. Missing/malformed journals, pending
+or ambiguous requests, and failed deletions fail the job. Recovery never turns
+failed tests or an interrupted run into a pass.
+
+This is a current-attempt finalizer, not the ended-run janitor: the workflow itself
+establishes the verification step ended and the job is still alive to clean up.
+It does not falsely mark a running job completed. Runner loss or force cancellation
+can prevent any finalizer; private ownership-based reconciliation is still required
+then. ShellCheck-enabled actionlint and synthetic interruption fixtures verify the
+implementation before Claude reviews it; only a later approved hosted run can
+establish live execution evidence for the changed harness.
 
 ### Narrow documentation-only exception to C13
 

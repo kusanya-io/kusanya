@@ -8,6 +8,7 @@ const outcomes = new Set([
   'passed',
   'failed-tests',
   'failed-infrastructure',
+  'failed-creation-rejected',
   'blocked-quota',
   'failed-cleanup',
 ]);
@@ -43,7 +44,12 @@ export function readVerificationMarker(log, { runId, attempt, headSha }) {
     new Date(record.startedAt).toISOString() !== record.startedAt ||
     !outcomes.has(record.outcome) ||
     typeof record.retryable !== 'boolean' ||
-    (['passed', 'failed-tests', 'failed-cleanup'].includes(record.outcome) &&
+    ([
+      'passed',
+      'failed-tests',
+      'failed-cleanup',
+      'failed-creation-rejected',
+    ].includes(record.outcome) &&
       record.retryable)
   )
     throw new Error('Verification marker does not match this exact attempt.');
@@ -158,20 +164,30 @@ export function collectAttempts({
       if (matching.length !== 1)
         throw new Error('Historical Apex job is ambiguous.');
       const job = matching[0];
-      // A wholly skipped job never entered the credentialed lifecycle.
-      if (
-        job.conclusion === 'skipped' &&
-        Array.isArray(job.steps) &&
-        job.steps.length === 0
-      )
-        continue;
       if (
         !Number.isSafeInteger(job.id) ||
         job.id < 1 ||
+        job.run_id !== run.id ||
+        job.run_attempt !== number ||
+        job.head_sha !== run.head_sha ||
         job.status !== 'completed' ||
-        !Number.isFinite(Date.parse(job.started_at))
+        !Array.isArray(job.steps)
       )
-        throw new Error('Historical Apex job has not finished.');
+        throw new Error(
+          'Historical Apex job identity or completion is incomplete.',
+        );
+      // GitHub records cancellation while awaiting environment approval as a
+      // completed, zero-step job without a log. Like an entirely skipped job,
+      // it never entered the credentialed lifecycle, including on dispatches
+      // whose reviewed PR subject was therefore never logged. Validate its
+      // enclosing run/attempt and job identity before granting this exception.
+      if (
+        ['skipped', 'cancelled'].includes(job.conclusion) &&
+        job.steps.length === 0
+      )
+        continue;
+      if (!Number.isFinite(Date.parse(job.started_at)))
+        throw new Error('Historical Apex job start is incomplete.');
       const log = readLog(run.id, number, job.id);
       const reviewedHead =
         run.event === 'workflow_dispatch'

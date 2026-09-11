@@ -263,6 +263,10 @@ export function decideInfrastructureRetry({
       return deny(
         'Cleanup failure requires human recovery before another attempt.',
       );
+    if (outcome === 'failed-creation-rejected')
+      return deny(
+        'A proven creation rejection is non-retryable; diagnose and correct the cause before a newly reviewed head.',
+      );
     if (
       !['failed-infrastructure', 'blocked-quota'].includes(outcome) ||
       previous.conclusion !== 'failure' ||

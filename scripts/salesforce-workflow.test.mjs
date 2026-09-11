@@ -8,6 +8,17 @@ const workflow = readFileSync(
   new URL('../.github/workflows/salesforce-verify.yml', import.meta.url),
   'utf8',
 ).replaceAll('\r\n', '\n');
+const apexJob = workflow.slice(
+  workflow.indexOf('\n  apex:'),
+  workflow.indexOf('\n  gate:'),
+);
+function stepConfig(name) {
+  const start = workflow.indexOf(`      - name: ${name}\n`);
+  assert.ok(start >= 0, `Missing workflow step: ${name}`);
+  const rest = workflow.slice(start);
+  const next = rest.slice(1).search(/^      - /m);
+  return next < 0 ? rest : rest.slice(0, next + 1);
+}
 // Exercise the actual inline shell guards, not a second copy of their policy.
 function shellStep(name) {
   const lines = workflow.split('\n');
@@ -67,6 +78,12 @@ const fixtures = {
   FAKE_STATE: 'open',
   SF_DEV_HUB_AUTH_URL: 'synthetic-auth-input-not-a-credential',
   FAKE_AUTH_RESULT: '0',
+  FAKE_GIT_RESULT: '0',
+  FAKE_BUDGET_RESULT: '0',
+  GITHUB_RUN_ID: '123',
+  GITHUB_RUN_ATTEMPT: '1',
+  KUSANYA_POLICY_REPOSITORY: 'kusanya-io/kusanya',
+  KUSANYA_POLICY_HEAD_SHA: sha,
 };
 const doubles = `
 gh() {
@@ -78,7 +95,17 @@ gh() {
     *) return 1 ;;
   esac
 }
-git() { printf '%s\\n' "$FAKE_CHECKOUT"; }
+git() { printf '%s\\n' "$FAKE_CHECKOUT"; return "$FAKE_GIT_RESULT"; }
+node() {
+  [[ "$#" -eq 1 && "$1" == trusted/scripts/apex-run-budget.mjs ]] || {
+    printf 'Unexpected node invocation\\n' >&2
+    return 2
+  }
+  [[ "$KUSANYA_POLICY_REPOSITORY" == "$GITHUB_REPOSITORY" &&
+     "$KUSANYA_POLICY_HEAD_SHA" == "$REVIEWED_SHA" ]] || return 3
+  printf 'Budget checked for attempt %s\\n' "$GITHUB_RUN_ATTEMPT"
+  return "$FAKE_BUDGET_RESULT"
+}
 sf() {
   [[ "$#" -eq 9 && "$1" == org && "$2" == login && "$3" == sfdx-url &&
      "$4" == --sfdx-url-stdin && "$5" == - && "$6" == --alias &&
@@ -93,12 +120,15 @@ sf() {
 }
 `;
 function runStep(name, overrides = {}) {
+  return runShell(shellStep(name), overrides);
+}
+function runShell(body, overrides = {}) {
   const env = { ...process.env, ...fixtures, ...overrides };
   delete env.BASH_ENV;
   delete env.ENV;
   const result = spawnSync(
     bash,
-    ['--noprofile', '--norc', '-c', doubles + shellStep(name)],
+    ['--noprofile', '--norc', '-c', doubles + body],
     { encoding: 'utf8', env, timeout: 10000 },
   );
   assert.ifError(result.error);
@@ -146,6 +176,135 @@ test('Salesforce authentication guard rejects mismatched checkout and changed he
   assert.equal(runStep(step, { FAKE_CHECKOUT: 'b'.repeat(40) }).status, 1);
   assert.equal(runStep(step, { FAKE_HEAD: 'b'.repeat(40) }).status, 1);
 });
+
+test('classification refuses a failed checkout identity command before running policy code', () => {
+  const step = 'Classify complete reviewed diff';
+  assert.doesNotMatch(shellStep(step), /export\s+\w+=\s*["']?\$\(/);
+  const result = runStep(step, { FAKE_GIT_RESULT: '42' });
+  assert.equal(result.status, 42);
+  assert.equal(result.stdout, '');
+  assert.equal(result.stderr, '');
+});
+
+test('each Apex attempt rechecks trusted budget before auth even if the early policy passed', () => {
+  const names = [
+    'Recheck exact head immediately before authentication',
+    'Recheck trusted retry budget immediately before authentication',
+    'Authenticate dedicated Dev Hub without printing its auth URL',
+  ];
+  const body =
+    names.map(shellStep).join('\n') + "\nprintf 'Authentication completed\\n'";
+  for (const attempt of ['1', '2', '3']) {
+    const allowed = runShell(body, { GITHUB_RUN_ATTEMPT: attempt });
+    assert.equal(allowed.status, 0, allowed.stdout + allowed.stderr);
+    assert.equal(
+      allowed.stdout,
+      `Budget checked for attempt ${attempt}\nAuthentication completed\n`,
+    );
+    // Simulate an already-successful policy job retained by a partial rerun.
+    // The fresh Apex-local budget failure must stop execution before auth.
+    const refused = runShell(body, {
+      GITHUB_RUN_ATTEMPT: attempt,
+      BUDGET_ALLOWED: 'true',
+      FAKE_BUDGET_RESULT: '1',
+      SF_DEV_HUB_AUTH_URL: '',
+    });
+    assert.equal(refused.status, 1);
+    assert.equal(refused.stdout, `Budget checked for attempt ${attempt}\n`);
+    assert.equal(refused.stderr, '');
+  }
+  const stale = runShell(body, { FAKE_HEAD: 'b'.repeat(40) });
+  assert.equal(stale.status, 1);
+  assert.doesNotMatch(stale.stdout, /Budget checked|Authentication completed/);
+});
+
+test('retry admission stays inside the approved Apex job with narrowly scoped read access', () => {
+  assert.match(
+    apexJob,
+    /permissions:\n      contents: read\n      pull-requests: read\n      actions: read\n/,
+  );
+  const jobEnv = apexJob.slice(
+    apexJob.indexOf('    env:\n'),
+    apexJob.indexOf('    steps:\n'),
+  );
+  assert.doesNotMatch(jobEnv, /GH_TOKEN|SF_DEV_HUB_AUTH_URL/);
+  assert.match(
+    jobEnv,
+    /KUSANYA_POLICY_REPOSITORY: \$\{\{ github\.repository \}\}/,
+  );
+  assert.match(
+    jobEnv,
+    /KUSANYA_POLICY_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| inputs\.reviewed_sha \}\}/,
+  );
+  const budget = stepConfig(
+    'Recheck trusted retry budget immediately before authentication',
+  );
+  assert.match(budget, /GH_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.doesNotMatch(budget, /\n        if:/);
+  assert.match(budget, /node trusted\/scripts\/apex-run-budget\.mjs/);
+  assert.match(
+    stepConfig('Enforce complete exact-head retry budget'),
+    /node trusted\/scripts\/apex-run-budget\.mjs/,
+  );
+  const ordered = [
+    'Checkout trusted verification harness',
+    'Recheck exact head immediately before authentication',
+    'Recheck trusted retry budget immediately before authentication',
+    'Authenticate dedicated Dev Hub without printing its auth URL',
+    'Verify reviewed metadata using only trusted harness code',
+  ].map((name) => apexJob.indexOf(`      - name: ${name}\n`));
+  assert.ok(ordered.every((index) => index >= 0));
+  assert.deepEqual(
+    ordered,
+    [...ordered].sort((a, b) => a - b),
+  );
+});
+
+test('Apex step deadlines reserve separate owned cleanup and five minutes of job slack', () => {
+  const jobMinutes = Number(
+    apexJob.match(/^    timeout-minutes: (\d+)$/m)?.[1],
+  );
+  const steps = apexJob.split(/^      - /m).slice(1);
+  const deadlines = steps.map((step) => {
+    const value = step.match(/^        timeout-minutes: (\d+)$/m)?.[1];
+    assert.ok(value, `Missing bounded deadline: ${step.split('\n')[0]}`);
+    return Number(value);
+  });
+  assert.equal(jobMinutes, 45);
+  assert.ok(deadlines.every((minutes) => minutes > 0));
+  assert.ok(deadlines.reduce((sum, minutes) => sum + minutes, 0) <= 40);
+  assert.match(
+    stepConfig('Verify reviewed metadata using only trusted harness code'),
+    /id: verify\n        timeout-minutes: 20/,
+  );
+  const cleanup = stepConfig(
+    "Clean up this authenticated run's owned scratch intents",
+  );
+  assert.match(cleanup, /timeout-minutes: 5/);
+  assert.match(cleanup, /run: node trusted\/scripts\/cleanup-salesforce\.mjs/);
+  assert.match(cleanup, /always\(\) && steps\.auth\.outcome == 'success'/);
+  for (const outcome of ['success', 'failure', 'cancelled'])
+    assert.ok(cleanup.includes(`steps.verify.outcome == '${outcome}'`));
+  assert.doesNotMatch(cleanup, /steps\.verify\.outcome == 'skipped'/);
+  assert.doesNotMatch(
+    cleanup,
+    /GH_TOKEN|SF_DEV_HUB_AUTH_URL|continue-on-error/,
+  );
+  // runner context is available in step env, not job env.
+  assert.doesNotMatch(apexJob.split('    steps:\n')[0], /runner\.temp/);
+  for (const step of [
+    cleanup,
+    stepConfig('Verify reviewed metadata using only trusted harness code'),
+  ])
+    assert.match(
+      step,
+      /KUSANYA_CLEANUP_JOURNAL: \$\{\{ runner\.temp \}\}\/kusanya-scratch-intents\.json/,
+    );
+  assert.ok(
+    apexJob.indexOf("Clean up this authenticated run's owned scratch intents") <
+      apexJob.indexOf('Remove Dev Hub authentication'),
+  );
+});
 test('Salesforce authentication passes the explicit stdin marker and suppresses CLI output', () => {
   const result = runStep(
     'Authenticate dedicated Dev Hub without printing its auth URL',
@@ -191,11 +350,11 @@ test('Salesforce workflow keeps the pinned harness, source guard and uncondition
     workflow,
     /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/,
   );
-  assert.equal(
-    (workflow.match(/ref: c8470cd3b63f775c719f8e61f2d8963275394623/g) ?? [])
-      .length,
-    2,
+  const immutableRefs = [...workflow.matchAll(/ref: ([0-9a-f]{40})\n/g)].map(
+    (match) => match[1],
   );
+  assert.equal(immutableRefs.length, 2);
+  assert.equal(immutableRefs[0], immutableRefs[1]);
   assert.match(workflow, /run: node trusted\/scripts\/verify-salesforce\.mjs/);
   assert.match(workflow, /needs: \[policy, apex\]\n    if: always\(\)/);
   assert.match(workflow, /cancel-in-progress: false/);
@@ -249,10 +408,6 @@ test('gate rejects policy failure, unknown exemption, stale head and missing ret
 });
 
 test('Apex serializes across every PR and no existing target-org input exists', () => {
-  const apexJob = workflow.slice(
-    workflow.indexOf('\n  apex:'),
-    workflow.indexOf('\n  gate:'),
-  );
   assert.match(
     apexJob,
     /concurrency:\n      group: \$\{\{ github\.repository \}\}-salesforce-ci\n      cancel-in-progress: false/,

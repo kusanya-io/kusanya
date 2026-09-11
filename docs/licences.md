@@ -30,6 +30,9 @@ Regenerate it when either lockfile changes with `node scripts/dependency-licence
 
 Salesforce CLI is an external build tool; CI pins its version. GitHub Actions pins
 the checkout/setup-node actions to reviewed commit hashes (MIT).
+Local workflow validation for issue #5 uses actionlint 1.7.12 (MIT) and
+ShellCheck 0.11.0 (GPL-3.0), standalone development tools, not service/runtime
+dependencies. No tool binaries are committed or shipped with the product.
 The container retains upstream licences/notices. Recheck the full image inventory
 before a release, including operating-system packages and copied npm notices.
 

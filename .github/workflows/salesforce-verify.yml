@@ -75,7 +75,8 @@ jobs:
               ;;
             *) exit 1 ;;
           esac
-          export KUSANYA_POLICY_CHECKOUT_SHA="$(git -C reviewed rev-parse HEAD)"
+          KUSANYA_POLICY_CHECKOUT_SHA="$(git -C reviewed rev-parse HEAD)"
+          export KUSANYA_POLICY_CHECKOUT_SHA
           policy="$(node trusted/scripts/apex-pr-policy.mjs classify)"
           decision="$(jq -er '.decision | select(. == "documentation-exemption" or . == "full-apex")' <<< "$policy")"
           [[ "$(jq -er .headSha <<< "$policy")" == "$REVIEWED_SHA" ]] || exit 1
@@ -99,6 +100,10 @@ jobs:
         github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
     environment: salesforce-ci
     concurrency:
       group: ${{ github.repository }}-salesforce-ci
@@ -110,11 +115,14 @@ jobs:
       KUSANYA_VERIFY_ROLE: ci
       KUSANYA_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
       KUSANYA_HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.reviewed_sha }}
+      KUSANYA_POLICY_REPOSITORY: ${{ github.repository }}
+      KUSANYA_POLICY_HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.reviewed_sha }}
       PR_NUMBER: ${{ github.event.pull_request.number || inputs.pull_request }}
       REVIEWED_SHA: ${{ github.event.pull_request.head.sha || inputs.reviewed_sha }}
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
     steps:
       - name: Confirm reviewed commit and trusted workflow
+        timeout-minutes: 1
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -138,6 +146,7 @@ jobs:
           [[ "$current_sha" == "$REVIEWED_SHA" && "$source_repo" == "$GITHUB_REPOSITORY" && "$base_branch" == "$DEFAULT_BRANCH" && "$pr_state" == open ]] || { echo 'PR changed, closed or fork source refused. Stage reviewed fork contributions in a same-repository PR.'; exit 1; }
           printf 'Verifying PR %s at head %s\n' "$PR_NUMBER" "$REVIEWED_SHA"
       - name: Checkout trusted verification harness
+        timeout-minutes: 1
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # Proposed immutable source pin; Claude must review it before first approval.
@@ -146,6 +155,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: scripts
       - name: Checkout reviewed metadata as data only
+        timeout-minutes: 1
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ env.REVIEWED_SHA }}
@@ -153,19 +163,33 @@ jobs:
           persist-credentials: false
           sparse-checkout: salesforce
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        timeout-minutes: 2
         with:
           node-version: '24'
       - name: Install pinned Salesforce CLI
+        timeout-minutes: 5
         run: npm install --global @salesforce/cli@2.135.7
         working-directory: ${{ runner.temp }}
       - name: Recheck exact head immediately before authentication
+        timeout-minutes: 1
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           [[ "$(git -C reviewed rev-parse HEAD)" == "$REVIEWED_SHA" ]] || { echo 'Checked-out source does not match the reviewed SHA.'; exit 1; }
           [[ "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)" == "$REVIEWED_SHA" ]] || { echo 'PR head changed; approve a fresh run.'; exit 1; }
+      # Re-run failed jobs / Re-run a job does not repeat the earlier policy job.
+      # Evaluate this attempt's admission day after approval and before any auth.
+      - name: Recheck trusted retry budget immediately before authentication
+        timeout-minutes: 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node trusted/scripts/apex-run-budget.mjs
       - name: Authenticate dedicated Dev Hub without printing its auth URL
+        id: auth
+        timeout-minutes: 1
         env:
           SF_DEV_HUB_AUTH_URL: ${{ secrets.SF_DEV_HUB_AUTH_URL }}
         run: |
@@ -176,17 +200,33 @@ jobs:
             exit 1
           fi
       - name: Verify reviewed metadata using only trusted harness code
+        id: verify
+        timeout-minutes: 20
         env:
           KUSANYA_SALESFORCE_DIR: ${{ github.workspace }}/reviewed/salesforce
+          KUSANYA_CLEANUP_JOURNAL: ${{ runner.temp }}/kusanya-scratch-intents.json
         run: node trusted/scripts/verify-salesforce.mjs
       - name: Reject a stale successful run
+        timeout-minutes: 1
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           [[ "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)" == "$REVIEWED_SHA" ]] || { echo 'PR changed during testing; this result cannot verify the new head.'; exit 1; }
+      # The harness's finally is primary. This trusted, exact-run fallback has
+      # time reserved even if the bounded verification step is interrupted.
+      - name: Clean up this authenticated run's owned scratch intents
+        if: >-
+          always() && steps.auth.outcome == 'success' &&
+          (steps.verify.outcome == 'success' || steps.verify.outcome == 'failure' ||
+           steps.verify.outcome == 'cancelled')
+        timeout-minutes: 5
+        env:
+          KUSANYA_CLEANUP_JOURNAL: ${{ runner.temp }}/kusanya-scratch-intents.json
+        run: node trusted/scripts/cleanup-salesforce.mjs
       - name: Remove Dev Hub authentication from the ephemeral runner
         if: always()
+        timeout-minutes: 1
         run: sf org logout --target-org Kusanya-CI-DevHub --no-prompt >/dev/null 2>&1
   gate:
     name: Salesforce verification gate

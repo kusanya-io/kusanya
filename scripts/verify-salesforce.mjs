@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { resolve, join } from 'node:path';
 import { checkApexCoverage, productionApexNames } from './apex-coverage.mjs';
+import { createCleanupJournal } from './scratch-cleanup-journal.mjs';
 import {
   createSalesforceClient,
   SalesforceCommandError,
@@ -73,6 +74,10 @@ export function runVerification({
     const directory = env.KUSANYA_SALESFORCE_DIR
       ? resolve(env.KUSANYA_SALESFORCE_DIR)
       : defaultDirectory;
+    const journal = createCleanupJournal({
+      env,
+      identity: { ...identity, devHub },
+    });
     sf = suppliedClient ?? createSalesforceClient({ cwd: directory, env });
     const discovered = sf('hub-discovery', ['org', 'list', '--all']).result;
     if (
@@ -94,6 +99,7 @@ export function runVerification({
       now,
       ...(nonce ? { nonce } : {}),
       onEvent: log,
+      ...(journal ?? {}),
     });
     orgs = acquired.orgs;
     const target = orgs[0].username;
@@ -106,7 +112,7 @@ export function runVerification({
       '--target-org',
       target,
       '--wait',
-      '15',
+      '5',
     ]);
     testing = true;
     const report = sf('apex-tests', [
@@ -121,7 +127,7 @@ export function runVerification({
       '--result-format',
       'json',
       '--wait',
-      '15',
+      '5',
     ]);
     const measured = coverage(
       report,
@@ -138,6 +144,11 @@ export function runVerification({
       ['CLEANUP_FAILED', 'RECONCILIATION_REQUIRED'].includes(error.code)
     ) {
       result.outcome = 'failed-cleanup';
+    } else if (
+      error instanceof LifecycleError &&
+      error.code === 'CREATION_REJECTED'
+    ) {
+      result.outcome = 'failed-creation-rejected';
     } else if (testing) {
       result.outcome = 'failed-tests';
     } else if (error instanceof QuotaBlockedError) {

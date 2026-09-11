@@ -447,11 +447,12 @@ test('UTC date boundary resets only the infrastructure attempt count', () => {
     'initial',
   );
 });
-test('test failures, prior passes and cleanup failures on the same head never authorize a retry', () => {
+test('test failures, prior passes, cleanup failures and creation rejections on the same head never authorize a retry', () => {
   for (const verificationOutcome of [
     'failed-tests',
     'passed',
     'failed-cleanup',
+    'failed-creation-rejected',
   ]) {
     for (const startedAt of ['2026-09-11T12:00:00Z', '2026-09-12T12:00:00Z']) {
       assert.equal(

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   acquireScratchOrgs,
   cleanupOwnedOrgs,
+  cleanupRunIntents,
   preflight,
   runJanitor,
   QuotaBlockedError,
@@ -98,10 +99,16 @@ function fixture(options = {}) {
         state.daily = 0;
         throw new SalesforceCommandError('SCRATCH_QUOTA', stage);
       }
+      if (failing && options.failure === 'rejected-absent')
+        throw new SalesforceCommandError('CREATION_REJECTED', stage);
       const row = record(number, value('--name'));
       row.CreatedDate = options.createdAt ?? now.toISOString();
       if (failing && options.failure === 'pending') row.Status = 'New';
-      if (failing && options.failure === 'error') row.Status = 'Error';
+      if (failing && options.failure === 'error') {
+        row.Status = 'Error';
+        row.ScratchOrg = null;
+        row.SignupUsername = null;
+      }
       if (!(failing && options.failure === 'absent')) state.records.push(row);
       state.daily -= 1;
       if (row.Status === 'Active') state.active -= 1;
@@ -190,7 +197,7 @@ test('preflight permits capacity without creating or deleting an org', () => {
   assert.equal(f.state.creates, 0);
   assert.equal(f.state.deletes.length, 0);
 });
-test('daily shortage reports rolling next slot only with complete observed history', () => {
+test('daily shortage reports unavailable reset time even with complete recent history', () => {
   const rows = Array.from({ length: 6 }, (_, index) => ({
     ...record(index + 1),
     Status: 'Deleted',
@@ -202,7 +209,8 @@ test('daily shortage reports rolling next slot only with complete observed histo
     (error) =>
       error instanceof QuotaBlockedError &&
       error.exitCode === 75 &&
-      error.report.nextSlotUtc === '2026-09-11T11:00:00.000Z' &&
+      error.report.nextSlotUtc === null &&
+      error.message.includes('unavailable') &&
       error.message.includes('daily 0/6'),
   );
   const unknown = fixture({ daily: 0 });
@@ -213,6 +221,27 @@ test('daily shortage reports rolling next slot only with complete observed histo
       error.message.includes('unavailable'),
   );
 });
+test('live daily capacity admits despite six creations less than 24 hours ago', () => {
+  const f = fixture({
+    daily: 6,
+    records: Array.from({ length: 6 }, (_, index) => ({
+      ...record(index + 1),
+      Status: 'Deleted',
+      CreatedDate: '2026-09-10T12:00:00.000Z',
+    })),
+  });
+  const report = preflight(f.sf, {
+    devHub: hub,
+    needed: 2,
+    now: new Date('2026-09-11T09:00:00.000Z'),
+  });
+  assert.equal(report.daily.remaining, 6);
+  assert.equal(report.nextSlotUtc, null);
+  assert.deepEqual(
+    f.state.calls.map(({ stage }) => stage),
+    ['quota-read'],
+  );
+});
 test('active capacity and pair preflight fail before any creation', () => {
   const f = fixture({ active: 1 });
   assert.throws(
@@ -221,11 +250,13 @@ test('active capacity and pair preflight fail before any creation', () => {
   );
   assert.equal(f.state.creates, 0);
 });
-test('malformed, duplicate, negative limits and incomplete/timestamp-invalid queries fail closed', () => {
+test('malformed, duplicate, negative or over-maximum limits fail closed', () => {
   for (const limits of [
     {},
     [],
     [{ name: 'ActiveScratchOrgs', max: 3, remaining: -1 }],
+    [{ name: 'ActiveScratchOrgs', max: 3, remaining: 4 }],
+    [{ name: 'ActiveScratchOrgs', max: 3, remaining: '3' }],
     [
       { name: 'ActiveScratchOrgs', max: 3, remaining: 3 },
       { name: 'ActiveScratchOrgs', max: 3, remaining: 3 },
@@ -238,13 +269,9 @@ test('malformed, duplicate, negative limits and incomplete/timestamp-invalid que
     });
     assert.equal(f.state.creates, 0);
   }
-  for (const f of [
-    fixture({ malformed: true }),
-    fixture({ records: [{ ...record(1), CreatedDate: 'not-a-date' }] }),
-    fixture({ records: [{ ...record(1), CreatedDate: '5' }] }),
-    fixture({ records: [record(1), record(1)] }),
-    fixture({ records: [{ ...record(1), Status: 'Unknown' }] }),
-  ]) {
+});
+test('incomplete ownership query fails closed before creation', () => {
+  for (const f of [fixture({ malformed: true })]) {
     assert.throws(() => acquireScratchOrgs(f.sf, options()), {
       code: 'INVALID_QUERY',
     });
@@ -265,6 +292,71 @@ test('one fresh tagged org is acquired, and cleanup matches remote IDs before de
     deleted: 0,
     alreadyDeleted: 1,
   });
+  const create = f.state.calls.find(({ stage }) => stage === 'scratch-create');
+  assert.equal(create.args[create.args.indexOf('--wait') + 1], '5');
+});
+test('intent is persisted before creation with only safe ownership fields', () => {
+  const f = fixture();
+  const intents = [];
+  acquireScratchOrgs(
+    f.sf,
+    options({
+      onIntent: (intent) => {
+        assert.equal(f.state.creates, 0);
+        intents.push(intent);
+      },
+    }),
+  );
+  assert.deepEqual(intents, [
+    { devHub: hub, role: 'ci', runId: '100-1', sha, tag: tag() },
+  ]);
+});
+test('failed or asynchronous intent persistence prevents creation', () => {
+  for (const onIntent of [
+    () => {
+      throw new Error('fixture-only-private-disk-error');
+    },
+    () => Promise.resolve(),
+  ]) {
+    const f = fixture();
+    assert.throws(
+      () => acquireScratchOrgs(f.sf, options({ onIntent })),
+      (error) =>
+        error.code === 'RECONCILIATION_REQUIRED' &&
+        !error.message.includes('fixture-only-private'),
+    );
+    assert.equal(f.state.creates, 0);
+  }
+});
+test('positive provider rejection is distinct from unknown missing creation', () => {
+  for (const failure of ['rejected-absent', 'error']) {
+    const f = fixture({ failAt: 1, failure });
+    const rejected = [];
+    assert.throws(
+      () =>
+        acquireScratchOrgs(
+          f.sf,
+          options({ onRejected: (intent) => rejected.push(intent) }),
+        ),
+      { code: 'CREATION_REJECTED', retryable: false },
+    );
+    assert.deepEqual(rejected, [
+      { devHub: hub, role: 'ci', runId: '100-1', sha, tag: tag() },
+    ]);
+    assert.equal(f.state.creates, 1);
+    assert.equal(f.state.deletes.length, 0);
+  }
+  for (const failure of ['pending', 'absent']) {
+    const f = fixture({ failAt: 1, failure });
+    assert.throws(
+      () =>
+        acquireScratchOrgs(
+          f.sf,
+          options({ onRejected: () => assert.fail('Not a proven rejection') }),
+        ),
+      { code: 'RECONCILIATION_REQUIRED' },
+    );
+  }
 });
 test('pair success creates exactly two; second failure cleans the first atomically', () => {
   const success = fixture();
@@ -273,7 +365,7 @@ test('pair success creates exactly two; second failure cleans the first atomical
   assert.equal(cleanupOwnedOrgs(success.sf, pair.orgs).deleted, 2);
   const failure = fixture({ failAt: 2, failure: 'error' });
   assert.throws(() => acquireScratchOrgs(failure.sf, options({ count: 2 })), {
-    code: 'TIMEOUT',
+    code: 'CREATION_REJECTED',
   });
   assert.equal(failure.state.creates, 2);
   assert.deepEqual(failure.state.deletes, [id('2AS', 1)]);
@@ -377,6 +469,93 @@ test('cleanup refuses changed role/name/org ownership', () => {
     });
     assert.equal(f.state.deletes.length, 0);
   }
+});
+test('run-intent cleanup reconciles exact Active, Deleted and Error records', () => {
+  for (const status of ['Active', 'Deleted', 'Error']) {
+    const row = { ...record(1), Status: status };
+    if (status === 'Error') row.ScratchOrg = null;
+    const f = fixture({ records: [row] });
+    const cleanup = cleanupRunIntents(f.sf, { ...identity, tags: [tag()] });
+    assert.deepEqual(cleanup, {
+      deleted: status === 'Active' ? 1 : 0,
+      alreadyDeleted: status === 'Deleted' ? 1 : 0,
+      rejected: status === 'Error' ? 1 : 0,
+    });
+    assert.equal(f.state.creates, 0);
+  }
+});
+test('run-intent cleanup permits absent rejection only with persisted positive evidence', () => {
+  const f = fixture();
+  assert.deepEqual(
+    cleanupRunIntents(f.sf, {
+      ...identity,
+      tags: [tag()],
+      rejectedTags: [tag()],
+    }),
+    { deleted: 0, alreadyDeleted: 0, rejected: 1 },
+  );
+  assert.throws(() => cleanupRunIntents(f.sf, { ...identity, tags: [tag()] }), {
+    code: 'RECONCILIATION_REQUIRED',
+  });
+  assert.equal(f.state.deletes.length, 0);
+});
+test('run-intent cleanup validates every tag before any read or deletion', () => {
+  for (const extra of [
+    { tags: [tag(), tag('verifier')] },
+    { tags: [tag(), tag('ci', '101-1')] },
+    { tags: [tag(), tag().replace(sha.slice(0, 12), 'b'.repeat(12))] },
+    { tags: [tag(), "bad' OR Status = 'Active"] },
+    { tags: [tag(), tag()] },
+    { tags: [tag()], rejectedTags: [tag('verifier')] },
+    { tags: [tag()], rejectedTags: [tag(), tag()] },
+    { tags: [tag(), null] },
+  ]) {
+    const f = fixture({ records: [record(1)] });
+    assert.throws(() => cleanupRunIntents(f.sf, { ...identity, ...extra }), {
+      code: 'OWNERSHIP_MISMATCH',
+    });
+    assert.equal(f.state.calls.length, 0);
+  }
+});
+test('run-intent cleanup refuses pending, ambiguous and foreign ownership records', () => {
+  for (const row of [
+    { ...record(1), Status: 'New' },
+    { ...record(1), Status: 'Creating' },
+    { ...record(1), Status: 'Unknown' },
+    { ...record(1), Status: 'Error' },
+    { ...record(1), Status: 'Error', ScratchOrg: undefined },
+    { ...record(1), Status: 'Error', ScratchOrg: false },
+    { ...record(1), OrgName: tag('verifier') },
+    { ...record(1), SignupUsername: 'invalid username' },
+  ]) {
+    const f = fixture({ records: [row] });
+    assert.throws(
+      () => cleanupRunIntents(f.sf, { ...identity, tags: [tag()] }),
+      { code: 'RECONCILIATION_REQUIRED' },
+    );
+    assert.equal(f.state.deletes.length, 0);
+  }
+});
+test('run-intent cleanup still releases owned first org when pair second remains unknown', () => {
+  const secondTag = tag('ci', '100-1', '000000000002');
+  const f = fixture({
+    records: [record(1), { ...record(2, secondTag), Status: 'Creating' }],
+  });
+  assert.throws(
+    () => cleanupRunIntents(f.sf, { ...identity, tags: [tag(), secondTag] }),
+    { code: 'RECONCILIATION_REQUIRED' },
+  );
+  assert.deepEqual(f.state.deletes, [id('2AS', 1)]);
+});
+test('persisted rejected tag cannot hide an actual active owned org from cleanup', () => {
+  const f = fixture({ records: [record(1)] });
+  const cleanup = cleanupRunIntents(f.sf, {
+    ...identity,
+    tags: [tag()],
+    rejectedTags: [tag()],
+  });
+  assert.equal(cleanup.deleted, 1);
+  assert.equal(cleanup.rejected, 0);
 });
 test('janitor defaults dry-run and applies only same-role, ended, exact-head run evidence', () => {
   const f = fixture({

@@ -126,9 +126,12 @@ PR #3 is not exempt. Main's required check is still present for exempt PRs.
 ### Quota, retries and cleanup
 
 Read-only preflight checks both active and daily capacity before creation. Daily
-capacity is a rolling 24-hour allocation; deleting an org frees active capacity,
-not daily capacity. `BLOCKED` exits 75 with limit/remaining/required counts and the
-next daily slot estimate from creation history, or an explicit unavailable estimate.
+capacity is a daily allocation, not a rolling 24-hour window; deleting an org frees
+active capacity, not daily capacity. The observed reset time is still unconfirmed
+(issue #5 note 16). `BLOCKED` exits 75 with limit/remaining/required counts and
+`next UTC slot unavailable`. Never infer a reset by adding 24 hours to creation
+timestamps or assume midnight Pacific. Preflight uses live limits without querying
+creation history; any future reset forecast needs independently confirmed ADR evidence.
 Malformed limits and failed queries fail closed. A race can still exhaust quota
 after preflight: recognized limit errors receive the same blocked treatment.
 The gate fails for BLOCKED; it never skips or substitutes the development org.
@@ -143,6 +146,14 @@ infrastructure recovery per head per UTC day; capacity recovery consumes that
 retry budget and must pass preflight again. Test/coverage failures need a new fixed
 head. A successful head is not rerun for duplicate evidence. Unknown outcomes,
 incomplete logs and failed cleanup require investigation, not presumed permission.
+The early policy check is repeated inside Apex, after approval and its exact-head
+recheck, immediately before authentication. Partial reruns cannot reuse the early
+job's permission, and the current UTC admission date is recomputed. The reader must
+finish within its bounded step or fail closed without authentication. Completed
+zero-step skipped/cancelled Apex jobs with valid run/attempt/head identity never
+allocated an org; the reader does not request their unavailable logs. Jobs with any
+steps, incomplete metadata or an unfinished status do not get that exemption.
+
 Only a unique, sanitized harness marker matching run/attempt/head establishes the
 previous outcome. The marker is also subject to finding 10's explicit-review rule.
 Manual dispatch uses main's workflow SHA, so history is enumerated without a SHA
@@ -167,10 +178,54 @@ cleanup. A pending/unknown creation result requires private reconciliation of it
 exact logged tag; this PR does not automate that operator investigation.
 
 The dedicated CI hub is approved but not provisioned by this PR. Until migration,
-CI and Claude coordinate the shared hub: the first returning 11 September slot at
-11:33 UTC is reserved for Phase 0 CI; the second at 13:20 for Claude; the next two
-are held for recovery. Check actual allocations before relying on those estimates.
-No builder org is created until the Phase 0 runs finish.
+CI and Claude coordinate the shared hub using live allocations and reserve recovery
+capacity. The original 11 September slot estimates were withdrawn in issue #5 note 16. Phase 0 CI and independent runs are complete; this hardening work consumes no
+builder org. Check actual limits before each authorized fresh run.
+
+### Timeout recovery and truthful failures (issue #5)
+
+The Apex job stays at 45 minutes. Its explicit step deadlines total 40, retaining
+five minutes of slack: 20 for verification, five for recovery cleanup, one for
+logout, and 14 for the other bounded steps. Each creation/deploy/test wait is five
+minutes. The CLI adapter bounds those direct processes to six minutes and other
+calls to 30 seconds. A killed CLI does not prove its remote request stopped, nor
+does killing Windows' `cmd.exe` wrapper guarantee all descendants were killed.
+
+The harness creates a private journal at
+`RUNNER_TEMP/kusanya-scratch-intents.json`, recording only this run's identity and
+exact tag intents before allocation. No credentials, usernames or raw results
+enter it; no artifact/cache uploads it. Existing, malformed, off-run or symlinked
+journals fail closed. Creation cannot start until its intent was persisted.
+
+The primary `finally` cleanup remains. An additional pinned `always()` step runs
+`node trusted/scripts/cleanup-salesforce.mjs` after authenticated verification was
+attempted, even if that bounded step failed or was cancelled. It requires GitHub's
+current CI run ID and attempt to match the journal, revalidates every allowed tag
+and remote org ID, and deletes only this attempt's positively owned orgs. Already
+deleted orgs are a no-op. It accepts no existing-target input or cross-run selector.
+It runs before Dev Hub logout and does not turn a failed verification into success.
+
+Confirmed provider creation rejection with no org reports nonretryable
+`failed-creation-rejected`, not a fictitious cleanup failure. The classifier uses
+the narrow `RemoteOrgSignupFailed` case from
+[Salesforce core](https://github.com/forcedotcom/sfdx-core/blob/main/src/org/scratchOrgErrorCodes.ts)
+plus an exact remote read; a terminal Error record must explicitly have no org.
+Recognized quota rejection remains `BLOCKED` (75). Unknown errors, pending requests
+and absent timeout records are not rejection evidence; they require reconciliation.
+Real quota-error classification is not claimed live-tested by synthetic fixtures.
+Do not consume capacity to manufacture a quota rejection.
+
+The fallback fails if the journal is missing or ambiguous, or cleanup cannot be
+confirmed. Total runner loss/force cancellation may prevent all cleanup steps;
+privately reconcile the logged ownership tag before another attempt. This current
+attempt finalizer does not pretend the whole job is ended, and does not expand the
+separate ended-run janitor's authority. ADR 0006 records these decisions; ADR 0007
+records Bill's limited Phase 0 deferral. Issue #5 stays open until Claude verifies.
+
+Run `actionlint` with an installed ShellCheck executable, not `-shellcheck=`.
+For example, when both are on PATH: `actionlint -shellcheck shellcheck`.
+CI policy/harness/workflow changes require Claude's explicit security review before
+Bill approves their first Salesforce execution, even when public fixtures pass.
 
 ### Fork contributions and manual dispatch
 
