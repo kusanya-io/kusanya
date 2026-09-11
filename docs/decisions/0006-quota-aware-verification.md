@@ -82,8 +82,8 @@ returns, within the same retry budget and only after another preflight. Read
 complete GitHub attempt history and the exact run/head's sanitized harness outcome;
 missing or contradictory history is not permission to retry. A quota check is
 advisory, never a reservation against other operators.
-Count the UTC day of the trusted harness's actual start timestamp, not GitHub's
-workflow or job start metadata (both can include waiting for approval). Manual
+For executed verification, count the UTC day of the trusted harness's actual start
+timestamp, not GitHub's workflow or job start metadata. Manual
 dispatch evidence must bind its reviewed head from the trusted
 subject log, not confuse it with main's dispatch SHA. Ambiguous legacy logs and
 history beyond the bounded complete reader require investigation, not exemption.
@@ -94,8 +94,21 @@ day. The early policy job remains a fast check, not authorization for a later
 partial rerun or next-day approval. The Apex job receives only read permissions
 for contents, pull requests and Actions; its GitHub token remains step-scoped.
 Completed, identity-validated zero-step skipped/cancelled Apex jobs consume no
-allocation and need no unavailable log. Executed, incomplete or ambiguous jobs
-are not covered by that exemption, including manual dispatches.
+allocation and need no unavailable log. Other jobs are not covered by that
+zero-allocation exemption, including manual dispatches.
+
+Finding 19 amendment: a completed failed Apex job whose Jobs API steps contain
+exactly one completed, skipped `Verify reviewed metadata using only trusted
+harness code` step proves the harness did not run. Classify it as
+`failed-infrastructure`, `retryable: true`, without requiring an outcome marker.
+Count it against the same initial-attempt-plus-one-retry daily budget; it is not
+a free attempt or passing verification. With no harness timestamp, use the
+validated completed job's UTC `started_at` for this pre-verification exception.
+PR attribution still requires exact run/attempt/head identity; manual dispatch
+still requires the trusted subject log to identify the reviewed PR head.
+Missing, duplicate, incomplete or non-skipped verify steps do not qualify and
+retain the marker requirement. Contradictory job completion fails closed.
+No automatic retry or new approval authority is introduced.
 
 Until CI has its separate hub, coordinate live available slots between CI and
 Claude, reserving room for explicitly authorized infrastructure recovery. The
@@ -112,6 +125,17 @@ timestamps do not establish the daily reset. Do not add a forecast until an
 independently confirmed reset rule is recorded in an ADR. The preflight does not
 need a creation-history query to read live limits. Malformed limits, failed queries and unknown
 errors fail closed. Never print raw Salesforce output, usernames or authorization.
+
+Finding 20 amendment: capture authentication `--json` stdout only in an unexported
+shell variable; discard stderr. On failure, parse one JSON object and disclose
+only its exact top-level `name` if allowlisted: `ENOTFOUND`, `ETIMEDOUT`,
+`ECONNRESET`, `ECONNREFUSED`, `EAI_AGAIN`, `invalid_grant`,
+`INVALID_SFDX_AUTH_URL`, `AuthDecryptError`, or `RequestError`. Otherwise disclose
+only `unrecognized`. Never print messages, nested data, URLs, instances, raw JSON
+or parser diagnostics. Success remains silent. Clear the variable before reporting;
+do not persist, export, upload or cache the captured output. The secret remains
+scoped to the single authentication step. The diagnostic class is evidence to
+investigate, not proof a retry will work or authority to rotate a credential.
 
 `BLOCKED` fails the required gate. It never becomes a successful skip and never
 falls back to an existing org. A recognized creation-time quota error follows the

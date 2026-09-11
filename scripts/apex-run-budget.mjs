@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { decideInfrastructureRetry } from './apex-pr-policy.mjs';
 
 const jobName = 'Scratch org tests and 85 percent coverage';
+const verificationStepName =
+  'Verify reviewed metadata using only trusted harness code';
 const outcomes = new Set([
   'passed',
   'failed-tests',
@@ -82,7 +84,7 @@ export function readVerificationSubject(log) {
   return subjects[0];
 }
 
-/** Read complete workflow history; never grant budget from missing logs or pages. */
+/** Read complete history; require positive Jobs API proof or trusted outcome logs. */
 export function collectAttempts({
   api,
   readLog,
@@ -186,19 +188,60 @@ export function collectAttempts({
         job.steps.length === 0
       )
         continue;
-      if (!Number.isFinite(Date.parse(job.started_at)))
+      if (
+        typeof job.started_at !== 'string' ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(
+          job.started_at,
+        ) ||
+        !Number.isFinite(Date.parse(job.started_at)) ||
+        new Date(job.started_at).toISOString().slice(0, 10) !==
+          job.started_at.slice(0, 10)
+      )
         throw new Error('Historical Apex job start is incomplete.');
-      const log = readLog(run.id, number, job.id);
+      // Dispatch head_sha identifies the workflow on main, not the reviewed
+      // PR. Even when the harness never starts, only its trusted subject line
+      // can attribute the failed attempt to a head.
+      const log =
+        run.event === 'workflow_dispatch'
+          ? readLog(run.id, number, job.id)
+          : undefined;
       const reviewedHead =
         run.event === 'workflow_dispatch'
           ? readVerificationSubject(log).headSha
           : run.head_sha;
       if (reviewedHead !== headSha) continue;
-      const marker = readVerificationMarker(log, {
-        runId: String(run.id),
-        attempt: number,
-        headSha: reviewedHead,
-      });
+      const verificationSteps = job.steps.filter(
+        (step) => step?.name === verificationStepName,
+      );
+      const verificationSkipped =
+        verificationSteps.length === 1 &&
+        verificationSteps[0].status === 'completed' &&
+        verificationSteps[0].conclusion === 'skipped';
+      let marker;
+      if (verificationSkipped) {
+        if (job.conclusion !== 'failure')
+          throw new Error('Skipped verification requires a failed Apex job.');
+        // A failed setup/auth step cannot emit a harness marker. GitHub's
+        // completed/skipped verification step proves the harness did not run.
+        // Unlike a zero-step cancellation this consumes the normal attempt
+        // budget, dated by the executing job rather than its workflow queue.
+        marker = {
+          verificationOutcome: 'failed-infrastructure',
+          retryable: true,
+          startedAt: job.started_at,
+        };
+      } else {
+        // Missing, duplicate, incomplete or executed verification steps cannot
+        // use the exception; retain exact-attempt outcome-marker requirements.
+        marker = readVerificationMarker(
+          log ?? readLog(run.id, number, job.id),
+          {
+            runId: String(run.id),
+            attempt: number,
+            headSha: reviewedHead,
+          },
+        );
+      }
       if (
         (marker.verificationOutcome === 'passed') !==
         (job.conclusion === 'success')

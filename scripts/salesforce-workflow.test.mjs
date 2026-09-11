@@ -78,6 +78,8 @@ const fixtures = {
   FAKE_STATE: 'open',
   SF_DEV_HUB_AUTH_URL: 'synthetic-auth-input-not-a-credential',
   FAKE_AUTH_RESULT: '0',
+  FAKE_AUTH_STDOUT: 'synthetic-auth-input-not-a-credential',
+  FAKE_AUTH_STDERR: 'synthetic-auth-input-not-a-credential',
   FAKE_GIT_RESULT: '0',
   FAKE_BUDGET_RESULT: '0',
   GITHUB_RUN_ID: '123',
@@ -114,8 +116,8 @@ sf() {
   payload="$(cat)"
   [[ "$payload" == synthetic-auth-input-not-a-credential ]] || return 3
   # Simulate a CLI that includes its input in diagnostics; neither stream may leak.
-  printf '%s\\n' "$payload"
-  printf '%s\\n' "$payload" >&2
+  printf '%s\\n' "$FAKE_AUTH_STDOUT"
+  printf '%s\\n' "$payload" "$FAKE_AUTH_STDERR" >&2
   return "$FAKE_AUTH_RESULT"
 }
 `;
@@ -358,7 +360,7 @@ test('Salesforce authentication fails closed without a secret or after a CLI fai
   assert.match(missing.stdout, /Missing environment secret/);
   const failed = runStep(step, { FAKE_AUTH_RESULT: '1' });
   assert.equal(failed.status, 1);
-  assert.match(failed.stdout, /Dev Hub authentication failed/);
+  assert.equal(failed.stdout, 'Dev Hub authentication failed: unrecognized\n');
   for (const result of [missing, failed]) {
     assert.doesNotMatch(
       result.stdout + result.stderr,
@@ -366,6 +368,119 @@ test('Salesforce authentication fails closed without a secret or after a CLI fai
     );
     assert.equal(result.stderr, '');
   }
+});
+
+test('auth failure prints only an exact allowlisted top-level class using the real inline parser', () => {
+  const step = 'Authenticate dedicated Dev Hub without printing its auth URL';
+  const secret = fixtures.SF_DEV_HUB_AUTH_URL;
+  // command node bypasses the budget-only shell double: these cases execute
+  // the actual inline JSON parser with the installed Node runtime.
+  assert.match(shellStep(step), /\| command node -e '/);
+  const allowed = [
+    'ENOTFOUND',
+    'ETIMEDOUT',
+    'ECONNRESET',
+    'ECONNREFUSED',
+    'EAI_AGAIN',
+    'invalid_grant',
+    'INVALID_SFDX_AUTH_URL',
+    'AuthDecryptError',
+    'RequestError',
+  ];
+  for (const name of allowed) {
+    const raw = JSON.stringify({
+      status: 1,
+      name,
+      message: secret,
+      stack: secret,
+      data: { authUrl: secret, instanceUrl: secret, name: secret },
+      result: { accessToken: secret, username: secret },
+    });
+    const result = runStep(step, {
+      FAKE_AUTH_RESULT: '1',
+      FAKE_AUTH_STDOUT: raw,
+      FAKE_AUTH_STDERR: `${secret}\n${raw}`,
+    });
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, `Dev Hub authentication failed: ${name}\n`);
+    assert.equal(result.stderr, '');
+    assert.ok(!(result.stdout + result.stderr).includes(secret));
+  }
+});
+
+test('auth parser refuses malicious, nested, malformed and non-object classifications without leaks', () => {
+  const step = 'Authenticate dedicated Dev Hub without printing its auth URL';
+  const secret = fixtures.SF_DEV_HUB_AUTH_URL;
+  for (const raw of [
+    secret,
+    '',
+    `{"name":"ENOTFOUND","message":"${secret}"`,
+    JSON.stringify({ name: `${secret}\nENOTFOUND`, message: secret }),
+    JSON.stringify({ name: `ENOTFOUND\n${secret}`, message: secret }),
+    JSON.stringify({ name: `$(printf '${secret}')`, message: secret }),
+    JSON.stringify({ name: 'enotfound', message: secret }),
+    JSON.stringify({ name: 'Error', message: secret }),
+    JSON.stringify({ name: ['ENOTFOUND'], message: secret }),
+    JSON.stringify({ name: { name: 'ENOTFOUND' }, message: secret }),
+    JSON.stringify({ name: null, message: secret }),
+    JSON.stringify({ data: { name: 'ENOTFOUND' }, message: secret }),
+    JSON.stringify({ result: { name: 'ENOTFOUND' }, message: secret }),
+    JSON.stringify([{ name: 'ENOTFOUND', message: secret }]),
+    JSON.stringify(`ENOTFOUND ${secret}`),
+    'null',
+    'true',
+    '123',
+  ]) {
+    const result = runStep(step, {
+      FAKE_AUTH_RESULT: '1',
+      FAKE_AUTH_STDOUT: raw,
+      // A plausible stderr classification must never become the output class.
+      FAKE_AUTH_STDERR: JSON.stringify({
+        name: 'RequestError',
+        message: secret,
+      }),
+    });
+    assert.equal(result.status, 1);
+    assert.equal(
+      result.stdout,
+      'Dev Hub authentication failed: unrecognized\n',
+    );
+    assert.equal(result.stderr, '');
+    assert.ok(!(result.stdout + result.stderr).includes(secret));
+  }
+});
+
+test('successful auth discards every stdout and stderr field and never persists raw JSON', () => {
+  const step = 'Authenticate dedicated Dev Hub without printing its auth URL';
+  const secret = fixtures.SF_DEV_HUB_AUTH_URL;
+  for (const raw of [
+    secret,
+    JSON.stringify({
+      status: 0,
+      result: { accessToken: secret, instanceUrl: secret },
+    }),
+    JSON.stringify({ status: 0, name: 'ENOTFOUND', message: secret }),
+  ]) {
+    const result = runStep(step, {
+      FAKE_AUTH_RESULT: '0',
+      FAKE_AUTH_STDOUT: raw,
+      FAKE_AUTH_STDERR: raw,
+    });
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, '');
+  }
+  const body = shellStep(step);
+  assert.match(
+    body,
+    /auth_json="\$\(printf '%s' "\$SF_DEV_HUB_AUTH_URL" \| sf /,
+  );
+  assert.doesNotMatch(body, /export|GITHUB_OUTPUT|GITHUB_ENV|tee\s|writeFile/);
+  assert.equal((body.match(/unset auth_json/g) ?? []).length, 2);
+  assert.equal(
+    (workflow.match(/secrets\.SF_DEV_HUB_AUTH_URL/g) ?? []).length,
+    1,
+  );
 });
 test('Salesforce result guard rejects a head changed during tests', () => {
   const step = 'Reject a stale successful run';

@@ -195,10 +195,26 @@ jobs:
         run: |
           set -euo pipefail
           [[ -n "$SF_DEV_HUB_AUTH_URL" ]] || { echo 'Missing environment secret SF_DEV_HUB_AUTH_URL. Apex verification is blocked.'; exit 1; }
-          if ! printf '%s' "$SF_DEV_HUB_AUTH_URL" | sf org login sfdx-url --sfdx-url-stdin - --alias Kusanya-CI-DevHub --set-default-dev-hub --json >/dev/null 2>&1; then
-            echo 'Dev Hub authentication failed; inspect the environment secret privately.'
+          if ! auth_json="$(printf '%s' "$SF_DEV_HUB_AUTH_URL" | sf org login sfdx-url --sfdx-url-stdin - --alias Kusanya-CI-DevHub --set-default-dev-hub --json 2>/dev/null)"; then
+            auth_name="$(printf '%s' "$auth_json" | command node -e '
+              const allowed = new Set([
+                "ENOTFOUND", "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED",
+                "EAI_AGAIN", "invalid_grant", "INVALID_SFDX_AUTH_URL",
+                "AuthDecryptError", "RequestError"
+              ]);
+              let name = "unrecognized";
+              try {
+                const value = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+                if (value && typeof value === "object" && !Array.isArray(value) &&
+                    allowed.has(value.name)) name = value.name;
+              } catch {}
+              process.stdout.write(name);
+            ' 2>/dev/null)" || auth_name=unrecognized
+            unset auth_json
+            printf 'Dev Hub authentication failed: %s\n' "$auth_name"
             exit 1
           fi
+          unset auth_json
       - name: Verify reviewed metadata using only trusted harness code
         id: verify
         timeout-minutes: 20

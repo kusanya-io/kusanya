@@ -95,8 +95,17 @@ credentialed job. Approval still requires inspection of YAML and its dependencie
 Authentication pipes the environment secret directly to the pinned CLI with
 `--sfdx-url-stdin -`. The explicit `-` is required: without it the CLI can consume
 the following `--alias` flag as the stdin option's value and reject the command.
-CLI output stays suppressed on both success and failure; never print an auth URL
-to diagnose a failed run. A failed authentication run supplies no Apex evidence.
+Raw CLI output stays suppressed on both success and failure. Authentication JSON
+stdout is captured only in an unexported shell variable, never an artifact, cache
+or file; stderr remains discarded. On failure, a real JSON parser permits only an
+exact top-level `name` from this allowlist: `ENOTFOUND`, `ETIMEDOUT`, `ECONNRESET`,
+`ECONNREFUSED`, `EAI_AGAIN`, `invalid_grant`, `INVALID_SFDX_AUTH_URL`,
+`AuthDecryptError`, `RequestError`. Anything else, including malformed JSON or
+non-object output, reports `unrecognized`. Messages, nested data, URLs, instances
+and parser diagnostics are never printed; success remains silent. The captured
+variable is cleared before reporting. Never print an auth URL to diagnose a run.
+A failed authentication run supplies no Apex evidence, and an error class alone
+is not a reason to rotate the secret. See finding 20 in ADR 0006.
 
 The Apex job serializes across all PRs using the CI hub, without cancelling an
 active scratch lifecycle. A replaced pending run has consumed no org; its skipped
@@ -151,17 +160,30 @@ recheck, immediately before authentication. Partial reruns cannot reuse the earl
 job's permission, and the current UTC admission date is recomputed. The reader must
 finish within its bounded step or fail closed without authentication. Completed
 zero-step skipped/cancelled Apex jobs with valid run/attempt/head identity never
-allocated an org; the reader does not request their unavailable logs. Jobs with any
-steps, incomplete metadata or an unfinished status do not get that exemption.
+allocated an org; the reader does not request their unavailable logs. Other jobs
+do not get that zero-allocation exemption.
 
-Only a unique, sanitized harness marker matching run/attempt/head establishes the
-previous outcome. The marker is also subject to finding 10's explicit-review rule.
+Finding 19 adds a distinct, counted pre-verification failure: a validated completed
+failed Apex job with exactly one completed, skipped step named
+`Verify reviewed metadata using only trusted harness code` is
+`failed-infrastructure`, `retryable: true`. The harness never ran, so an outcome
+marker cannot exist. The reader uses Jobs API evidence without a log for PR runs,
+counts the attempt against the existing daily budget, and still needs Bill's
+explicit approval for any retry. It never makes the failed gate green. Missing,
+duplicate, incomplete or non-skipped verify steps retain the marker requirement;
+contradictory completion is refused.
+
+For executed verification, only a unique, sanitized harness marker matching
+run/attempt/head establishes the previous outcome. Both the marker and step-based
+exception are subject to finding 10's explicit-review rule.
 Manual dispatch uses main's workflow SHA, so history is enumerated without a SHA
 filter and its reviewed head is bound by the trusted `Verifying PR ... at head ...`
-log line. The trusted harness's actual start timestamp determines the UTC retry
-day; GitHub timestamps a job even while it is waiting for approval, so neither
-workflow nor job start metadata is used for this counter. Unidentified legacy dispatches or missing logs fail closed and
-need investigation; they are not silently excluded. The history reader caps at
+log line, including pre-verification failures. The trusted harness's actual start
+timestamp determines the UTC retry day when verification ran. For the skipped
+verify exception only, there is no harness timestamp: use the validated completed
+job's UTC `started_at`. Workflow queue time is never used. Unidentified legacy
+dispatches or missing required logs fail closed and need investigation; they are
+not silently excluded. The history reader caps at
 1,000 workflow runs and refuses incomplete history rather than resetting budget.
 
 Tag each disposable org with role, run ID, short head SHA and a unique suffix.
@@ -256,7 +278,8 @@ separately reviewed trusted status publisher; no write-token permission is added
 `npm test` includes `scripts/salesforce-workflow.test.mjs`. These tests execute the
 actual inline Bash guards using synthetic GitHub/Git/Salesforce responses. They
 cover valid PR/dispatch inputs, forks, stale SHA, mismatched checkout, invalid inputs,
-authentication arguments/stdin, missing credentials, suppressed CLI diagnostics and
+authentication arguments/stdin, missing credentials, allowlisted error names,
+suppression of synthetic credentials in both CLI streams, malformed/nested output and
 the final fail-closed gate. Windows resolves Bash from the Git for Windows root's
 `bin` or `usr/bin`, including when Git Bash exposes `mingw64/bin/git.exe` first.
 Resolver fixtures also run on Linux. These tests validate policy and command

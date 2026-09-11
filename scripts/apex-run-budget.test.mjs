@@ -686,6 +686,294 @@ test('runBudget cannot authorize partial reruns from unavailable or incomplete h
   }
 });
 
+const verificationStepName =
+  'Verify reviewed metadata using only trusted harness code';
+const skippedVerification = () => ({
+  name: verificationStepName,
+  status: 'completed',
+  conclusion: 'skipped',
+});
+
+function preHarnessFailureHistory({
+  failedStep = 'auth',
+  event = 'pull_request',
+  workflowHead = event === 'workflow_dispatch' ? 'b'.repeat(40) : headSha,
+  jobChanges = {},
+  attemptChanges = {},
+  log = subject(),
+} = {}) {
+  const history = fakeHistory();
+  const originalApi = history.api;
+  const logReads = [];
+  history.api = (path) => {
+    const result = originalApi(path);
+    if (path.includes('/workflows/'))
+      Object.assign(
+        result.workflow_runs.find((run) => run.id === 11),
+        {
+          event,
+          head_sha: workflowHead,
+        },
+      );
+    if (path.endsWith('/attempts/1'))
+      Object.assign(result, {
+        event,
+        head_sha: workflowHead,
+        ...attemptChanges,
+      });
+    if (path.includes('/jobs?'))
+      Object.assign(result.jobs[0], {
+        head_sha: workflowHead,
+        steps: [
+          {
+            name: 'Confirm reviewed commit and trusted workflow',
+            status: 'completed',
+            conclusion: 'success',
+          },
+          {
+            name: 'Install pinned Salesforce CLI',
+            status: 'completed',
+            conclusion: failedStep === 'install' ? 'failure' : 'success',
+          },
+          {
+            name: 'Authenticate dedicated Dev Hub without printing its auth URL',
+            status: 'completed',
+            conclusion: failedStep === 'install' ? 'skipped' : 'failure',
+          },
+          skippedVerification(),
+        ],
+        ...jobChanges,
+      });
+    return result;
+  };
+  history.readLog = (run, attempt, job) => {
+    logReads.push([run, attempt, job]);
+    return log;
+  };
+  return { ...history, logReads };
+}
+
+test('auth and CLI install failures with completed/skipped verification consume a retry without requiring an outcome log', () => {
+  for (const failedStep of ['auth', 'install']) {
+    const history = preHarnessFailureHistory({ failedStep, log: undefined });
+    history.readLog = () =>
+      assert.fail('PR skipped-verification proof needs no log.');
+    assert.deepEqual(collectAttempts(history), [
+      {
+        runId: '11',
+        attempt: 1,
+        headSha,
+        status: 'completed',
+        conclusion: 'failure',
+        verificationOutcome: 'failed-infrastructure',
+        retryable: true,
+        startedAt: '2026-09-10T12:00:00Z',
+      },
+    ]);
+    assert.equal(
+      runBudget({
+        ...history,
+        env: budgetEnv(),
+        now: new Date('2026-09-10T13:00:00Z'),
+      }).kind,
+      'infrastructure-retry',
+    );
+  }
+});
+
+test('skipped-verification exception retains exact failed job identity and completed run requirements', () => {
+  for (const jobChanges of [
+    { id: undefined },
+    { run_id: 12 },
+    { run_attempt: 2 },
+    { head_sha: 'c'.repeat(40) },
+    { status: 'in_progress' },
+    { status: undefined },
+    { conclusion: undefined },
+    { conclusion: 'success' },
+    { conclusion: 'skipped' },
+    { conclusion: 'cancelled' },
+    { conclusion: 'timed_out' },
+  ])
+    assert.throws(() =>
+      collectAttempts(preHarnessFailureHistory({ jobChanges })),
+    );
+  for (const attemptChanges of [
+    { id: 12 },
+    { run_attempt: 2 },
+    { head_sha: 'c'.repeat(40) },
+    { status: 'in_progress' },
+  ])
+    assert.throws(() =>
+      collectAttempts(preHarnessFailureHistory({ attemptChanges })),
+    );
+});
+
+test('missing, duplicate, incomplete and executed verification steps still require trusted outcome markers', () => {
+  for (const steps of [
+    [],
+    [null],
+    [{ name: 'Another step', status: 'completed', conclusion: 'skipped' }],
+    [skippedVerification(), skippedVerification()],
+    [
+      skippedVerification(),
+      {
+        name: verificationStepName,
+        status: 'completed',
+        conclusion: 'failure',
+      },
+    ],
+    [{ name: verificationStepName, conclusion: 'skipped' }],
+    [{ ...skippedVerification(), status: 'in_progress' }],
+    [{ ...skippedVerification(), conclusion: undefined }],
+    [{ ...skippedVerification(), conclusion: 'success' }],
+    [{ ...skippedVerification(), conclusion: 'failure' }],
+    [{ ...skippedVerification(), conclusion: 'cancelled' }],
+  ]) {
+    const history = preHarnessFailureHistory({
+      jobChanges: { steps },
+      log: '',
+    });
+    assert.throws(() => collectAttempts(history), /outcome marker/);
+    assert.deepEqual(history.logReads, [[11, 1, 100]]);
+  }
+  // Preserve support for legacy job step naming when a valid exact-attempt
+  // harness marker supplies the required evidence.
+  assert.equal(
+    collectAttempts(fakeHistory())[0].verificationOutcome,
+    'failed-infrastructure',
+  );
+  const testFailure = preHarnessFailureHistory({
+    jobChanges: {
+      steps: [{ ...skippedVerification(), conclusion: 'failure' }],
+    },
+    log: marker({ outcome: 'failed-tests', retryable: false }),
+  });
+  assert.equal(
+    runBudget({
+      ...testFailure,
+      env: budgetEnv(),
+      now: new Date('2026-09-11T12:00:00Z'),
+    }).allowed,
+    false,
+  );
+});
+
+test('skipped-verification attempts use a validated executing job UTC date, never the earlier workflow queue date', () => {
+  const history = preHarnessFailureHistory({
+    attemptChanges: { run_started_at: '2026-09-10T23:00:00Z' },
+    jobChanges: { started_at: '2026-09-11T00:01:00Z' },
+  });
+  assert.equal(collectAttempts(history)[0].startedAt, '2026-09-11T00:01:00Z');
+  assert.equal(
+    runBudget({
+      ...history,
+      env: budgetEnv(),
+      now: new Date('2026-09-11T00:05:00Z'),
+    }).kind,
+    'infrastructure-retry',
+  );
+  assert.equal(
+    runBudget({
+      ...history,
+      env: budgetEnv(),
+      now: new Date('2026-09-12T00:00:00Z'),
+    }).kind,
+    'initial',
+  );
+  for (const started_at of [
+    undefined,
+    null,
+    1,
+    '2026-02-30T12:00:00Z',
+    '2026-09-11T00:01:00+03:00',
+    '2026-09-11T00:01:00',
+  ])
+    assert.throws(
+      () =>
+        collectAttempts(
+          preHarnessFailureHistory({ jobChanges: { started_at } }),
+        ),
+      /job start/,
+    );
+  const future = preHarnessFailureHistory({
+    jobChanges: { started_at: '2026-09-12T00:00:00Z' },
+  });
+  assert.equal(
+    runBudget({
+      ...future,
+      env: budgetEnv(),
+      now: new Date('2026-09-11T12:00:00Z'),
+    }).allowed,
+    false,
+  );
+});
+
+test('pre-harness failures exhaust the same initial-plus-one UTC-day budget across rerun attempts', () => {
+  const history = rerunHistory({ runAttempt: 3 });
+  const originalApi = history.api;
+  history.api = (path) => {
+    const result = originalApi(path);
+    if (path.includes('/jobs?')) result.jobs[0].steps = [skippedVerification()];
+    return result;
+  };
+  history.readLog = () =>
+    assert.fail('Validated skipped PR verification needs no outcome log.');
+  const env = budgetEnv({ GITHUB_RUN_ID: '11', GITHUB_RUN_ATTEMPT: '3' });
+  assert.equal(collectAttempts(history).length, 2);
+  const exhausted = runBudget({
+    ...history,
+    env,
+    now: new Date('2026-09-10T13:00:00Z'),
+  });
+  assert.equal(exhausted.allowed, false);
+  assert.match(exhausted.reason, /already consumed/);
+  assert.equal(
+    runBudget({ ...history, env, now: new Date('2026-09-11T00:00:00Z') }).kind,
+    'initial',
+  );
+});
+
+test('skipped dispatch verification still requires trusted reviewed-subject identity, not workflow head', () => {
+  const history = preHarnessFailureHistory({
+    event: 'workflow_dispatch',
+    log: subject(),
+  });
+  assert.equal(collectAttempts(history)[0].headSha, headSha);
+  assert.deepEqual(history.logReads, [[11, 1, 100]]);
+  for (const log of [
+    '',
+    `${subject()}\n${subject()}`,
+    'Verifying PR malformed',
+    `echo '${subject()}'`,
+  ])
+    assert.throws(
+      () =>
+        collectAttempts(
+          preHarnessFailureHistory({ event: 'workflow_dispatch', log }),
+        ),
+      /subject/,
+    );
+  const unrelated = preHarnessFailureHistory({
+    event: 'workflow_dispatch',
+    log: subject('c'.repeat(40)),
+  });
+  assert.deepEqual(collectAttempts(unrelated), []);
+  assert.equal(
+    runBudget({
+      ...unrelated,
+      env: budgetEnv(),
+      now: new Date('2026-09-10T13:00:00Z'),
+    }).kind,
+    'initial',
+  );
+  const wrongPrHead = preHarnessFailureHistory({
+    workflowHead: 'c'.repeat(40),
+  });
+  assert.deepEqual(collectAttempts(wrongPrHead), []);
+  assert.deepEqual(wrongPrHead.logReads, []);
+});
+
 test('first attempt budget is allowed only with validated current run and complete history', () => {
   const history = fakeHistory({ prior: false });
   const env = {
