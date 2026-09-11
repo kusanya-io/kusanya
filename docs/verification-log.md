@@ -193,3 +193,47 @@ Findings:
 `HOLD: PR #3, 1 finding` (finding 1; findings 11 to 13 deferred to issue #5 with Bill's approval)
 
 `PHASE 0: HOLD` until hosted Apex passes on 8e1e2b7, the verifier's fresh-org run passes, and the three checks are required on `main`.
+
+## 2026-09-11: Phase 0 gate report, PR #3 head `8e1e2b7`
+
+- Date: 11 September 2026, 09:40 UTC.
+- Commit: `8e1e2b7c984298c19ae61d1ddf5609c58a635d4c`. Merge ref 02037ab on `main` at c2945e0. The PR is mergeable and clean.
+- C10 acceptance tests: none are assigned to Phase 0, none are claimed, and no earlier phase exists.
+
+### Evidence
+
+| Check                                                                         | Result                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Hosted Salesforce run 34523564584, attempt 1, approved by `cobitechsolutions` | Success. Apex job 103026947098 ran every step. Its log shows 1 test passed, 2 of 2 lines covered (100.00%) and 1 owned scratch org deleted. The marker shows role `ci`, run 34523564584-1, the exact head and outcome `passed`. The gate job succeeded.                                                                  |
+| Logs of all three jobs in that run                                            | No auth URL, token or scratch username appears. The secret is shown only masked.                                                                                                                                                                                                                                         |
+| Dev Hub audit                                                                 | The CI org `kusanya-ci-v1__34523564584-1__8e1e2b7c9842__5dcfe7a521cd` is Deleted. No scratch orgs are active.                                                                                                                                                                                                            |
+| Verifier fresh-org run with its own commands, on an export of the exact head  | One org, `kusanya-verifier-v1__claude-p0gate__8e1e2b7c9842__e94f63356002`, was created and 4 files deployed. `KusanyaRuntimeTest` passed 1 of 1 and `KusanyaRuntime` covered 2 of 2 lines. The head's coverage gate passes on the raw result. The org is deleted and confirmed Deleted. Daily capacity went from 5 to 4. |
+| Public CI run 34523565060 on the head                                         | Scaffold and lint: format check, 100 of 100 tooling tests, scaffold check. Service and container tests: 11 unit and 2 integration tests on the runner, then 11 unit and 2 integration tests inside the container, and the runtime image built.                                                                           |
+| Verifier local runs at this head on 10 September                              | 100 of 100 tooling tests in Git Bash and PowerShell. Service lint, typecheck and 11 unit tests. actionlint with shellcheck gave one warning, note 14.                                                                                                                                                                    |
+| Required checks on `main`                                                     | Scaffold and lint, Service and container tests, and Salesforce verification gate, all from GitHub Actions. Strict up-to-date is on and admins are included. Force pushes and deletions are off.                                                                                                                          |
+| Repository                                                                    | Apache-2.0 licence, Issues and Discussions on, public. No workflow, script or Salesforce change since the security review of 8e1e2b7.                                                                                                                                                                                    |
+| Verifier container run of the service                                         | Not run. `cobitech-edge-01` has been offline on Tailscale since about 00:30 UTC, and Cloudflare returns HTTP 530 for cobitechsolutions.com. The verifier last ran the containers at 72c6ccf. Since then the service changed only in its error handler, in 5e22782.                                                       |
+
+### Brief C11 Phase 0 deliverables
+
+- Present: the repository, the scratch org definition, the ADR folder with its template, and the brief committed as `docs/brief.md`.
+- Present and green on the exact head: CI with the Salesforce CLI, Apex at 85 percent or better, service tests and lint. Apex is gated by human approval and a required gate check.
+
+### ADRs against the brief's decide and ask rules
+
+- Decided and recorded: service language, framework and database (0001); monorepo and service licence (0002); exclusions (0003); CI trust model (0004 and 0005); quota and verification strategy (0006).
+- Asked and approved by Bill: automatic Apex (0005); adjustments A1 to A11, the CI Dev Hub and the documentation exemption (0006); the deferral of findings 11 to 13 (issue #5, with ADR 0007 due in the follow-up).
+- Correctly left unchosen: packaging, paid dependencies and per-collector licences.
+- Still due: the namespace availability check and ADR before Phase 1 objects (note 7); ODK Collect and Enketo versions and the tenant OAuth flow before their phases; an ADR on measured upload bandwidth before staging (C12a); Bill's confirmation of Apache-2.0 for the service (question 8).
+
+### Findings
+
+- Finding 1 is closed. Hosted Apex, coverage and cleanup pass on the exact head, and the three checks are required on `main`.
+- Findings 2 to 10 were closed earlier.
+- Findings 11 to 13 and notes 14 to 16 are deferred to issue #5 with Bill's approval. They are due in the first builder PR after Phase 0, before Phase 1.
+
+### Verdict
+
+`HOLD: PR #3, 0 findings, 1 verifier check outstanding`
+
+`PHASE 0: HOLD` until the verifier's own container run of the service at 8e1e2b7 passes on `cobitech-edge`. Every other gate requirement is met. When that run passes, the verdict becomes `PASS: PR #3 may be merged` and `PHASE 0: PASS`. If Bill waives the container run in writing, the verdict becomes PASS with the deviation recorded.
