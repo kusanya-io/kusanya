@@ -48,7 +48,7 @@ jobs:
       - name: Checkout immutable policy
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: c8470cd3b63f775c719f8e61f2d8963275394623
+          ref: 6e6eb94e4483700a8b6f9209a1fb04565f46c37e
           path: trusted
           persist-credentials: false
           sparse-checkout: scripts
@@ -150,7 +150,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # Proposed immutable source pin; Claude must review it before first approval.
-          ref: c8470cd3b63f775c719f8e61f2d8963275394623
+          ref: 6e6eb94e4483700a8b6f9209a1fb04565f46c37e
           path: trusted
           persist-credentials: false
           sparse-checkout: scripts
