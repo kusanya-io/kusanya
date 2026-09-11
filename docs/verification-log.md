@@ -293,3 +293,32 @@ The verifier plans no fresh org for PR #6. Salesforce metadata is unchanged sinc
 `SAFE TO APPROVE: run 34587333623 at head 7fcfee2`
 
 `HOLD: PR #6, 1 finding` (finding 17). Issue #5 stays open until the hosted run's log and the Dev Hub audit confirm admission, cleanup and the fallback working live.
+
+## 2026-09-11: Re-verification of PR #6 head `c635566` and authentication diagnosis
+
+Scope: findings 17 and 18, the new pin e006ed9, and why run 34587333623 failed at authentication. No scratch orgs were created, and no credential was read or displayed.
+
+Code and settings:
+
+- Findings 17 and 18 are closed. The fallback cleanup now runs only when authenticated verification failed or was cancelled, and a regression test exercises the real guard for every combination of authentication and verification outcomes. A journal that cannot be created before allocation reports `JOURNAL_UNAVAILABLE` as non-retryable infrastructure failure. Later journal failures keep their reconciliation meaning.
+- The pin e006ed9 differs from the head only in its two pin lines. The merge ref 0acc34d matches the head for workflows, scripts, `salesforce/` and `service/`. The service tree and Salesforce metadata are unchanged.
+- Tests: 132 of 132 in Git Bash and PowerShell, plus format, scaffold and whitespace checks. actionlint 1.7.12 with ShellCheck 0.11.0 is clean. Public CI 34601412415 is green.
+- Settings unchanged: one environment secret, last updated 10 September; reviewer `cobitechsolutions`; administrator bypass off; three required checks on `main`.
+- The failed run's log holds no credential material. Its in-Apex budget recheck ran live and admitted the attempt before authentication. That is the first live evidence for finding 11.
+
+Authentication diagnosis, all read-only:
+
+- Only one Salesforce CLI OAuth token exists in the Dev Hub. A browser login created it at 11:27 UTC on 10 September. Its use count is 6: that login plus 5 successful refreshes.
+- Two refreshes came from GitHub runner addresses, at 16:28 UTC on 10 September and 09:13 UTC on 11 September. Both match the successful CI authentication steps to the second. The other three came from the laptop, the last at 12:14 UTC on 11 September. The CI secret therefore holds this same token, which was valid 31 minutes before the failure and is still valid.
+- The failed attempt, from 12:45:17 to 12:45:19, left no LoginHistory row. The setup audit trail shows no security change. Salesforce's status API reports USA876 OK, with no incident that day.
+- The runner image, runner version, Node 24.20.0 and the CLI install were identical to the successful run. The authentication step took about 2 seconds in both runs.
+- Conclusion: expiry, revocation and a changed secret are ruled out. The request most likely failed on the runner's network path, or inside the CLI before Salesforce processed a refresh. The cause cannot be confirmed, because the step discards all CLI output. `sf org logout` does not revoke tokens: the token kept working after each CI logout.
+
+New findings:
+
+- Finding 19, should fix before PR #6 merges. A failure after the Apex job starts but before the verify step leaves an executed job with no result marker. That covers the head recheck, CLI install, budget recheck and authentication. The budget reader then refuses every later attempt on that head. Its own module confirms this against run 34587333623's real log. Head 7fcfee2 is now permanently locked, and a second authentication failure would lock c635566. This belongs to the same gap as finding 12, and the earlier review did not catch it. Fix: when the Jobs API shows the verify step skipped, no org can exist, so count the attempt as a retryable infrastructure failure within the daily budget.
+- Finding 20, should fix before PR #6 merges. The authentication step discards all CLI output, so an authentication failure cannot be diagnosed. Print only an allowlisted error name from the CLI's JSON error, never its message, and keep suppressing everything else.
+
+`SAFE TO APPROVE: run 34601412466 at head c635566`. Approval is safe for the credential but not recommended yet. If authentication fails again, finding 19 locks this head and finding 20 leaves no diagnosis. Fixing both first means one run on the final head.
+
+`HOLD: PR #6, 2 findings` (19 and 20). Issue #5 stays open.
