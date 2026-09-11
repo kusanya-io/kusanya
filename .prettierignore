@@ -1,0 +1,12 @@
+seed/
+docs/brief.md
+docs/verification.md
+LICENSE
+service/dist/
+node_modules/
+work/
+coverage/
+test-results/
+package-lock.json
+.sf/
+.sfdx/

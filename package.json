@@ -1,0 +1,19 @@
+{
+  "name": "kusanya-tooling",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --test scripts/*.test.mjs",
+    "check:scaffold": "node scripts/check-scaffold.mjs"
+  },
+  "devDependencies": {
+    "prettier": "3.9.6",
+    "prettier-plugin-apex": "2.3.0"
+  }
+}
