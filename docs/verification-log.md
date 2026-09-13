@@ -428,3 +428,29 @@ Diagnosis:
 Recommendation: Bill views the app's OAuth settings read-only, then Salesforce Support is asked for a supported fix. Any change to the app's PKCE flag, or the Known Issue workaround, needs Bill's separate approval and verifier review before and after. The drafted support request was given to Bill and not sent.
 
 No verdict applies. Linking stays incomplete, and ADR 0008's Phase 1 prerequisite is still open.
+
+## 2026-09-13: Option 1 stopped; Namespace Registry app PKCE is locked by Salesforce
+
+Bill approved one temporary PKCE change on the Dev Hub's "SalesforceDX Namespace Registry" app to link `ksny`. The approval required stopping without any change if the control was unticked or not editable. The verifier recorded a read-only baseline at 12:09:45 UTC first.
+
+Builder report, recorded locally in ADR 0008 at 9bb1f65, not pushed:
+
+- On the app's Edit form, PKCE was checked and disabled, with the text "To change this required setting, contact Support."
+- Edit was cancelled without saving, so no window started and no link was attempted.
+- The builder also opened the app's Delete confirmation by mistake and cancelled it.
+
+Verifier check, read-only, at 12:44:49 UTC:
+
+- Both org identities match the approval: Dev Hub 00Dbm00000yeiz3EAA, and holder 00Dbm00000yxbH7EAI with `NamespacePrefix = ksny`.
+- `NamespaceRegistry` still has 0 rows, the same as the baseline.
+- The Dev Hub still has exactly one connected application, "SalesforceDX Namespace Registry". Its `LastModifiedDate` is unchanged from the baseline, 2026-09-10T11:30:21Z by Automated Process, so it was neither saved nor deleted.
+- The setup audit trail has no entries after 17:07 UTC on 11 September, so no setting was saved.
+- The org-wide `isPkceRequired` is still false.
+
+Conclusion:
+
+- The app-level PKCE requirement is now directly observed. Salesforce has made it a required setting that only Support can change, so the earlier diagnosis is confirmed.
+- The Link Namespace flow cannot succeed from this org without Salesforce. No admin-side workaround remains within the approved security boundaries.
+- The two routes left are a Salesforce Support request, and Option 2: continue Phase 1 without a namespace and link before any package is created.
+- Option 2 needs Bill's approval and amendments to ADR 0006 and ADR 0008.
+- Linking stays incomplete, and no verdict applies.
