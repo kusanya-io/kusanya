@@ -454,3 +454,27 @@ Conclusion:
 - The two routes left are a Salesforce Support request, and Option 2: continue Phase 1 without a namespace and link before any package is created.
 - Option 2 needs Bill's approval and amendments to ADR 0006 and ADR 0008.
 - Linking stays incomplete, and no verdict applies.
+
+## 2026-09-13: Source and security review of PR #8 head `9da8f13` before approving run 34758585587
+
+Scope: the first Phase 1 unit. It adds Folder, Form and Form Version metadata, a version-identity trigger, three model-only permission sets, and the service's Salesforce name resolver, plus ADRs 0002, 0006, 0008 and 0009. This is a source and security review before Bill approves Apex, not the phase gate. No scratch org was created.
+
+What was checked:
+
+- Identity and trust boundary. The merge ref 4399356 matches the head. No workflow changed. The only new `scripts/` file is a public-CI source test, and the credentialed harness stays pinned at 1d0edc1. PR metadata and Apex run only inside the scratch org, contain no callouts, and never reach the runner's Dev Hub session. `sfdx-project.json` and the scratch definition are unchanged, with an empty namespace.
+- Brief C4. Every listed Form and Form_Version field is present, and Folder is added. Every object, field and name field has a description. No `ksny__` prefix or org ID appears in the source.
+- Model. Form and Folder are private roots. Form_Version is a non-reparentable master-detail to Form. Current_Version and Folder lookups clear on delete. Version_Key (Text 28, unique, case-sensitive) is derived in a before trigger with no queries or DML, and a caller-supplied key is overwritten. Validation rules reject a non-positive or fractional version number, and a current version from another form.
+- Permission sets. Admin has create, read, edit and delete; Integration has create, read and edit; Supervisor has read only. None has view-all or modify-all, user or setup permissions, or class, tab or app access, and none is assigned. The derived key is read-only.
+- Service. `createSalesforceNames` prefixes only Kusanya-owned `__c` names. It preserves standard, customer and foreign-package names byte for byte, builds namespaced Apex REST paths, and rejects traversal, query and injection input. The deployment default does not select a tenant.
+- Tests at the head: 154 of 154 root tests in Git Bash and PowerShell; service lint, typecheck and 21 of 21 tests; format, scaffold and whitespace checks; offline source conversion. Public CI 34758585542 is green.
+- Settings are unchanged. Dev Hub capacity at 13:07 UTC was 3 of 3 active and 6 of 6 daily.
+
+Notes, none blocking:
+
+- Note 23. The fractional-version rule assumes Salesforce evaluates the validation rule before rounding the scale-0 `Version_Number__c`. Only the hosted Apex run can show this. If Salesforce rounds first, `rejectsNonPositiveAndFractionalVersions` fails, and 1.5 would save as 2. The fix would then be a non-zero scale with the whole-number rule.
+- Note 24. Form and Folder are private, and Integration and Supervisor have no view-all. The integration user will not read forms that administrators create, and supervisors will see only their own. Decide the sharing model or the permission-set grants before Phase 2 reads forms.
+- Note 25. `Current_Version_Matches_Form` is tested on update but not on insert. The resolver handles only `__c`; relationship (`__r`) and other suffixes will be needed later, as ADR 0009 acknowledges.
+
+`SAFE TO APPROVE: run 34758585587 at head 9da8f13`
+
+`HOLD: PR #8, 0 findings, awaiting hosted Apex and the verifier's fresh-org run`
