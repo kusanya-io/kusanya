@@ -1,6 +1,6 @@
 # ADR 0008: Select the ksny namespace and separate registration from packaging
 
-- Status: Accepted; registration verified by builder; Claude diagnosis recorded; Dev Hub linking blocked; prerequisite review pending
+- Status: Accepted; registration verified by builder; app PKCE locked in Edit; Dev Hub linking blocked; prerequisite review pending
 - Date: 2026-09-11
 - Brief sections: C11 Phase 1 prerequisites, C12, C13
 - Decision owner: Cobitech Solutions
@@ -163,6 +163,68 @@ disclosure is authorized by this diagnosis. Keep the prerequisite PR incomplete
 until the link is verified; keep namespaced Phase 1 objects and the source
 namespace change on hold. The remaining multi-hub, dedicated CI hub and packaging
 approval boundaries above are unchanged.
+
+## Conditional PKCE approval and stopped inspection (2026-09-13)
+
+Bill separately approved one temporary PKCE change in the existing Dev Hub
+`00Dbm00000yeiz3EAA`, on `SalesforceDX Namespace Registry` only, to link `ksny`
+from holder `00Dbm00000yxbH7EAI`. The approved window was at most 30 minutes,
+including up to 10 minutes for propagation, with one link attempt and immediate
+restoration regardless of the result. Bill would enter credentials himself.
+The approval explicitly required stopping without changes if PKCE was unchecked
+or could not be edited. It authorized no other app, OAuth setting, consumer
+details, scratch org, CI, package or source-namespace changes.
+
+Bill relayed Claude's read-only baseline at 12:09:45 UTC: zero registry rows,
+app last modified on 10 September at 11:30 UTC by Automated Process, and no
+security or connected-app audit entries. This is attributed baseline evidence,
+not a builder audit-trail inspection or evidence of a subsequent change.
+
+The builder performed the following checks without changing Salesforce settings:
+
+1. At 12:19:30 UTC, read-only Organization queries matched both exact approved
+   org IDs. The holder reported Developer Edition, `NamespacePrefix = ksny` and
+   `IsSandbox = false`; the hub's `ksny` registry query returned zero rows.
+2. Opened the approved app's View page. PKCE was checked. The visible callback
+   belonged to the approved Dev Hub and ended in
+   `/environmenthub/soma-callback.apexp`. Consumer details were not opened.
+3. During navigation, inadvertently opened the app's Delete confirmation and
+   cancelled it without confirming deletion. Then identified the current Edit
+   control and opened the Edit form. No field was changed and Save was not used.
+4. On the actual Edit form, the PKCE checkbox was both checked (`1`) and disabled.
+   Its adjacent instruction read: **To change this required setting, contact
+   Support.** This establishes the non-editable condition on Edit, not merely the
+   normal read-only state of a View-page checkbox. The builder cancelled Edit.
+5. The returned View page still showed the same app, PKCE checked, and Last
+   Modified Date `9/10/2026, 4:30 AM`, by Automated Process. That displayed time
+   is preserved as UI-local evidence, not independently converted to UTC.
+6. At 12:39:27 UTC, read-only queries again matched both approved org IDs and the
+   holder's Developer Edition, `ksny`, non-sandbox state. An unfiltered standard
+   `NamespaceRegistry` query in the hub returned zero total rows:
+
+   ```powershell
+   sf data query --target-org Kusanya-DevHub --query "SELECT Id, NamespacePrefix, NamespaceOrg FROM NamespaceRegistry" --json
+   ```
+
+Screenshots in the builder conversation show the View-page app name, callback and
+checked PKCE, followed by the Edit-page checked, disabled PKCE and Support
+instruction. No consumer key or secret is visible in those captures. They are
+described here, not embedded or represented as retained repository attachments;
+the verifier should independently inspect the app and audit trail.
+
+**Outcome: stopped under Bill's non-editable-control rule.** PKCE was never
+unticked, so untick and re-tick UTC times are both not applicable, the temporary
+window never started, and no restoration action was needed. No new Link Namespace
+attempt, authentication/consent interaction or security-setting save occurred on
+13 September. The computer-use skill also reserves security-setting changes to
+the operator; no alternate API or control manipulation was used to bypass it.
+
+Option 1 cannot proceed through this UI. Return to Bill and Claude for the
+Option 2 / Salesforce Support route; this record does not authorize another
+workaround or submit a Support request. The checked app-level PKCE requirement
+is now directly observed, but the root cause remains a diagnosis rather than a
+Salesforce-confirmed defect. Linking and the prerequisite review remain blocked;
+the Phase 1, multi-hub, CI and packaging boundaries above are unchanged.
 
 ## Alternatives considered
 
