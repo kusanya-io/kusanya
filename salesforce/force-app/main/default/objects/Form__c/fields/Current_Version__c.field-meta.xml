@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Current_Version__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>Optional selected version of this same form. This pointer alone does not publish a form or authorize data collection.</description>
+    <label>Current Version</label>
+    <referenceTo>Form_Version__c</referenceTo>
+    <relationshipLabel>Current For Forms</relationshipLabel>
+    <relationshipName>Current_For_Forms</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

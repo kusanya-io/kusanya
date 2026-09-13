@@ -1,7 +1,8 @@
 # Delivery gates
 
 Only Claude can close a phase by recording a verdict in `docs/verification-log.md`.
-Phase 0 is in progress; the builder does not mark it passed.
+Bill relayed Claude's Phase 0 PASS in PR #3 review 5177252674; the first Phase 1
+unit is now in development. The builder does not issue its own gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
 | --------- | --------------------------------------------------------------------------- | ---------------------------------------------- |
@@ -20,11 +21,17 @@ tests. The repository currently has only one worked example and an empty XLSForm
 directory; additional fixtures are required before claiming the full migration suite.
 
 Decisions still due before their corresponding implementation: exact Collect/Enketo
-versions, tenant OAuth flow, namespace availability, XML/queue/transaction strategy,
+versions, tenant OAuth flow, XML/queue/transaction strategy,
 API-call budget, storage drivers and measured Cobitech upload bandwidth. Packaging
 choice and paid dependencies require Bill's approval under C12.
 
-Before creating the first Phase 1 object, check availability of the brief's `ksny`
-namespace and commit the namespace decision ADR. This prerequisite is not fulfilled
-by the empty namespace in the Phase 0 scratch scaffold. Do not start Phase 1 until
-Claude passes the Phase 0 gate.
+`ksny` is registered but linking is blocked. Bill's 13 September Option 2 permits
+the first unnamespaced model unit and ADR amendments together, superseding the
+earlier link/ADR sequencing restriction. Keep the project namespace empty; require
+linking before packaging or namespaced claims and run the suite namespaced as soon
+as linking works, before the next phase gate (ADRs 0006/0008).
+
+The first unit contains Folder/Form/Form Version and external namespace resolution,
+not the complete data model or tests 10/12. Next units must deliver question trees,
+choices, skip rules and mappings, then compilation/validation, XLSForm round trips,
+print view and CLI publication. Do not mark Phase 1 complete from model tests.

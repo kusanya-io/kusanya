@@ -1,7 +1,7 @@
-# Architecture and Phase 0 baseline
+# Architecture and initial Phase 1 foundation
 
 The build contract is [the brief](brief.md), especially C1, C2 and C12a. This page
-distinguishes the intended product from what Phase 0 implements.
+distinguishes the intended product from the implemented foundation.
 
 ## Intended ownership
 
@@ -36,6 +36,24 @@ API-call budget require a Phase 2 ADR and tests before implementation.
 
 There is no product database schema yet. See [data model status](data-model.md),
 [OpenAPI](openapi.yaml), [OpenRosa status](openrosa.md) and [threat model](threat-model.md).
+
+## Initial Phase 1 source
+
+The first model slice adds Folder, Form and Form Version metadata, model-only
+permission sets, declarative validation and a bulk-safe derived version identity.
+It does not expose a form/publish API or implement compilation. C10 tests 10 and
+12 remain unimplemented, not represented by source/smoke tests.
+
+Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
+blocked. Source stays namespace-local with an empty project namespace. The pure
+`createSalesforceNames(prefix)` service helper qualifies explicitly Kusanya-owned
+names, preserves explicit customer/standard/foreign target identifiers and builds
+namespace-aware Apex REST paths. The deployment default is
+`SALESFORCE_NAMESPACE_PREFIX`, not tenant identity or authorization; future tenant
+connections and CLI/compiler/mapping adapters must supply their own configuration.
+Synthetic empty/`ksny__` fixtures do not prove actual namespaced behavior. Linking
+is required before packaging or namespaced claims, and a namespaced suite must run
+as soon as the link works, before the next phase gate (ADRs 0006, 0008, 0009).
 
 ## Environments
 

@@ -1,6 +1,6 @@
 # ADR 0008: Select the ksny namespace and separate registration from packaging
 
-- Status: Accepted; registration verified by builder; app PKCE locked in Edit; Dev Hub linking blocked; prerequisite review pending
+- Status: Accepted; Bill approved unnamespaced Phase 1; ksny registered but linking blocked; namespaced verification pending
 - Date: 2026-09-11
 - Brief sections: C11 Phase 1 prerequisites, C12, C13
 - Decision owner: Cobitech Solutions
@@ -9,8 +9,10 @@
 
 The brief names `ksny` unless a conflict is found and delegates the namespace-prefix
 decision. ADR 0003 requires an availability check and namespace ADR before the first
-Phase 1 object. ADR 0006 additionally requires registration and multi-hub linking
-before namespaced Phase 1 objects. Package format remains an explicit C12 question
+Phase 1 object. ADR 0006 originally additionally required registration and multi-hub
+linking before namespaced Phase 1 objects. Bill's 13 September Option 2 amendment
+below changes that sequencing while preserving the registration evidence.
+Package format remains an explicit C12 question
 for Bill; choosing a prefix does not answer it.
 
 On 2026-09-11, Bill supplied a screenshot of Salesforce's Namespace Settings page
@@ -226,15 +228,52 @@ is now directly observed, but the root cause remains a diagnosis rather than a
 Salesforce-confirmed defect. Linking and the prerequisite review remain blocked;
 the Phase 1, multi-hub, CI and packaging boundaries above are unchanged.
 
+## Bill's Option 2 decision (2026-09-13)
+
+Bill closed Option 1 after Claude verified that no change occurred and the app's
+PKCE setting was locked. This verification is attributed to Bill's relay; it is
+not a builder claim of independently inspecting the setup audit trail. Bill is
+pursuing Salesforce Support separately. The builder must not change PKCE, any
+connected app or other OAuth settings, or attempt another workaround.
+
+Bill explicitly approved continuing Phase 1 without a namespace while linking is
+blocked, and sending these ADR changes with the first Phase 1 work through the
+normal PR process. This supersedes the earlier linking-before-objects restriction
+and allows this namespace ADR to accompany the first unnamespaced model PR rather
+than requiring a separate completed-link PR to land first (ADR 0003 sequencing).
+The exact implementation boundary is:
+
+- Keep `"namespace": ""` in `salesforce/sfdx-project.json`; do not add `ksny` yet.
+- Write Apex, LWC and metadata with local references that are intended to work
+  unchanged in the `ksny` namespace. No hard-coded namespace prefixes or org IDs.
+- Everything outside Salesforce naming objects, fields or Apex REST paths must
+  take the namespace prefix from configuration. Test both empty and `ksny__`
+  configurations with synthetic fixtures, including simultaneous configurations.
+  This applies to the service and future CLI publish, XForm bindings and mappings;
+  customer target names must remain explicit, not automatically re-prefixed.
+- Registration and linking remain required before **any package creation** and
+  before **any claim of namespaced behavior**, not before the first Phase 1 object.
+  Package format still requires Bill's separate C12 decision.
+- As soon as the link exists, run the applicable suite in a namespaced scratch org
+  before the next phase gate. Apply the normal allocation, verification, coverage,
+  independent review and cleanup rules; no additional scratch orgs are approved.
+
+The accepted risk is that namespace-only defects will be discovered later, when
+the linked namespaced org can actually execute the suite. Passing empty-namespace
+Apex or synthetic prefix fixtures does not remove that risk or establish
+namespaced behavior. This decision changes no CI workflow, harness pin, approval
+or secret. Future source-namespace/CI changes require their own reviewed work.
+
 ## Alternatives considered
 
 An alternative prefix was unnecessary: `ksny` passed the availability check and is
 now registered. Using a Dev Hub or scratch org as the namespace holder conflicts
 with Salesforce's documented setup.
-Starting Phase 1 objects before the availability evidence and this ADR land would
-bypass ADR 0003. Namespaced objects also await ADR 0006's verified registration and
-linking. Choosing managed packaging now would exceed the delegated prefix decision
-and Bill's current approval.
+Waiting for the link would preserve earlier verification sequencing but stop all
+Phase 1 work on a vendor-controlled blocker. Bill chose the bounded unnamespaced
+route above, accepting delayed discovery of namespace-only defects. Choosing
+managed packaging now would still exceed the delegated prefix decision and Bill's
+current approval.
 
 ## Consequences and verification
 
@@ -252,8 +291,9 @@ and Bill's current approval.
 - No Phase 1 objects, packaging, deployment or C10 acceptance tests are implemented
   or claimed here. The existing no-Salesforce-licence-per-collector rule is unchanged.
 - All ADRs remain outside the documentation-only CI exemption. Batch this record
-  with ADR 0002's licence confirmation before submitting the prerequisite PR; do
-  not change the exemption to avoid review or scratch capacity requirements.
+  with ADR 0002's licence confirmation, ADR 0006's amendment and the first Phase 1
+  unit under Bill's Option 2 approval. Do not claim the link complete or change
+  the exemption to avoid review or scratch capacity requirements.
 
 Salesforce documents the separate
 [availability, Review and Save steps](https://developer.salesforce.com/docs/platform/pkg2-dev/guide/sfdx-dev-dev2gp-create-namespace.html)

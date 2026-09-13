@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Language__c</fullName>
+    <description>Language tag for this form. Stored without normalization or language validation in this initial slice.</description>
+    <label>Language</label>
+    <length>35</length>
+    <required>false</required>
+    <type>Text</type>
+</CustomField>
