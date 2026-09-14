@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Minimum_Not_Above_Maximum</fullName>
+    <active>true</active>
+    <description>Reject contradictory numeric answer bounds when both are provided.</description>
+    <errorConditionFormula>AND(NOT(ISBLANK(Minimum__c)), NOT(ISBLANK(Maximum__c)), Minimum__c &gt; Maximum__c)</errorConditionFormula>
+    <errorDisplayField>Maximum__c</errorDisplayField>
+    <errorMessage>Maximum must be greater than or equal to Minimum.</errorMessage>
+</ValidationRule>

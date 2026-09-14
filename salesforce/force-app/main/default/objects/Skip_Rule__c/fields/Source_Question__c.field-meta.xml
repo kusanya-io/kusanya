@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Source_Question__c</fullName>
+    <deleteConstraint>Restrict</deleteConstraint>
+    <description>Required answer question in the same version tested by this condition. Deleting a referenced source is restricted.</description>
+    <label>Source Question</label>
+    <referenceTo>Question__c</referenceTo>
+    <relationshipLabel>Sourced Skip Rules</relationshipLabel>
+    <relationshipName>Sourced_Skip_Rules</relationshipName>
+    <required>true</required>
+    <type>Lookup</type>
+</CustomField>

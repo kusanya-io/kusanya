@@ -101,8 +101,12 @@ export function createSalesforceClient({
     )
       throw new SalesforceCommandError('INVALID_INPUT', stage);
     const cliArgs = [...args, '--json'];
-    // Quoted Windows arguments permit SOQL spaces/single quotes. Reject cmd expansion/control syntax.
-    if (platform === 'win32' && cliArgs.some((arg) => /["%!&|<>^]/.test(arg)))
+    // Reject cmd expansion/control syntax and a trailing backslash, which the
+    // sf.cmd -> node.exe argument parser would consume with our closing quote.
+    if (
+      platform === 'win32' &&
+      cliArgs.some((arg) => /["%!&|<>^]/.test(arg) || /\\$/.test(arg))
+    )
       throw new SalesforceCommandError('INVALID_INPUT', stage);
     let result;
     try {
@@ -120,6 +124,9 @@ export function createSalesforceClient({
           cwd,
           encoding: 'utf8',
           shell: false,
+          // The Windows branch already quotes every validated cmd argument.
+          // Node must not escape those quotes a second time for cmd.exe.
+          windowsVerbatimArguments: platform === 'win32',
           env: {
             ...env,
             SF_DISABLE_LOG_FILE: 'true',

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Cascade_Level__c</fullName>
+    <description>Optional positive whole level in a cascading select hierarchy. Compiler and itemset behavior are implemented later.</description>
+    <label>Cascade Level</label>
+    <precision>9</precision>
+    <required>false</required>
+    <scale>0</scale>
+    <type>Number</type>
+</CustomField>

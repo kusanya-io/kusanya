@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Choice_List__c</fullName>
+    <deleteConstraint>Restrict</deleteConstraint>
+    <description>Reusable choice list or this question's own inline list. Valid only for select_one or select_multiple; deleting a referenced list is restricted.</description>
+    <label>Choice List</label>
+    <referenceTo>Choice_List__c</referenceTo>
+    <relationshipLabel>Questions</relationshipLabel>
+    <relationshipName>Questions</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

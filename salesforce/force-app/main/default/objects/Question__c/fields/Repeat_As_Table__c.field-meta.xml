@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Repeat_As_Table__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>Authoring request for a tabular repeat presentation; valid only on repeat containers. Defaults false and does not itself implement a renderer.</description>
+    <label>Repeat As Table</label>
+    <type>Checkbox</type>
+</CustomField>

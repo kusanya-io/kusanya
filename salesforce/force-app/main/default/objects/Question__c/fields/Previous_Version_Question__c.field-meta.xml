@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Previous_Version_Question__c</fullName>
+    <description>Optional lineage to a question in a different version of this same form. Does not copy data. Apex blocks direct Question deletion while another question outside the delete batch refers to this predecessor. Parent cascades bypass that guard and may clear outside lookups.</description>
+    <label>Previous Version Question</label>
+    <referenceTo>Question__c</referenceTo>
+    <relationshipLabel>Successor Questions</relationshipLabel>
+    <relationshipName>Successor_Questions</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

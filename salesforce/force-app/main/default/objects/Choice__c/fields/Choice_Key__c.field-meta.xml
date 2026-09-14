@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Choice_Key__c</fullName>
+    <caseSensitive>true</caseSensitive>
+    <description>Internal case-sensitive SHA-256 identity derived before save from owning Choice List ID and exact Value. Caller values are overwritten; never export this destination-specific identity.</description>
+    <label>Choice Key</label>
+    <length>64</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>true</unique>
+</CustomField>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Repeat_Source_Question__c</fullName>
+    <description>Integer answer node in this same version whose value supplies a from_answer repeat count. Apex blocks direct Question deletion while another question outside the delete batch refers to this source. Parent cascades bypass that guard and may clear outside lookups.</description>
+    <label>Repeat Source Question</label>
+    <referenceTo>Question__c</referenceTo>
+    <relationshipLabel>Dependent Repeats</relationshipLabel>
+    <relationshipName>Dependent_Repeats</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

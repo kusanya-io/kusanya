@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Relevant__c</fullName>
+    <description>Hand-written or skip-rule-generated XPath relevance expression. Combination and conflict policy belong to the later compiler.</description>
+    <label>Relevant</label>
+    <length>32768</length>
+    <type>LongTextArea</type>
+    <visibleLines>3</visibleLines>
+</CustomField>
