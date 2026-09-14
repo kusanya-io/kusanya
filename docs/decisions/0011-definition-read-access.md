@@ -23,6 +23,12 @@ allowlist is Folder, Form, Form Version, Question, Choice List, Choice and Skip
 Rule. Any later mapping-definition objects require an explicit reviewed extension;
 the allowlist must never grow automatically with every Kusanya object.
 
+ADR 0013 explicitly extends this future definition-only allowlist to Mapping and
+Field Mapping. Include a reference-parent/two-repeat graph, its field mappings and
+required master/detail dependencies in every distinct-principal read/denial test
+below. This does not grant View All now: note 24 stays open until the separately
+reviewed permission implementation and actual reader/effective-access tests pass.
+
 This is read access to all definitions within the connected Salesforce org, not
 to all customer data. That is the intended definition-reader role boundary.
 [Object View All overrides record sharing for that object, unlike View All Data](https://help.salesforce.com/articleView?id=users_profiles_object_perms.htm).
@@ -45,7 +51,8 @@ or Author Notes. Object Read All cannot replace service authorization or field
 allowlisting. A connection's access must never cross Salesforce orgs/tenants.
 
 **This PR records the decision only.** The permission sets continue to have
-`viewAllRecords=false` and `modifyAllRecords=false` on all seven objects. No users,
+`viewAllRecords=false` and `modifyAllRecords=false` on the seven original objects
+and the two mapping objects added in ADR 0013. No users,
 assignments, shares or org security settings are created or changed. Note 24's
 runtime access gap stays open until the follow-up implementation and tests pass.
 

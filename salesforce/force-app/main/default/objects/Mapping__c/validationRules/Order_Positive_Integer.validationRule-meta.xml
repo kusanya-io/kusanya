@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Order_Positive_Integer</fullName>
+    <active>true</active>
+    <description>Reject non-positive and fractional mapping order values before number-field rounding.</description>
+    <errorConditionFormula>OR(Order__c &lt; 1, MOD(Order__c, 1) &lt;&gt; 0)</errorConditionFormula>
+    <errorDisplayField>Order__c</errorDisplayField>
+    <errorMessage>Order must be a positive whole number.</errorMessage>
+</ValidationRule>

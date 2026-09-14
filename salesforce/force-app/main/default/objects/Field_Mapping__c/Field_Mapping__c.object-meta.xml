@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Mapping-owned definition connecting an answer or explicit constant to a target field. Stores authoring intent only; diagnostics are advisory and neither target writes nor permissions are granted by storing a row.</description>
+    <enableActivities>false</enableActivities>
+    <enableFeeds>false</enableFeeds>
+    <enableHistory>false</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <externalSharingModel>ControlledByParent</externalSharingModel>
+    <label>Field Mapping</label>
+    <nameField>
+        <description>System-generated identifier for a target field mapping definition.</description>
+        <displayFormat>FM-{000000}</displayFormat>
+        <label>Field Mapping Name</label>
+        <startingNumber>1</startingNumber>
+        <type>AutoNumber</type>
+    </nameField>
+    <pluralLabel>Field Mappings</pluralLabel>
+    <sharingModel>ControlledByParent</sharingModel>
+</CustomObject>

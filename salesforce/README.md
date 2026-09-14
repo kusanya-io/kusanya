@@ -2,10 +2,11 @@
 
 Phase 0 supplies the Developer scratch definition and runtime smoke test. The first
 Phase 1 slice added Folder, Form and Form Version with version identity/validation.
-The current unit adds Question (sections/repeats), Choice List, Choice and Skip
-Rule, integrity triggers and synthetic model tests. No collection, mapping,
+The subsequent unit added Question (sections/repeats), Choice List, Choice and Skip
+Rule. The current unit adds Mapping and Field Mapping definitions with integrity
+triggers and synthetic model tests. No collection, mapping execution,
 authentication, compiler, publishing or C10 capability is claimed. See
-[the data model](../docs/data-model.md) and ADRs 0009/0010 for exact limitations.
+[the data model](../docs/data-model.md) and ADRs 0009/0010/0013 for exact limitations.
 
 Question tree updates validate the entire affected version and protect partial-DML
 outcomes. Detach children before changing container roles or reversing parent edges.
@@ -15,8 +16,9 @@ annotations in Author Notes, never Hint. Inline lists use question -> owned list
 for the reverse unlink/delete sequence and deferred lifecycle protections.
 The three Question self-lookups omit metadata delete restrictions: Salesforce
 rejects Restrict on self-lookups (finding 26). A before-delete guard protects
-direct Question batches with outside question dependants, using one query and
-no DML. Form/Form Version cascades bypass it; the deletion tests cover that
+direct Question batches with outside question dependants. Two additional probes
+protect Mapping/Field Mapping references (three fixed queries, no DML).
+Form/Form Version cascades bypass it; the deletion tests cover that
 platform distinction and partial-DML retries. Source conversion is not a deploy
 test. Full publication/version deletion protection remains deferred.
 
@@ -27,11 +29,19 @@ deletion; failed owner deletion must roll back that cleanup. The synthetic owner
 tests cover rollback, partial deletion, sibling isolation and a 200-Form batch.
 Inline-list cleanup and published/submission-aware deletion remain future work.
 
-The unassigned Admin/Integration/Supervisor permission sets cover seven definition
+Mapping parents form a same-version acyclic graph; a reference may parent multiple
+repeats without a main mapping. Field Mapping explicitly selects a question or
+constant, including a blank constant. Once-only questions outside a repeat can be
+shared by repeat mappings. Target names/Record Type DeveloperNames are portable
+configuration, not validated target access; transforms and stamps are not executed.
+See ADR 0013 for partial-write staging, direct deletion and compiler responsibilities.
+
+The unassigned Admin/Integration/Supervisor permission sets cover nine definition
 objects while preserving ordinary sharing and no View All grants. They do not yet
 allow cross-owner definition reads. ADR 0011 records the decision and required
 future reviewed implementation/effective-access tests before a Phase 2 reader
-(Claude note 24).
+(Claude note 24); ADR 0013 explicitly extends that future allowlist and tests to
+the two mapping objects without implementing the grants.
 
 ## Iterative development only
 

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Record_Type__c</fullName>
+    <description>Optional portable target RecordType DeveloperName, not an org-specific record ID. Retain customer identifiers verbatim. Later publication resolves it on Target Object and validates availability; storing it grants no access.</description>
+    <label>Record Type</label>
+    <length>255</length>
+    <required>false</required>
+    <type>Text</type>
+</CustomField>

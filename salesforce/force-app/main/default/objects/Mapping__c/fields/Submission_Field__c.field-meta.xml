@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Submission_Field__c</fullName>
+    <description>Optional target field API name for the trusted submission stamp. Preserve customer or foreign namespace verbatim. Later ingestion supplies the canonical submission identity, never a form answer.</description>
+    <label>Submission Field</label>
+    <length>255</length>
+    <required>false</required>
+    <type>Text</type>
+</CustomField>

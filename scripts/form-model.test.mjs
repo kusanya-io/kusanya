@@ -92,11 +92,37 @@ const objects = {
     'Join__c',
     'Action__c',
   ],
+  Mapping__c: [
+    'Form_Version__c',
+    'Target_Object__c',
+    'Record_Type__c',
+    'Kind__c',
+    'Repeat_Question__c',
+    'Parent_Mapping__c',
+    'Parent_Lookup_Field__c',
+    'Matching_Field__c',
+    'Upsert_External_Id_Field__c',
+    'Collector_Field__c',
+    'Submission_Field__c',
+    'Order__c',
+  ],
+  Field_Mapping__c: [
+    'Mapping__c',
+    'Question__c',
+    'Target_Field__c',
+    'Transform__c',
+    'Constant_Value__c',
+    'Match_Status__c',
+    'Match_Detail__c',
+    'Source_Kind__c',
+    'Target_Key__c',
+  ],
 };
 const derivedKeys = new Set([
   'Form_Version__c.Version_Key__c',
   'Question__c.Question_Key__c',
   'Choice__c.Choice_Key__c',
+  'Field_Mapping__c.Target_Key__c',
 ]);
 const fieldXml = (object, field) =>
   read(`objects/${object}/fields/${field}.field-meta.xml`);
@@ -106,7 +132,7 @@ const picklistValues = (xml) =>
   );
 
 // Source-contract checks only: hosted deployment and Apex establish runtime behavior.
-test('model contains the C4 form, question, choice and skip fields with descriptions', () => {
+test('model contains the C4 form, question, choice, skip and mapping fields with descriptions', () => {
   assert.deepEqual(files('objects/').sort(), Object.keys(objects).sort());
   for (const [object, expected] of Object.entries(objects)) {
     const base = `objects/${object}/`;
@@ -152,6 +178,8 @@ test('model ownership and file pointers use the documented metadata contracts', 
     ['Question__c', 'Form_Version__c', 'Form_Version__c'],
     ['Choice__c', 'Choice_List__c', 'Choice_List__c'],
     ['Skip_Rule__c', 'Question__c', 'Question__c'],
+    ['Mapping__c', 'Form_Version__c', 'Form_Version__c'],
+    ['Field_Mapping__c', 'Mapping__c', 'Mapping__c'],
   ]) {
     const parent = fieldXml(object, field);
     assert.equal(tag(parent, 'type'), 'MasterDetail');
@@ -299,6 +327,7 @@ test('question and choice numeric constraints and skip-rule enums match C4', () 
     ['Question__c', 'Cascade_Level', false],
     ['Question__c', 'Media_Max_Seconds', false],
     ['Choice__c', 'Order', true],
+    ['Mapping__c', 'Order', true],
   ]) {
     const xml = fieldXml(object, `${field}__c`);
     assert.equal(tag(xml, 'type'), 'Number');
@@ -366,6 +395,11 @@ test('new Apex uses local references, responsibility headers and API 64 without 
     'ChoiceDefinitionHandler',
     'SkipRuleDefinitionHandler',
     'ChoiceAndSkipRuleModelTest',
+    'MappingDefinitionHandler',
+    'MappingDefinitionModelTest',
+    'MappingDeletionTest',
+    'FieldMappingDefinitionHandler',
+    'FieldMappingDefinitionModelTest',
   ]) {
     const cls = read(`classes/${name}.cls`);
     assert.match(cls, /Responsibility:/);
@@ -386,6 +420,8 @@ test('new Apex uses local references, responsibility headers and API 64 without 
     'ChoiceIdentity',
     'ChoiceListIntegrity',
     'SkipRuleIntegrity',
+    'MappingDefinition',
+    'FieldMappingDefinition',
   ]) {
     const trigger = read(`triggers/${name}.trigger`);
     assert.match(trigger, /Responsibility:/);

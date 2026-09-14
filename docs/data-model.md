@@ -1,20 +1,22 @@
 # Data model: Phase 1 definition slices
 
-The source defines the Form/Version foundation plus question trees, choices and
-stored skip rules below. This is not the whole
+The source defines the Form/Version foundation plus question trees, choices,
+stored skip rules and mapping definitions below. This is not the whole
 C4 model, a publishing implementation or a claim of deployed/namespaced behavior.
-See ADRs 0009/0010 for schema choices and ADR 0008 for Bill's unnamespaced-development
+See ADRs 0009/0010/0013 for schema choices and ADR 0008 for Bill's unnamespaced-development
 approval. `salesforce/sfdx-project.json` still has an empty namespace.
 
-| Object            | Fields and role                                                                                                                                                      | Access / relationships                                                                                        |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `Folder__c`       | Name, Description                                                                                                                                                    | Private owned root; deleting it clears a form's folder lookup.                                                |
-| `Form__c`         | Name, Status, Description, Folder, Default_Target_Object, Current_Version, Language, Country, Allow_Ad_Hoc_Submissions, GPS_Capture, Close_Message                   | Private owned root; Current_Version must belong to this form.                                                 |
-| `Form_Version__c` | Form, Version_Number, Status, XForm, XLSForm, Compiled_At, Compile_Warnings, Published_By, Published_At, Change_Log, derived Version_Key                             | Non-reparentable master-detail to Form; inherits sharing and deletion. Auto-number Name.                      |
-| `Question__c`     | All C4 question fields: tree/identity, labels, Hint, Author_Notes, types/flags, expressions/constraints, repeat/media/prefill/lineage settings; derived Question_Key | Non-reparentable detail of Form Version; same-version Parent lookup, with Apex protection for direct deletes. |
-| `Choice_List__c`  | Name, Description, optional Owner_Question                                                                                                                           | Private owned root; reusable when owner is null, otherwise immutable inline ownership by a select question.   |
-| `Choice__c`       | Choice_List, Value, Label, Order, Filter_Value, Score, derived Choice_Key                                                                                            | Non-reparentable detail of Choice List; exact Value unique within its list.                                   |
-| `Skip_Rule__c`    | Question, Source_Question, Operator, Value, Value_To, Join, Action                                                                                                   | Non-reparentable detail of target Question; distinct, same-version source with restricted deletion.           |
+| Object             | Fields and role                                                                                                                                                                          | Access / relationships                                                                                                          |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `Folder__c`        | Name, Description                                                                                                                                                                        | Private owned root; deleting it clears a form's folder lookup.                                                                  |
+| `Form__c`          | Name, Status, Description, Folder, Default_Target_Object, Current_Version, Language, Country, Allow_Ad_Hoc_Submissions, GPS_Capture, Close_Message                                       | Private owned root; Current_Version must belong to this form.                                                                   |
+| `Form_Version__c`  | Form, Version_Number, Status, XForm, XLSForm, Compiled_At, Compile_Warnings, Published_By, Published_At, Change_Log, derived Version_Key                                                 | Non-reparentable master-detail to Form; inherits sharing and deletion. Auto-number Name.                                        |
+| `Question__c`      | All C4 question fields: tree/identity, labels, Hint, Author_Notes, types/flags, expressions/constraints, repeat/media/prefill/lineage settings; derived Question_Key                     | Non-reparentable detail of Form Version; same-version Parent lookup, with Apex protection for direct deletes.                   |
+| `Choice_List__c`   | Name, Description, optional Owner_Question                                                                                                                                               | Private owned root; reusable when owner is null, otherwise immutable inline ownership by a select question.                     |
+| `Choice__c`        | Choice_List, Value, Label, Order, Filter_Value, Score, derived Choice_Key                                                                                                                | Non-reparentable detail of Choice List; exact Value unique within its list.                                                     |
+| `Skip_Rule__c`     | Question, Source_Question, Operator, Value, Value_To, Join, Action                                                                                                                       | Non-reparentable detail of target Question; distinct, same-version source with restricted deletion.                             |
+| `Mapping__c`       | Form_Version, Target_Object, Record_Type, Kind, Repeat_Question, Parent_Mapping, Parent_Lookup_Field, Matching_Field, Upsert_External_Id_Field, Collector_Field, Submission_Field, Order | Non-reparentable detail of Form Version; same-version acyclic parent graph; repeat kind requires a repeat Question.             |
+| `Field_Mapping__c` | Mapping, Question, Target_Field, Transform, Constant_Value, Match_Status, Match_Detail; Source_Kind and derived Target_Key                                                               | Non-reparentable detail of Mapping; same-version question or explicit constant; case-insensitive target uniqueness per mapping. |
 
 The table omits custom-field `__c` suffixes for readability. Every object, custom
 field and record-name field has a description in source. Form/version status
@@ -66,7 +68,7 @@ or lineage cycles; those remain publication/version-lifecycle work.
 
 Question self-lookups cannot use metadata Restrict (Claude finding 26). Their
 metadata leaves Salesforce's default clear behavior. A before-delete guard uses
-one query and no DML to reject a direct Question delete batch when any outside
+one self-reference query and no DML to reject a direct Question delete batch when any outside
 question references its Parent, Repeat Source or Previous Version targets. Related
 questions may be deleted together in one trigger batch; partial-DML retries
 recheck the actual remaining batch. Larger deletes may need leaf-first ordering.
@@ -83,6 +85,13 @@ cached IDs. The Form path performs its own cleanup because cascades bypass the
 Version trigger. Inline lists can still block ancestor deletion until explicitly
 unlinked/deleted; publication/submission-aware protection and the complete C3.11
 lifecycle remain deferred. See ADR 0010 for rollback and bulk regression coverage.
+
+ADR 0013 additionally protects Question references held by mappings: two fixed
+dependency queries refuse direct deletion if a Mapping uses the repeat or a Field
+Mapping uses the question. Remove these definitions first. A referenced repeat
+cannot change to a non-repeat type. Owner cascades bypass direct-child guards and
+delete the same-version questions and mappings together; the existing Skip Rule
+cleanup remains unchanged. These are storage guards, not lifecycle/undelete APIs.
 
 To author inline choices, create the select question with no list, create the list
 with that Owner Question, then set the question's Choice List backlink. Owner
@@ -101,28 +110,70 @@ The compiler must explicitly reject a repeat counted from anywhere in its own
 subtree and skip-rule sources that cannot be answered (including section, repeat,
 note and end); current authoring storage does not enforce those semantics (note 28).
 
+## Mapping authoring rules
+
+A reference mapping may supply the parent lookup for two repeat mappings with no
+main mapping, as in the worked example. Parent Mapping and Parent Lookup Field
+are paired. Parents must be distinct and same-version; cycles are refused,
+including cycles possible under partial DML. Detach before reversing edges.
+Order is positive/whole, not unique and not executable scheduling.
+
+Target names are single API identifiers, not expressions, traversal paths or IDs.
+Store customer/foreign namespaces exactly as supplied; only explicitly Kusanya-owned
+schema names receive the configured prefix outside Salesforce. Record Type is an
+optional DeveloperName; publish must resolve it on the target, check availability
+and reject ambiguity. No target schema, CRUD/FLS or record-type access is checked
+by storage. Reference Matching Field is required and may be `Id` or `Name`; future
+publish/lookup logic must check uniqueness and refuse zero/multiple matches.
+
+Repeat kind requires a repeat Question; main/reference kinds have no Repeat
+Question. Field sources can be once-only answers outside a repeat, reused by both
+repeat mappings, or answers inside it. Same-version ownership is enforced, but
+answerability and executable instance scope are compiler work. Sibling/deeper-repeat
+aggregation must not be silently inferred.
+
+Field Mapping Source Kind is explicitly `question` or `constant`. Question mode
+requires Question and no constant text. Constant mode forbids Question and preserves
+literal text; `0`/`false` are not missing. Null/empty Constant Value means an explicit
+blank in constant mode, not omission. The derived SHA-256 Target Key prevents
+case-variant duplicate target assignments within one mapping and is never portable
+identity. All twelve C4 transforms are stored, not run. Nullable Match Status has
+no success default; saved diagnostics must never authorize publication.
+
+Collector Field and Submission Field configure future trusted stamps, not response
+identity overrides. No target write or stamping is implemented here. Compiler and
+ingestion tests must reject conflicts with user field mappings and enforce C7.
+
+Direct deletion of a referenced parent Mapping is refused with a generic message;
+deleting it with all dependent mappings in one trigger batch is allowed. Larger
+direct batches may need leaf-first order. Form/Version deletion cascades ownership;
+Mapping deletion cascades Field Mappings. Published/submission-aware protection and
+note 30's undelete behavior remain future lifecycle work; do not use restored
+definitions as published artifacts. See ADR 0013 for tests and exact boundaries.
+
 ## Access and verification status
 
 Unassigned `Kusanya_Admin`, `Kusanya_Integration`, `Kusanya_Supervisor` permission
 sets grant model CRUD, read/create/edit and read respectively, retaining sharing
-and no setup permissions. All three derived keys are read-only. Required/master-detail
+and no setup permissions. All four derived keys are read-only. Required/master-detail
 fields omit FLS entries. These do not assign users, create collectors or grant
 access to customer target objects, and their definitions alone do not establish
 effective access for a particular user.
 
 Private ownership still prevents integration/supervisor reads of another user's
-definitions by default (Claude note 24). ADR 0011 selects a future seven-object
+definitions by default (Claude note 24). ADRs 0011/0013 select a future nine-object
 View All Records allowlist and its effective-access tests. This PR grants none of
 it. Implement and verify that read policy before any Phase 2 definition reader;
 read-all does not authorize editing administrator-owned definitions.
 
 Synthetic `FormDefinitionModelTest`, `QuestionDefinitionModelTest`,
-`QuestionDeletionTest` and `ChoiceAndSkipRuleModelTest` exercise the model invariants; root
+`QuestionDeletionTest`, `ChoiceAndSkipRuleModelTest`, `MappingDefinitionModelTest`,
+`MappingDeletionTest` and `FieldMappingDefinitionModelTest` exercise the model invariants; root
 `scripts/form-model.test.mjs` checks the source contract and permissions. Actual
 deployment and Apex behavior require the approved hosted run and independent
 verification. No C10 acceptance test is claimed by this slice.
 
-The remaining Salesforce work includes metadata mappings, compilation, publication,
+The remaining Salesforce work includes executable mapping validation/ingestion, compilation, publication,
 version lifecycle, jobs/tasks/prefill, assignment groups, collectors, submissions/answers,
 scoring and operational audit records. Every future object and field must carry a
 description. Target customer objects and fields are mapping data, never constants

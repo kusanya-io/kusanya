@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Question__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>Optional answer source in the owning mapping form version. Source Kind question requires this field; constant leaves it empty. Later compilation checks answerability and repeat ancestry. Apex guards direct referenced Question deletion; owner cascades remain native.</description>
+    <label>Question</label>
+    <referenceTo>Question__c</referenceTo>
+    <relationshipLabel>Target Field Mappings</relationshipLabel>
+    <relationshipName>Target_Field_Mappings</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

@@ -40,13 +40,18 @@ There is no product database schema yet. See [data model status](data-model.md),
 ## Initial Phase 1 source
 
 The model slices add Folder, Form, Form Version, Question, Choice List, Choice and
-Skip Rule metadata, model-only permission sets, declarative validation and derived
+Skip Rule, Mapping and Field Mapping metadata, model-only permission sets, declarative validation and derived
 identities. Question parent scope distinguishes once-only siblings from repeat
 children; Hint and Author Notes are separate fields. Integrity triggers reject
 invalid trees/references/ownership without exposing definition data. Stored skip
 conditions are not yet compiled. These slices expose no form/publish API or
 collector delivery path. C10 tests 10 and
 12 remain unimplemented, not represented by source/smoke tests.
+
+Mapping definitions store a reference/main/repeat dependency graph and explicit
+question-or-constant field sources. They preserve once-only answers shared across
+repeat mappings and portable customer target identifiers. They do not execute
+transforms, validate target permissions or write/stamp customer records (ADR 0013).
 
 Private definition ownership still blocks cross-owner integration/supervisor reads.
 ADR 0011 records a future object-scoped read-all policy, not a current permission
