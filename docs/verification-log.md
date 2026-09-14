@@ -686,3 +686,18 @@ Credential hygiene:
 Finding 26 remains closed. Notes 27 to 31 remain for later reviewed units and do not block this one. This is a Phase 1 unit, not the phase gate.
 
 `PASS: PR #9 may be merged`
+
+## 2026-09-14: PR #9 merged
+
+Bill squash-merged PR #9 as 1ec8488. Its tree, 61ad122, is identical to the verified head bc5affc, so the hosted Apex evidence from run 34846612699 attempt 2 and my fresh-org run apply to main unchanged. Main CI 34876934759 passed.
+
+Carried forward to later reviewed units, none blocking:
+
+- Note 24: the ADR 0011 read policy and its effective-access tests before any Phase 2 definition reader.
+- Note 25: the untested insert path of the Current Version rule; the resolver handles only `__c`.
+- Note 27: Author Notes exclusion must be proven at the compiler and delivery layer.
+- Note 28: compile-time rejection of a repeat counted from its own subtree and of non-answerable skip sources.
+- Note 29: working-directory executable discovery in the Windows launcher.
+- Note 30: undelete restores a Form without its skip rules, and a lone child without its parent.
+- Note 31: a single dropped GitHub API response fails the confirm step, and logout fails when the CLI is absent.
+- A namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
