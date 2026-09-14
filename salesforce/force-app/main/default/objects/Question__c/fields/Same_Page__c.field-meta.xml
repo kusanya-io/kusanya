@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Same_Page__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>Authoring request to render with the previous question where supported. Does not alter parentage or repeat scope; defaults false.</description>
+    <label>Same Page</label>
+    <type>Checkbox</type>
+</CustomField>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Conditional visibility rule owned by its target question. The later compiler combines rules into XPath relevance; storing a rule does not execute it.</description>
+    <enableActivities>false</enableActivities>
+    <enableFeeds>false</enableFeeds>
+    <enableHistory>false</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <externalSharingModel>ControlledByParent</externalSharingModel>
+    <label>Skip Rule</label>
+    <nameField>
+        <description>System-generated identifier for a question visibility condition.</description>
+        <displayFormat>SR-{0000000000}</displayFormat>
+        <label>Skip Rule Name</label>
+        <startingNumber>1</startingNumber>
+        <type>AutoNumber</type>
+    </nameField>
+    <pluralLabel>Skip Rules</pluralLabel>
+    <sharingModel>ControlledByParent</sharingModel>
+</CustomObject>

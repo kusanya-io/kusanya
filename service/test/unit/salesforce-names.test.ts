@@ -44,6 +44,39 @@ void test('target object and field names are unchanged for both configurations',
   }
 });
 
+void test('owned parent and child relationship names use the configured prefix', () => {
+  for (const namespacePrefix of ['', 'ksny__']) {
+    const names = createSalesforceNames(namespacePrefix);
+    for (const localName of [
+      'Parent__r',
+      'Form_Version__r',
+      'Questions__r',
+      'Choices__r',
+    ])
+      assert.equal(
+        names.kusanyaRelationship(localName),
+        `${namespacePrefix}${localName}`,
+      );
+  }
+});
+
+void test('target relationships preserve standard, customer and foreign namespace names', () => {
+  for (const namespacePrefix of ['', 'ksny__']) {
+    const names = createSalesforceNames(namespacePrefix);
+    for (const apiName of [
+      'Owner',
+      'CreatedBy',
+      'Contacts',
+      'School__r',
+      'Site_Visits__r',
+      'other__Parent__r',
+      'other__Children__r',
+      'ksny__Form_Version__r',
+    ])
+      assert.equal(names.targetRelationship(apiName), apiName);
+  }
+});
+
 void test('Apex REST has a namespace path segment without the API-name suffix', () => {
   assert.equal(
     createSalesforceNames('').apexRestPath('v1/forms/publish'),
@@ -65,6 +98,21 @@ void test('interleaved resolvers cannot overwrite each other or existing configu
   for (let index = 0; index < 3; index += 1) {
     assert.equal(prefixed.kusanyaObject('Question__c'), 'ksny__Question__c');
     assert.equal(plain.kusanyaObject('Question__c'), 'Question__c');
+    assert.equal(prefixed.kusanyaRelationship('Parent__r'), 'ksny__Parent__r');
+    assert.equal(plain.kusanyaRelationship('Parent__r'), 'Parent__r');
+    assert.equal(
+      prefixed.kusanyaRelationship('Choices__r'),
+      'ksny__Choices__r',
+    );
+    assert.equal(plain.kusanyaRelationship('Choices__r'), 'Choices__r');
+    assert.equal(
+      prefixed.targetRelationship('other__Parent__r'),
+      'other__Parent__r',
+    );
+    assert.equal(
+      plain.targetRelationship('other__Parent__r'),
+      'other__Parent__r',
+    );
     assert.equal(
       prefixed.apexRestPath('publish'),
       '/services/apexrest/ksny/publish',
@@ -157,6 +205,52 @@ void test('owned names refuse standard, customer-qualified and already-prefixed 
   }
 });
 
+void test('owned relationships refuse other suffixes, qualified names and traversal', () => {
+  const malformed: unknown[] = [
+    undefined,
+    null,
+    1,
+    {},
+    [],
+    '',
+    'Owner',
+    'CreatedBy',
+    'Parent',
+    'Parent__c',
+    'Parent__x',
+    'Parent__mdt',
+    'Parent__e',
+    'ksny__Parent__r',
+    'other__Parent__r',
+    'other__Children__r',
+    'Bad___Name__r',
+    '1Parent__r',
+    'Parent__r ',
+    'Parent__r\n',
+    'Parent__r.Name',
+    'Parent__r.Parent__r',
+    'Parent__r/secret-value',
+    'Parent__r?secret-value',
+    "Parent__r' OR Name = 'secret-value",
+    '/data/parent',
+  ];
+  for (const prefix of ['', 'ksny__']) {
+    const names = createSalesforceNames(prefix);
+    for (const value of malformed)
+      assert.throws(
+        () => names.kusanyaRelationship(value as string),
+        (error: unknown) => {
+          assert.ok(error instanceof SalesforceNameError);
+          assert.equal(
+            error.message,
+            'Invalid Salesforce owned relationship name',
+          );
+          return true;
+        },
+      );
+  }
+});
+
 void test('target identifiers reject expressions, paths and injection instead of rewriting them', () => {
   const malformed: unknown[] = [
     undefined,
@@ -170,6 +264,8 @@ void test('target identifiers reject expressions, paths and injection instead of
     'Name_',
     'Name___c',
     'Account.Name',
+    'Parent__r.Name',
+    'other__Parent__r.Owner',
     'Name,Id',
     'Name FROM Account',
     'Name\n',
@@ -192,6 +288,17 @@ void test('target identifiers reject expressions, paths and injection instead of
       assert.throws(
         () => names.targetField(value as string),
         SalesforceNameError,
+      );
+      assert.throws(
+        () => names.targetRelationship(value as string),
+        (error: unknown) => {
+          assert.ok(error instanceof SalesforceNameError);
+          assert.equal(
+            error.message,
+            'Invalid Salesforce target relationship name',
+          );
+          return true;
+        },
       );
     }
   }

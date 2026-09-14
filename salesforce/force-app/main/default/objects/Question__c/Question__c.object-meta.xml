@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Question, section or repeat node in a version-owned definition tree. Parent determines repeat scope; compiler and publication behavior are implemented in later units.</description>
+    <enableActivities>false</enableActivities>
+    <enableFeeds>false</enableFeeds>
+    <enableHistory>false</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <externalSharingModel>ControlledByParent</externalSharingModel>
+    <label>Question</label>
+    <nameField>
+        <description>Canonical XForm node name, unique case-sensitively within its form version. Use a local XML identifier without a namespace prefix; not a Salesforce API field name.</description>
+        <label>Question Name</label>
+        <type>Text</type>
+    </nameField>
+    <pluralLabel>Questions</pluralLabel>
+    <sharingModel>ControlledByParent</sharingModel>
+</CustomObject>

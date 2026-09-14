@@ -37,15 +37,85 @@ const objects = {
     'Change_Log__c',
     'Version_Key__c',
   ],
+  Question__c: [
+    'Form_Version__c',
+    'Parent__c',
+    'Order__c',
+    'Label__c',
+    'Hint__c',
+    'Author_Notes__c',
+    'Type__c',
+    'Required__c',
+    'Read_Only__c',
+    'Hidden__c',
+    'Same_Page__c',
+    'Default_Value__c',
+    'Calculation__c',
+    'Constraint__c',
+    'Constraint_Message__c',
+    'Regex__c',
+    'Regex_Example__c',
+    'Minimum__c',
+    'Maximum__c',
+    'Relevant__c',
+    'Appearance__c',
+    'Choice_List__c',
+    'Repeat_Mode__c',
+    'Repeat_Count__c',
+    'Repeat_Source_Question__c',
+    'Repeat_Max__c',
+    'Repeat_As_Table__c',
+    'Cascade_Level__c',
+    'Require_Live_Photo__c',
+    'Media_Max_Seconds__c',
+    'Prefill_Source__c',
+    'Validation_Script__c',
+    'Previous_Version_Question__c',
+    'Question_Key__c',
+  ],
+  Choice_List__c: ['Description__c', 'Owner_Question__c'],
+  Choice__c: [
+    'Choice_List__c',
+    'Value__c',
+    'Label__c',
+    'Order__c',
+    'Filter_Value__c',
+    'Score__c',
+    'Choice_Key__c',
+  ],
+  Skip_Rule__c: [
+    'Question__c',
+    'Source_Question__c',
+    'Operator__c',
+    'Value__c',
+    'Value_To__c',
+    'Join__c',
+    'Action__c',
+  ],
 };
+const derivedKeys = new Set([
+  'Form_Version__c.Version_Key__c',
+  'Question__c.Question_Key__c',
+  'Choice__c.Choice_Key__c',
+]);
+const fieldXml = (object, field) =>
+  read(`objects/${object}/fields/${field}.field-meta.xml`);
+const picklistValues = (xml) =>
+  [...xml.matchAll(/<value>([\s\S]*?)<\/value>/g)].map((match) =>
+    tag(match[1], 'fullName'),
+  );
 
 // Source-contract checks only: hosted deployment and Apex establish runtime behavior.
-test('first model slice contains the C4 Form and Form Version fields with descriptions', () => {
+test('model contains the C4 form, question, choice and skip fields with descriptions', () => {
   assert.deepEqual(files('objects/').sort(), Object.keys(objects).sort());
   for (const [object, expected] of Object.entries(objects)) {
     const base = `objects/${object}/`;
     const objectXml = read(`${base}${object}.object-meta.xml`);
     assert.ok(tag(objectXml, 'description')?.trim(), `${object} description`);
+    assert.doesNotMatch(
+      objectXml,
+      /ksny__|00D[A-Za-z0-9]{12}(?:[A-Za-z0-9]{3})?/,
+    );
     assert.ok(
       tag(tag(objectXml, 'nameField'), 'description')?.trim(),
       `${object}.Name description`,
@@ -69,40 +139,216 @@ test('first model slice contains the C4 Form and Form Version fields with descri
 });
 
 test('model ownership and file pointers use the documented metadata contracts', () => {
-  for (const object of ['Folder__c', 'Form__c']) {
-    assert.equal(
-      tag(read(`objects/${object}/${object}.object-meta.xml`), 'sharingModel'),
-      'Private',
-    );
+  for (const object of Object.keys(objects)) {
+    const expected = ['Folder__c', 'Form__c', 'Choice_List__c'].includes(object)
+      ? 'Private'
+      : 'ControlledByParent';
+    const xml = read(`objects/${object}/${object}.object-meta.xml`);
+    assert.equal(tag(xml, 'sharingModel'), expected);
+    assert.equal(tag(xml, 'externalSharingModel'), expected);
   }
-  assert.equal(
-    tag(
-      read('objects/Form_Version__c/Form_Version__c.object-meta.xml'),
-      'sharingModel',
-    ),
-    'ControlledByParent',
-  );
-  const parent = read('objects/Form_Version__c/fields/Form__c.field-meta.xml');
-  assert.equal(tag(parent, 'type'), 'MasterDetail');
-  assert.equal(tag(parent, 'referenceTo'), 'Form__c');
-  assert.equal(tag(parent, 'reparentableMasterDetail'), 'false');
+  for (const [object, field, target] of [
+    ['Form_Version__c', 'Form__c', 'Form__c'],
+    ['Question__c', 'Form_Version__c', 'Form_Version__c'],
+    ['Choice__c', 'Choice_List__c', 'Choice_List__c'],
+    ['Skip_Rule__c', 'Question__c', 'Question__c'],
+  ]) {
+    const parent = fieldXml(object, field);
+    assert.equal(tag(parent, 'type'), 'MasterDetail');
+    assert.equal(tag(parent, 'referenceTo'), target);
+    assert.equal(tag(parent, 'reparentableMasterDetail'), 'false');
+    assert.equal(tag(parent, 'writeRequiresMasterRead'), 'false');
+  }
   for (const field of ['XForm__c', 'XLSForm__c']) {
     const xml = read(`objects/Form_Version__c/fields/${field}.field-meta.xml`);
     assert.equal(tag(xml, 'type'), 'Text');
     assert.equal(tag(xml, 'length'), '18');
     assert.match(tag(xml, 'description'), /ContentDocument/);
   }
-  const key = read(
-    'objects/Form_Version__c/fields/Version_Key__c.field-meta.xml',
+  for (const [object, field, length] of [
+    ['Form_Version__c', 'Version_Key__c', '28'],
+    ['Question__c', 'Question_Key__c', '100'],
+    ['Choice__c', 'Choice_Key__c', '64'],
+  ]) {
+    const key = fieldXml(object, field);
+    assert.equal(tag(key, 'type'), 'Text');
+    assert.equal(tag(key, 'length'), length);
+    assert.equal(tag(key, 'unique'), 'true');
+    assert.equal(tag(key, 'caseSensitive'), 'true');
+    assert.equal(tag(key, 'required'), 'false');
+    assert.match(tag(key, 'description'), /derived|generated|computed/i);
+  }
+});
+
+test('question tree and inline-choice relationships preserve explicit scope and deletion contracts', () => {
+  for (const [object, field, target, required] of [
+    ['Question__c', 'Parent__c', 'Question__c', false],
+    ['Question__c', 'Choice_List__c', 'Choice_List__c', false],
+    ['Question__c', 'Repeat_Source_Question__c', 'Question__c', false],
+    ['Question__c', 'Previous_Version_Question__c', 'Question__c', false],
+    ['Choice_List__c', 'Owner_Question__c', 'Question__c', false],
+    ['Skip_Rule__c', 'Source_Question__c', 'Question__c', true],
+  ]) {
+    const xml = fieldXml(object, field);
+    assert.equal(tag(xml, 'type'), 'Lookup');
+    assert.equal(tag(xml, 'referenceTo'), target);
+    assert.equal(tag(xml, 'deleteConstraint'), 'Restrict');
+    assert.equal(tag(xml, 'required'), String(required));
+    assert.ok(tag(xml, 'relationshipName'));
+  }
+  const question = read('objects/Question__c/Question__c.object-meta.xml');
+  assert.equal(tag(tag(question, 'nameField'), 'type'), 'Text');
+  assert.match(
+    tag(tag(question, 'nameField'), 'description'),
+    /XForm node name/,
   );
-  assert.equal(tag(key, 'unique'), 'true');
-  assert.match(tag(key, 'description'), /derived|generated|computed/i);
+  assert.match(
+    tag(fieldXml('Question__c', 'Parent__c'), 'description'),
+    /null parent keeps a once-only question outside every repeat/,
+  );
+  assert.match(
+    tag(fieldXml('Choice_List__c', 'Owner_Question__c'), 'description'),
+    /Immutable after creation, including clearing/,
+  );
+});
+
+test('question types, repeat settings and author notes remain distinct source contracts', () => {
+  const type = fieldXml('Question__c', 'Type__c');
+  assert.equal(tag(type, 'restricted'), 'true');
+  assert.equal(tag(type, 'required'), 'true');
+  assert.deepEqual(picklistValues(type), [
+    'section',
+    'repeat',
+    'note',
+    'text',
+    'text_long',
+    'integer',
+    'decimal',
+    'select_one',
+    'select_multiple',
+    'date',
+    'time',
+    'datetime',
+    'geopoint',
+    'geotrace',
+    'geoshape',
+    'photo',
+    'signature',
+    'audio',
+    'video',
+    'file',
+    'barcode',
+    'calculate',
+    'reference',
+    'end',
+  ]);
+  const repeatMode = fieldXml('Question__c', 'Repeat_Mode__c');
+  assert.equal(tag(repeatMode, 'restricted'), 'true');
+  assert.deepEqual(picklistValues(repeatMode), [
+    'fixed',
+    'from_answer',
+    'open',
+  ]);
+  assert.doesNotMatch(repeatMode, /<default>true<\/default>/);
+  for (const field of ['Hint__c', 'Author_Notes__c']) {
+    const xml = fieldXml('Question__c', field);
+    assert.equal(tag(xml, 'type'), 'LongTextArea');
+    assert.equal(tag(xml, 'length'), '32768');
+  }
+  assert.match(
+    tag(fieldXml('Question__c', 'Hint__c'), 'description'),
+    /Collector-facing help/,
+  );
+  assert.match(
+    tag(fieldXml('Question__c', 'Author_Notes__c'), 'description'),
+    /Author and reviewer annotations only/,
+  );
+  for (const field of [
+    'Required__c',
+    'Read_Only__c',
+    'Hidden__c',
+    'Same_Page__c',
+    'Repeat_As_Table__c',
+    'Require_Live_Photo__c',
+  ]) {
+    const xml = fieldXml('Question__c', field);
+    assert.equal(tag(xml, 'type'), 'Checkbox');
+    assert.equal(tag(xml, 'defaultValue'), 'false');
+  }
+});
+
+test('question and choice numeric constraints and skip-rule enums match C4', () => {
+  for (const [object, field, required] of [
+    ['Question__c', 'Order', true],
+    ['Question__c', 'Repeat_Count', false],
+    ['Question__c', 'Repeat_Max', false],
+    ['Question__c', 'Cascade_Level', false],
+    ['Question__c', 'Media_Max_Seconds', false],
+    ['Choice__c', 'Order', true],
+  ]) {
+    const xml = fieldXml(object, `${field}__c`);
+    assert.equal(tag(xml, 'type'), 'Number');
+    assert.equal(tag(xml, 'precision'), '9');
+    assert.equal(tag(xml, 'scale'), '0');
+    assert.equal(tag(xml, 'required'), String(required));
+    if (required) assert.equal(tag(xml, 'defaultValue'), '1');
+    const rule = read(
+      `objects/${object}/validationRules/${field}_Positive_Integer.validationRule-meta.xml`,
+    );
+    assert.equal(tag(rule, 'active'), 'true');
+    assert.ok(tag(rule, 'description')?.trim());
+    assert.ok(
+      tag(rule, 'errorConditionFormula').includes(
+        `MOD(${field}__c, 1) &lt;&gt; 0`,
+      ),
+    );
+    assert.ok(
+      tag(rule, 'errorConditionFormula').includes(`${field}__c &lt; 1`),
+    );
+  }
+  const bounds = read(
+    'objects/Question__c/validationRules/Minimum_Not_Above_Maximum.validationRule-meta.xml',
+  );
+  assert.equal(tag(bounds, 'active'), 'true');
+  assert.match(
+    tag(bounds, 'errorConditionFormula'),
+    /Minimum__c &gt; Maximum__c/,
+  );
+  assert.equal(tag(fieldXml('Choice__c', 'Value__c'), 'required'), 'true');
+  assert.equal(tag(fieldXml('Choice__c', 'Value__c'), 'length'), '255');
+  assert.equal(tag(fieldXml('Choice__c', 'Label__c'), 'type'), 'LongTextArea');
+  for (const [field, expected] of [
+    [
+      'Operator__c',
+      [
+        'answered',
+        'is',
+        'is_not',
+        'less_than',
+        'greater_than',
+        'in_range',
+        'contains',
+      ],
+    ],
+    ['Join__c', ['all', 'any']],
+    ['Action__c', ['show', 'hide']],
+  ]) {
+    const xml = fieldXml('Skip_Rule__c', field);
+    assert.equal(tag(xml, 'required'), 'true');
+    assert.equal(tag(xml, 'restricted'), 'true');
+    assert.deepEqual(picklistValues(xml), expected);
+  }
 });
 
 test('new Apex uses local references, responsibility headers and API 64 without setup DML', () => {
   for (const name of [
     'FormVersionIdentityHandler',
     'FormDefinitionModelTest',
+    'QuestionIntegrityHandler',
+    'QuestionDefinitionModelTest',
+    'ChoiceDefinitionHandler',
+    'SkipRuleDefinitionHandler',
+    'ChoiceAndSkipRuleModelTest',
   ]) {
     const cls = read(`classes/${name}.cls`);
     assert.match(cls, /Responsibility:/);
@@ -116,10 +362,24 @@ test('new Apex uses local references, responsibility headers and API 64 without 
       '64.0',
     );
   }
-  assert.equal(
-    tag(read('triggers/FormVersionIdentity.trigger-meta.xml'), 'apiVersion'),
-    '64.0',
-  );
+  for (const name of [
+    'FormVersionIdentity',
+    'QuestionIntegrity',
+    'ChoiceIdentity',
+    'ChoiceListIntegrity',
+    'SkipRuleIntegrity',
+  ]) {
+    const trigger = read(`triggers/${name}.trigger`);
+    assert.match(trigger, /Responsibility:/);
+    assert.doesNotMatch(
+      trigger,
+      /ksny__|00D[A-Za-z0-9]{12}(?:[A-Za-z0-9]{3})?/,
+    );
+    assert.equal(
+      tag(read(`triggers/${name}.trigger-meta.xml`), 'apiVersion'),
+      '64.0',
+    );
+  }
   assert.equal(
     JSON.parse(
       readFileSync(
@@ -141,7 +401,7 @@ test('permission sets grant only this model and never grant setup or collector a
     assert.ok(tag(xml, 'description')?.trim());
     assert.doesNotMatch(
       xml,
-      /<userPermissions>|<classAccesses>|<applicationVisibilities>/,
+      /<userPermissions>|<classAccesses>|<applicationVisibilities>|<customPermissions>|<externalDataSourceAccesses>|<flowAccesses>|<license>/,
     );
     const grants = [
       ...xml.matchAll(/<objectPermissions>([\s\S]*?)<\/objectPermissions>/g),
@@ -183,9 +443,7 @@ test('permission sets grant only this model and never grant setup or collector a
       assert.equal(tag(grant, 'readable'), 'true');
       assert.equal(
         tag(grant, 'editable'),
-        String(
-          canWrite && tag(grant, 'field') !== 'Form_Version__c.Version_Key__c',
-        ),
+        String(canWrite && !derivedKeys.has(tag(grant, 'field'))),
       );
     }
   }

@@ -76,11 +76,17 @@ Import the pure helper from `src/salesforce-names.ts` in source, or
 const names = createSalesforceNames(configuredPrefix);
 const objectName = names.kusanyaObject('Form__c');
 const parentField = names.kusanyaField('Form__c');
+const parentRelationship = names.kusanyaRelationship('Form_Version__r');
+const childRelationship = names.kusanyaRelationship('Questions__r');
 const customerField = names.targetField(configuredTargetField);
+const customerRelationship = names.targetRelationship(configuredRelationship);
 const restPath = names.apexRestPath(relativeResource);
 ```
 
-Only the `kusanya*` methods add the prefix; their inputs must be local `__c` names.
+Only the `kusanya*` methods add the prefix: object/field inputs are local `__c`
+names, relationship inputs are explicit local `__r` names. Relationship names
+must come from the schema/describe; the helper never guesses a child relationship
+from a field name. It validates one identifier, not a dotted traversal path.
 The `target*` methods validate one API identifier and preserve customer, standard
 or foreign-package names exactly. They are not SOQL builders or permission checks.
 REST accepts literal relative path segments, not URLs, query strings or escapes;
@@ -88,7 +94,8 @@ the namespace becomes a path segment without its trailing `__`. Future CLI
 publish, XForm bindings and mapping adapters must reuse this boundary and keep
 question/XPath names separate from Salesforce names. They are not implemented yet.
 
-Tests use empty and `ksny__` synthetic configurations, malformed inputs and
+Tests use empty and `ksny__` synthetic configurations, parent/child relationship
+names, standard/customer/foreign targets, malformed inputs and
 interleaved resolvers. They do not contact Salesforce or prove namespaced execution.
 
 The request error handler preserves integer 4xx statuses and returns only

@@ -152,6 +152,41 @@ private class FormDefinitionModelTest {
     }
 
     @IsTest
+    static void currentVersionRejectsAnotherFormsVersionOnInsert() {
+        Form__c existingForm = createForm('Synthetic existing owner');
+        Form_Version__c existingVersion = new Form_Version__c(
+            Form__c = existingForm.Id,
+            Version_Number__c = 1
+        );
+        insert existingVersion;
+        Integer formsBefore = [SELECT COUNT() FROM Form__c];
+
+        Database.SaveResult result = Database.insert(
+            new Form__c(
+                Name = 'Synthetic invalid new owner',
+                Current_Version__c = existingVersion.Id
+            ),
+            false
+        );
+
+        Assert.isFalse(result.isSuccess());
+        Assert.areEqual(
+            StatusCode.FIELD_CUSTOM_VALIDATION_EXCEPTION,
+            result.getErrors()[0].getStatusCode()
+        );
+        Assert.isTrue(
+            result.getErrors()[0]
+                .getMessage()
+                .contains('must belong to this form')
+        );
+        Assert.areEqual(
+            formsBefore,
+            [SELECT COUNT() FROM Form__c],
+            'An invalid current-version reference must not persist a new form'
+        );
+    }
+
+    @IsTest
     static void versionNumbersAreUniqueWithinEachFormOnInsertAndUpdate() {
         Form__c firstForm = createForm('Synthetic unique first');
         Form__c secondForm = createForm('Synthetic unique second');

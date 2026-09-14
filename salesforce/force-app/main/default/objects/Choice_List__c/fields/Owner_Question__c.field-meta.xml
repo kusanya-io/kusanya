@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Owner_Question__c</fullName>
+    <deleteConstraint>Restrict</deleteConstraint>
+    <description>Optional select question that exclusively owns this inline list; blank denotes a reusable list. Immutable after creation, including clearing. Clear the question's Choice List backlink, then delete this list before deleting its owner; an inline list never silently becomes reusable.</description>
+    <label>Owner Question</label>
+    <referenceTo>Question__c</referenceTo>
+    <relationshipLabel>Inline Choice Lists</relationshipLabel>
+    <relationshipName>Inline_Choice_Lists</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

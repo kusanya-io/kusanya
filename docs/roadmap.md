@@ -1,8 +1,9 @@
 # Delivery gates
 
 Only Claude can close a phase by recording a verdict in `docs/verification-log.md`.
-Bill relayed Claude's Phase 0 PASS in PR #3 review 5177252674; the first Phase 1
-unit is now in development. The builder does not issue its own gate verdict.
+Bill relayed Claude's Phase 0 PASS in PR #3 review 5177252674 and the first Phase 1
+unit PASS in PR #8 review 5194796568 (merged as `e97882d`). The question-tree unit
+is in development. The builder does not issue its own gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
 | --------- | --------------------------------------------------------------------------- | ---------------------------------------------- |
@@ -31,7 +32,14 @@ earlier link/ADR sequencing restriction. Keep the project namespace empty; requi
 linking before packaging or namespaced claims and run the suite namespaced as soon
 as linking works, before the next phase gate (ADRs 0006/0008).
 
-The first unit contains Folder/Form/Form Version and external namespace resolution,
-not the complete data model or tests 10/12. Next units must deliver question trees,
-choices, skip rules and mappings, then compilation/validation, XLSForm round trips,
-print view and CLI publication. Do not mark Phase 1 complete from model tests.
+The first unit contains Folder/Form/Form Version and external namespace resolution.
+The current unit adds Question trees, choices and stored skip rules, separate
+Hint/Author Notes, the Current Version INSERT regression and external `__r`
+resolution (note 25). It does not complete C3.6/.19 rendering/delivery guarantees.
+ADRs 0010/0011 record scope, lifecycle gaps and note 24's future object-scoped read
+policy. That policy must be implemented and effective-access tested before any
+Phase 2 definition reader; this unit retains private sharing and no View All.
+
+Next units must deliver mappings, compilation/validation, immutable publication
+and draft deletion behavior, XLSForm round trips, print view and CLI publication.
+No model unit claims C10 tests 10/12. Do not mark Phase 1 complete from model tests.

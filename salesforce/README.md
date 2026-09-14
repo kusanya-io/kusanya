@@ -1,10 +1,24 @@
 # Salesforce source
 
 Phase 0 supplies the Developer scratch definition and runtime smoke test. The first
-Phase 1 slice adds Folder, Form and Form Version with version identity/validation,
-model-only permission sets and nine synthetic model tests. No collection, mapping,
+Phase 1 slice added Folder, Form and Form Version with version identity/validation.
+The current unit adds Question (sections/repeats), Choice List, Choice and Skip
+Rule, integrity triggers and synthetic model tests. No collection, mapping,
 authentication, compiler, publishing or C10 capability is claimed. See
-[the data model](../docs/data-model.md) and ADR 0009 for exact limitations.
+[the data model](../docs/data-model.md) and ADRs 0009/0010 for exact limitations.
+
+Question tree updates validate the entire affected version and protect partial-DML
+outcomes. Detach children before changing container roles or reversing parent edges.
+Keep once-only questions as siblings of a repeat, not its children; keep author
+annotations in Author Notes, never Hint. Inline lists use question -> owned list
+-> question backlink creation; ownership cannot be reassigned. See the data model
+for the reverse unlink/delete sequence and deferred lifecycle protections.
+
+The unassigned Admin/Integration/Supervisor permission sets cover seven definition
+objects while preserving ordinary sharing and no View All grants. They do not yet
+allow cross-owner definition reads. ADR 0011 records the decision and required
+future reviewed implementation/effective-access tests before a Phase 2 reader
+(Claude note 24).
 
 ## Iterative development only
 
