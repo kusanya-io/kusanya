@@ -508,3 +508,36 @@ This is a Phase 1 unit, not the Phase 1 gate. Phase 1 still needs question trees
 - PR #8 was squash-merged by `cobitechsolutions` at 08:32 UTC as e97882d. The merged tree is identical to the verified head 9da8f13, so the PASS in review 5194796568 applies to `main`'s content.
 - This branch, PR #7, was brought up to date with `main` by a merge commit, keeping every entry. It still changes only this file, so its Salesforce gate uses the documentation exemption.
 - Still open: notes 24 and 25 for later Phase 1 units, the `ksny` Dev Hub link through Salesforce Support, a namespaced suite run once linking works, and C10 tests 10 and 12.
+
+## 2026-09-14: Source and security review of PR #9 head `e694453`; deployment blocker
+
+Scope: the question-tree unit, covering Question, Choice List, Choice and Skip Rule, four integrity handlers and triggers, permission-set extensions, the `__r` name resolver, and ADRs 0010 and 0011. The review was requested before Bill approves Salesforce run 34829135270.
+
+What passed locally and in source review:
+
+- Trust boundary. No workflow changed; the only script change is the public-CI source test. The harness is still pinned at 1d0edc1, and the project and scratch definitions are unchanged. The merge ref 68ebfc6 matches the head.
+- Tests at the head: 157 of 157 root tests in Git Bash and PowerShell; service lint, typecheck and 24 of 24 tests; format, scaffold and whitespace checks; offline conversion to 105 components. Public CI 34829135322 is green.
+- Source. All C4 fields are present, with descriptions and restricted picklists. Tree validation checks old and new parent edges, detects cycles, and uses three bounded queries with no DML of its own. The trigger-only `without sharing` handlers return no data. The three permission sets cover the seven objects with no view-all, modify-all or other grant types. ADR 0011 correctly defers cross-owner reads to a separately tested change. The resolver adds bounded `kusanyaRelationship` and `targetRelationship` methods.
+- Capacity and settings were unchanged before the verifier run.
+
+Verifier fresh-org run, 09:51 UTC, on an export of the exact head:
+
+- Deployment failed: 96 of 166 components succeeded and 70 failed. Salesforce rejected `Question__c.Parent__c`, `Question__c.Repeat_Source_Question__c` and `Question__c.Previous_Version_Question__c` with "Cannot add a self-lookup relationship child with cascade or restrict options to the object itself". Each field declares `<deleteConstraint>Restrict</deleteConstraint>` on a Question-to-Question lookup. Everything referencing those fields then failed to compile: `QuestionIntegrityHandler`, the `QuestionIntegrity` trigger, `QuestionDefinitionModelTest`, and all three permission sets.
+- No Apex test or deletion probe ran. The org was deleted and confirmed Deleted, no scratch orgs are active, and daily capacity went from 6 to 5.
+- Local checks and offline source conversion cannot detect this platform rule; only a real deployment does.
+
+Findings:
+
+- Finding 26, blocker. PR #9 does not deploy.
+  - A self-lookup cannot use Restrict. Salesforce allows only Clear (SetNull), which is the default.
+  - To keep ADR 0010's intent that deleting a parent must not silently change repeat scope, remove the delete constraints from the three self-lookups. Enforce the protection in a `before delete` trigger on Question instead.
+  - That trigger refuses deleting a question still referenced as Parent, Repeat Source or Previous Version by a question outside the same delete operation.
+  - Master-detail cascade deletes of a Form or Form Version do not fire child delete triggers. Confirm this with a test that deletes a Form containing a section, repeat, child and skip rule.
+  - Add tests for direct deletion of a referenced parent, for deleting a parent together with its children, and for the other two references.
+  - Re-run a real deployment before requesting review.
+- Note 27. The integration user can read and edit `Author_Notes__c`. That is plausible for future XLSForm import and export, so C3.19 will rest entirely on the compiler and delivery allowlist, which must be tested there.
+- Note 28. Two things are accepted, and are compiler-time checks only: a repeat whose count source sits inside the same repeat, and a skip rule sourced from a non-answerable question such as a section. The deletion and edge-case probes will be re-run on the fixed head.
+
+`HOLD: run 34829135270 at head e694453`. Do not approve: it would fail at deployment, consume a scratch org, and leave that head non-retryable.
+
+`HOLD: PR #9, 1 finding` (26)
