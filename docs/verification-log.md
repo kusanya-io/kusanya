@@ -653,3 +653,36 @@ Note 31, non-blocking, a later tripwire change: the confirm step makes four sepa
 `SAFE TO APPROVE: ONE same-head infrastructure retry of run 34846612699 at bc5affc`, using "Re-run all jobs" with one environment approval. If it fails the same way again, stop and send the log.
 
 `HOLD: PR #9, 0 findings`. This becomes PASS once the hosted run succeeds on this exact head and the gate is green.
+
+## 2026-09-14: PR #9 hosted Apex evidence, run 34846612699 attempt 2 at `bc5affc`; PASS
+
+Scope: independent review of the hosted retry's log, the Dev Hub cleanup, and credential hygiene. No scratch org or fresh-org run was created; my 13:14 UTC fresh-org run on this same head remains the independent runtime evidence.
+
+Run and head:
+
+- Attempt 2 completed as success on bc5affc. The policy, Apex and gate jobs all succeeded.
+- The pull request head is unchanged. It is up to date with main e97882d, the merge state is CLEAN, and all five checks are green.
+- The workflow, the harness pin 1d0edc1 and the ADRs are unchanged since review 5198161599.
+
+Apex job 104005342261, full log of 531 lines:
+
+- Every step succeeded, except the fallback cleanup step, which was correctly skipped.
+- The confirm step printed the exact head, and the stale-head check passed.
+- The in-job budget recheck returned `allowed: true, kind: infrastructure-retry`.
+- Result: `Apex for bc5affc…: 51 passed; 286/287 executable lines (99.65%)`.
+- There is exactly one marker: schema 1, role `ci`, run `34846612699-2`, full head bc5affc, started 14:03:09.910Z, outcome `passed`, retryable false.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted. Tag `kusanya-ci-v1__34846612699-2__bc5affcd0f62__d01396573f6d`.
+
+Dev Hub:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00Dcb00000NiiBN, created 14:03:14 and last modified 14:04:01 UTC.
+- The Setup Audit Trail has `deleteScratchOrg` for "00Dcb00000NiiBN" at 14:04:03 UTC. ActiveScratchOrg has 0 rows.
+
+Credential hygiene:
+
+- The scan found no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys, or email addresses.
+- All 10 `***` masks are GitHub redactions: the auth URL secret once in an env display, `GH_TOKEN` and checkout tokens, and the checkout auth header.
+
+Finding 26 remains closed. Notes 27 to 31 remain for later reviewed units and do not block this one. This is a Phase 1 unit, not the phase gate.
+
+`PASS: PR #9 may be merged`
