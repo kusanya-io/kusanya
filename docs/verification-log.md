@@ -564,3 +564,65 @@ Operational: run 34829135270 on the published head was still waiting at 12:44 UT
 `SAFE TO USE LOCAL BUILDER TOOL: e6720e9`, for `builder-org.mjs` status, acquire and release under Bill's one-org authorization only. Development output is not verification evidence.
 
 `HOLD: PR #9, 1 finding` (finding 26 stays open until the pushed head deploys in the verifier's fresh org and passes its tests and deletion probes).
+
+## 2026-09-14: Re-verification of PR #9 head `bc5affc`; finding 26 closed
+
+Scope: the finding 26 fix (acbad1d), the Windows launcher already cleared at e6720e9, and bc5affc, which adds owner-scoped skip-rule cleanup before Form and Form Version deletion. Requested before Bill approves hosted run 34846612699.
+
+Trust boundary and identity:
+
+- The PR head is bc5affc. No workflow changed, and the harness pin 1d0edc1 appears twice as before. The project and scratch definitions are unchanged. Since e6720e9, the only script change adds two class names to `scripts/form-model.test.mjs`.
+- Codex's development org `kusanya-builder-v1`, created at 12:50 UTC, shows Deleted. No scratch org was active before the verifier run.
+
+Source review:
+
+- The three Question self-lookups no longer declare `deleteConstraint`.
+- The `QuestionIntegrity` before-delete guard uses one query with `LIMIT 1` and no DML. It rejects the whole batch with a generic message when any question outside the batch references a deleted question as Parent, Repeat Source or Previous Version.
+- `DefinitionDeletionHandler` is without sharing, holds no state, and is called only from the Form and Form Version before-delete triggers. Each call queries skip rules whose target question belongs to those exact owners and deletes them in one all-or-none statement. The platform checks delete access on the owners before the trigger runs. Source Question's native Restrict is kept.
+- `SkipRuleDefinitionHandler` requires the source and target to share a version, so an owner's cleanup covers every rule sourced in that owner.
+- Test corrections: `CIRCULAR_DEPENDENCY` for direct self-lookups, and an `SObjectException` on assignment for the non-reparentable Form Version. Both still assert that nothing changed.
+- ADR 0010, the data model, the roadmap and the README record notes 27, 28 and 29 and the remaining gaps.
+
+Local, in a verifier-owned detached worktree of bc5affc (removed afterwards):
+
+- Root tests: 161 of 161.
+- Service: lint, typecheck, and 24 of 24 tests.
+- Prettier, run with the repository's own dependencies, and the scaffold check: both clean.
+- Public CI 34846612683 is green.
+
+Verifier fresh org `kusanya-verifier-v1__claude-pr9__bc5affcd0f62`, created 13:14 UTC from the head's own scratch definition:
+
+- Deployment: Succeeded, 109 of 109 components, 0 errors.
+- `RunLocalTests` with coverage: Passed, 51 of 51.
+  - QuestionDefinitionModelTest 17, ChoiceAndSkipRuleModelTest 10, FormDefinitionModelTest 10, QuestionDeletionTest 7, DefinitionDeletionTest 6, KusanyaRuntimeTest 1.
+  - Org-wide coverage 99%. Every class and trigger is at 100%, except ChoiceDefinitionHandler at 98%.
+- Probes: anonymous Apex, synthetic data, each probe rolled back, 0 rows left. `Kusanya_Admin` was assigned to the scratch admin so anonymous Apex could compile against field access.
+  - P1. A whole Form deletes: a section, an integer count, a from_answer repeat, a child, two skip rules and Current Version set. 0 questions and 0 rules remain.
+  - P2. Deleting a lineage predecessor directly is refused with the generic guard message. Deleting version 1 succeeds, clears the surviving successor's lineage lookup as documented, and keeps version 2's own rule.
+  - P3. A cross-version skip rule is refused on insert and on update.
+  - P4. Deleting a skip source directly is refused by the native Restrict. Deleting the target cascades its rule, and the source then deletes.
+  - P5. An inline list blocks Form deletion with `DELETE_FAILED`, as documented. After unlinking and deleting the list, the Form deletes.
+  - P6. Choice values are trimmed on save. `a ` and ` a` are duplicates of `a`, `A` is distinct, and a single space is refused as required-missing.
+  - P7. Note 28: a repeat counted from its own child, and a section as a skip source, are both still accepted, as documented.
+  - P8. Undeleting a deleted Form restores the version and both questions, but 0 of its skip rules.
+  - P9. Undeleting only a child from a deleted parent-and-child group restores the child with Parent cleared.
+  - P10. The guard message does not name or identify the dependant record.
+- Cleanup: the org was deleted and shows Deleted, with 0 active. Daily capacity went from 4 to 3 of 6.
+
+Finding 26 is closed: the head deploys, and the deletion design behaves as ADR 0010 describes in a real org.
+
+Note 30, non-blocking, for the lifecycle unit:
+
+- Recycle Bin restoration is unsafe for definitions. An undeleted Form comes back without its skip rules (P8). An undeleted child can come back outside its repeat (P9).
+- The lifecycle service should either restore what was removed or refuse the restore, with a test.
+- ADR 0010 should record this as observed behaviour rather than "untested".
+
+Operational:
+
+- Run 34829135270 on e694453 is still waiting.
+- Run 34846612699 on bc5affc is pending behind it on the global Apex concurrency slot.
+- Cancel the old run first, then approve the new one.
+
+`SAFE TO APPROVE: run 34846612699 at head bc5affc`, after run 34829135270 is cancelled.
+
+`HOLD: PR #9, 0 findings`. This becomes PASS once the hosted run succeeds on this exact head and the gate is green.
