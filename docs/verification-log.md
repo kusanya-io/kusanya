@@ -626,3 +626,30 @@ Operational:
 `SAFE TO APPROVE: run 34846612699 at head bc5affc`, after run 34829135270 is cancelled.
 
 `HOLD: PR #9, 0 findings`. This becomes PASS once the hosted run succeeds on this exact head and the gate is green.
+
+## 2026-09-14: Read-only diagnosis of run 34846612699 attempt 1 and retry clearance, PR #9 head `bc5affc`
+
+Scope: Bill rejected run 34829135270 and approved run 34846612699, which failed. This is a read-only diagnosis. No scratch org, container run, rerun, approval or secret change was made.
+
+Evidence:
+
+- The Apex job 103984075830 ran from 13:48:14 to 13:48:28 UTC. The step "Confirm reviewed commit and trusted workflow" printed `Verifying PR 9 at head bc5affc…`, then after about 11.5 seconds printed `unexpected end of JSON input` and exited 1.
+- That text is what `gh api --jq` prints when a response body is empty or cut off. It came from one of the step's four separate pull request lookups. The guard's own mismatch message was not printed.
+- The token permissions were Actions, Contents, Metadata and PullRequests, all read.
+- The same step passed on every earlier executed Apex run: 34523564584, 34619677398, 34623685881 and 34758585587. The workflow has not changed since 87b008a.
+- A live lookup at 13:55 UTC returned head bc5affc, repository kusanya-io/kusanya, base main and state open. No workflow run was queued or in progress.
+- GitHub's status feed lists no incident on 14 September. The most recent was 13 September, 09:16 to 10:44 UTC.
+- Jobs API steps: every credentialed step was `skipped`, including harness checkout, CLI install, both rechecks, authentication, verification and cleanup. The logout step's exit 127 follows from the CLI never being installed.
+
+Retry budget:
+
+- The pinned `apex-run-budget.mjs` and `apex-pr-policy.mjs` from 1d0edc1 were exported to the scratchpad. They were run read-only against live history, with only this run's listing changed to attempt 2.
+- The exact-head history has one Salesforce run, 34846612699, attempt 1. That attempt is counted as `failed-infrastructure`, retryable, because its failed job's verify step is completed and skipped.
+- Old run 34829135270 on e694453 is filtered out by head.
+- Result: `allowed: true`, `kind: infrastructure-retry`, "One infrastructure retry remains for this head and UTC day."
+
+Note 31, non-blocking, a later tripwire change: the confirm step makes four separate `gh api` calls with no retry, so one dropped response fails the run. A reviewed change could fetch and parse the pull request once, with a bounded retry and a clear error. The logout step could skip when `sf` is absent. Do not change the workflow or pin for this retry.
+
+`SAFE TO APPROVE: ONE same-head infrastructure retry of run 34846612699 at bc5affc`, using "Re-run all jobs" with one environment approval. If it fails the same way again, stop and send the log.
+
+`HOLD: PR #9, 0 findings`. This becomes PASS once the hosted run succeeds on this exact head and the gate is green.
