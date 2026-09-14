@@ -6,15 +6,15 @@ C4 model, a publishing implementation or a claim of deployed/namespaced behavior
 See ADRs 0009/0010 for schema choices and ADR 0008 for Bill's unnamespaced-development
 approval. `salesforce/sfdx-project.json` still has an empty namespace.
 
-| Object            | Fields and role                                                                                                                                                      | Access / relationships                                                                                      |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `Folder__c`       | Name, Description                                                                                                                                                    | Private owned root; deleting it clears a form's folder lookup.                                              |
-| `Form__c`         | Name, Status, Description, Folder, Default_Target_Object, Current_Version, Language, Country, Allow_Ad_Hoc_Submissions, GPS_Capture, Close_Message                   | Private owned root; Current_Version must belong to this form.                                               |
-| `Form_Version__c` | Form, Version_Number, Status, XForm, XLSForm, Compiled_At, Compile_Warnings, Published_By, Published_At, Change_Log, derived Version_Key                             | Non-reparentable master-detail to Form; inherits sharing and deletion. Auto-number Name.                    |
-| `Question__c`     | All C4 question fields: tree/identity, labels, Hint, Author_Notes, types/flags, expressions/constraints, repeat/media/prefill/lineage settings; derived Question_Key | Non-reparentable detail of Form Version; Parent is a delete-restricted same-version section/repeat lookup.  |
-| `Choice_List__c`  | Name, Description, optional Owner_Question                                                                                                                           | Private owned root; reusable when owner is null, otherwise immutable inline ownership by a select question. |
-| `Choice__c`       | Choice_List, Value, Label, Order, Filter_Value, Score, derived Choice_Key                                                                                            | Non-reparentable detail of Choice List; exact Value unique within its list.                                 |
-| `Skip_Rule__c`    | Question, Source_Question, Operator, Value, Value_To, Join, Action                                                                                                   | Non-reparentable detail of target Question; distinct, same-version source with restricted deletion.         |
+| Object            | Fields and role                                                                                                                                                      | Access / relationships                                                                                        |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `Folder__c`       | Name, Description                                                                                                                                                    | Private owned root; deleting it clears a form's folder lookup.                                                |
+| `Form__c`         | Name, Status, Description, Folder, Default_Target_Object, Current_Version, Language, Country, Allow_Ad_Hoc_Submissions, GPS_Capture, Close_Message                   | Private owned root; Current_Version must belong to this form.                                                 |
+| `Form_Version__c` | Form, Version_Number, Status, XForm, XLSForm, Compiled_At, Compile_Warnings, Published_By, Published_At, Change_Log, derived Version_Key                             | Non-reparentable master-detail to Form; inherits sharing and deletion. Auto-number Name.                      |
+| `Question__c`     | All C4 question fields: tree/identity, labels, Hint, Author_Notes, types/flags, expressions/constraints, repeat/media/prefill/lineage settings; derived Question_Key | Non-reparentable detail of Form Version; same-version Parent lookup, with Apex protection for direct deletes. |
+| `Choice_List__c`  | Name, Description, optional Owner_Question                                                                                                                           | Private owned root; reusable when owner is null, otherwise immutable inline ownership by a select question.   |
+| `Choice__c`       | Choice_List, Value, Label, Order, Filter_Value, Score, derived Choice_Key                                                                                            | Non-reparentable detail of Choice List; exact Value unique within its list.                                   |
+| `Skip_Rule__c`    | Question, Source_Question, Operator, Value, Value_To, Join, Action                                                                                                   | Non-reparentable detail of target Question; distinct, same-version source with restricted deletion.           |
 
 The table omits custom-field `__c` suffixes for readability. Every object, custom
 field and record-name field has a description in source. Form/version status
@@ -53,6 +53,9 @@ values are positive but not unique; deterministic tie handling is compiler work.
 Use Hint for collector help and Author Notes for author/reviewer annotations.
 The future compiler must omit Author Notes from collector output; this unit tests
 separate storage, not delivery. Stored XPath, regex and scripts are not executed.
+Integration can currently read and edit Author Notes: the compiler/delivery
+allowlist, not FLS, must enforce exclusion and include a regression proving notes
+never reach generated XForms or collector output (note 27).
 See ADR 0010 for field lengths, defaults and publication-time validation gaps.
 
 Tree edits are conservative under partial DML: detach children before changing a
@@ -60,6 +63,17 @@ container's type or reversing edges. A structural error rejects the entire batch
 so successful rows cannot depend on failed ones. Version ownership cannot change.
 Previous Version Question checks another version of the same Form, not chronology
 or lineage cycles; those remain publication/version-lifecycle work.
+
+Question self-lookups cannot use metadata Restrict (Claude finding 26). Their
+metadata leaves Salesforce's default clear behavior. A before-delete guard uses
+one query and no DML to reject a direct Question delete batch when any outside
+question references its Parent, Repeat Source or Previous Version targets. Related
+questions may be deleted together in one trigger batch; partial-DML retries
+recheck the actual remaining batch. Larger deletes may need leaf-first ordering.
+Master-detail cascades from Form/Form Version do not invoke this guard; a Form
+cascade test covers a section/count/repeat/child/skip-rule definition. A cascade
+can clear a surviving successor's lineage lookup. Full lifecycle protection and
+inline-list cleanup are not implemented by this direct-delete guard.
 
 To author inline choices, create the select question with no list, create the list
 with that Owner Question, then set the question's Choice List backlink. Owner
@@ -74,6 +88,9 @@ conditions. Answered takes no operands; other operators need Value, and only
 in_range needs/allows Value To. Join and Action default all/show. Compilation must
 later check operand types, repeat-relative scope, relevance cycles and conflicting
 Join/Action policies, then generate escaped XPath. No relevance is generated now.
+The compiler must explicitly reject a repeat counted from anywhere in its own
+subtree and skip-rule sources that cannot be answered (including section, repeat,
+note and end); current authoring storage does not enforce those semantics (note 28).
 
 ## Access and verification status
 
@@ -90,8 +107,8 @@ View All Records allowlist and its effective-access tests. This PR grants none o
 it. Implement and verify that read policy before any Phase 2 definition reader;
 read-all does not authorize editing administrator-owned definitions.
 
-Synthetic `FormDefinitionModelTest`, `QuestionDefinitionModelTest` and
-`ChoiceAndSkipRuleModelTest` exercise the model invariants; root
+Synthetic `FormDefinitionModelTest`, `QuestionDefinitionModelTest`,
+`QuestionDeletionTest` and `ChoiceAndSkipRuleModelTest` exercise the model invariants; root
 `scripts/form-model.test.mjs` checks the source contract and permissions. Actual
 deployment and Apex behavior require the approved hosted run and independent
 verification. No C10 acceptance test is claimed by this slice.

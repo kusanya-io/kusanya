@@ -11,6 +11,31 @@ public without sharing class QuestionIntegrityHandler {
     );
     private static final String INVALID = 'Question definition is inconsistent. Check names, parent scope, repeat settings and lineage; stage dependent tree changes separately.';
 
+    public static void validateDeletion(Map<Id, Question__c> deleting) {
+        Set<Id> deletingIds = deleting.keySet();
+        // Self-lookups support only Salesforce's default clear behavior. Guard
+        // direct deletes without blocking edges wholly inside this trigger batch.
+        // Parent master-detail cascades do not invoke this child delete trigger.
+        List<Question__c> outsideDependants = [
+            SELECT Id
+            FROM Question__c
+            WHERE
+                Id NOT IN :deletingIds
+                AND (Parent__c IN :deletingIds
+                OR Repeat_Source_Question__c IN :deletingIds
+                OR Previous_Version_Question__c IN :deletingIds)
+            LIMIT 1
+        ];
+        if (!outsideDependants.isEmpty()) {
+            // Fail this batch together; do not disclose hidden dependant records.
+            for (Question__c question : deleting.values()) {
+                question.addError(
+                    'Cannot delete questions referenced by questions outside this delete batch.'
+                );
+            }
+        }
+    }
+
     public static void validateQuestions(
         List<Question__c> incoming,
         Map<Id, Question__c> original

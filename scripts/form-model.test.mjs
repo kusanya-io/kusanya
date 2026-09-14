@@ -192,7 +192,21 @@ test('question tree and inline-choice relationships preserve explicit scope and 
     const xml = fieldXml(object, field);
     assert.equal(tag(xml, 'type'), 'Lookup');
     assert.equal(tag(xml, 'referenceTo'), target);
-    assert.equal(tag(xml, 'deleteConstraint'), 'Restrict');
+    if (object === target) {
+      // Salesforce rejects cascade/restrict metadata on a self-lookup.
+      assert.equal(tag(xml, 'deleteConstraint'), undefined);
+      assert.match(
+        tag(xml, 'description'),
+        /Apex blocks direct Question deletion/,
+      );
+      assert.match(tag(xml, 'description'), /outside the delete batch/);
+      assert.match(
+        tag(xml, 'description'),
+        /Parent cascades bypass that guard/,
+      );
+    } else {
+      assert.equal(tag(xml, 'deleteConstraint'), 'Restrict');
+    }
     assert.equal(tag(xml, 'required'), String(required));
     assert.ok(tag(xml, 'relationshipName'));
   }
@@ -346,6 +360,7 @@ test('new Apex uses local references, responsibility headers and API 64 without 
     'FormDefinitionModelTest',
     'QuestionIntegrityHandler',
     'QuestionDefinitionModelTest',
+    'QuestionDeletionTest',
     'ChoiceDefinitionHandler',
     'SkipRuleDefinitionHandler',
     'ChoiceAndSkipRuleModelTest',
@@ -380,6 +395,10 @@ test('new Apex uses local references, responsibility headers and API 64 without 
       '64.0',
     );
   }
+  const questionTrigger = read('triggers/QuestionIntegrity.trigger');
+  assert.match(questionTrigger, /before delete/);
+  assert.match(questionTrigger, /Trigger\.isDelete/);
+  assert.match(questionTrigger, /Trigger\.oldMap/);
   assert.equal(
     JSON.parse(
       readFileSync(

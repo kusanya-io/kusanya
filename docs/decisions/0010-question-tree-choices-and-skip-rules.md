@@ -28,9 +28,27 @@ repeats are allowed. The later compiler must retain this structure, not flatten
 the enclosing section into the repeat. This is the schema design for C3.6, not
 evidence of correct Collect rendering.
 
-Parent deletion is restricted while children reference it: silently clearing a
-parent would change repeat scope. Repeat-source and previous-version lookups also
-restrict deletion. The Question/Skip Rule detail chain below Form has three
+Finding 26 correction: Claude's real deployment of `e694453` rejected metadata
+`deleteConstraint=Restrict` on all three Question self-lookups. Offline conversion
+did not detect this platform rule. Omit `deleteConstraint` on Parent, Repeat Source
+Question and Previous Version Question, leaving Salesforce's default clear behavior.
+Use a Question before-delete guard for direct deletion instead: one bulk existence
+query checks all three references from questions outside the current trigger batch.
+If any such dependant exists, reject the whole batch with a generic error and no
+internal DML; otherwise references wholly inside the batch do not block deletion.
+No cached delete-ID set is used, so platform partial-DML retries query again against
+their actual batch. A regression covers a child rejected by a native non-self
+lookup restriction while its parent was also submitted for deletion. Operations
+larger than one trigger batch may require explicit leaf-first deletion; the guard
+does not assume later batches will succeed.
+
+Master-detail cascades from Form or Form Version bypass child delete triggers.
+The cascade regression deletes a Form with a section, integer count, from-answer
+repeat, child and skip rule. Cascades can clear self-lookups on surviving records,
+notably successor lineage after deleting an earlier Form Version; the direct-delete
+guard does not promise to protect that path. Non-self lookups retain their native
+Restrict behavior. Full version/publication lifecycle protection remains future work.
+The Question/Skip Rule detail chain below Form has three
 levels, within Salesforce's documented [master-detail relationship limits](https://help.salesforce.com/s/articleView?id=platform.relationships_considerations.htm&language=en_US&type=5).
 Complete draft cascade and published/submission-aware deletion still need a
 lifecycle service; these metadata relationships alone do not implement C3.11.
@@ -43,7 +61,7 @@ a version, not merely among siblings. A before-write trigger replaces supplied
 `Question_Key__c` values with `<18-character version ID>:<Name>` in unique,
 case-sensitive Text(100). It is internal identity, omitted/regenerated on import.
 
-Each Question trigger batch locks its affected Form Versions, reads their complete
+Each Question insert/update trigger batch locks its affected Form Versions, reads their complete
 question graphs and referenced questions, and locks referenced/owned choice lists:
 three fixed SOQL queries and no internal DML. Validation covers same-version
 parents, container types, self-reference, cycles, repeat settings, lineage bounds
@@ -78,6 +96,11 @@ fields. Future compiler/delivery code must explicitly allowlist collector fields
 and exclude Author Notes from XForms and collector-facing output. An author-only
 review view may deliberately include notes. There is no collector delivery path
 yet, so persistence tests do not establish the end-to-end C3.19 guarantee.
+Note 27: Integration currently has read and edit FLS on Author Notes for definition
+authoring/import/export. FLS is therefore not the collector-leak boundary. The
+compiler and delivery units must add synthetic tests proving distinctive author
+notes never occur in generated XForms or any collector response/output, while
+collector Hint remains available. Until those tests pass, C3.19 is not complete.
 
 Narrative content, XPath, regex and validation scripts use LongTextArea(32768).
 Appearance and Prefill Source use Text(255). Numerical bounds use Number(18,6).
@@ -129,6 +152,12 @@ are Text(255), checked for presence only. Type compatibility, lexical conversion
 repeat-relative scope, circular relevance, escaping, range ordering and per-target
 Join/Action combination/conflict checks belong to the compiler. No relevance is
 generated or silently applied, and hand-written Relevant is not rewritten here.
+Note 28 explicitly requires compile-time rejection of a from-answer repeat whose
+count source is anywhere inside its own repeat subtree (including nested sections
+or repeats), and of skip rules sourced from non-answerable nodes such as section,
+repeat, note or end. The model currently accepts these incomplete authoring states;
+the future compiler must reject them with actionable diagnostics and tests before
+it can produce a publishable artifact. They are not supported runtime semantics.
 
 The integrity handlers deliberately run without sharing so hidden definitions
 participate in validation; they are trigger-only helpers, return no definition
@@ -168,7 +197,10 @@ the effective-access tests required before Phase 2 reads any definitions.
 Synthetic Apex tests cover mixed once-only/repeat scopes, trees and invalid/partial
 updates, 200-row batches/deep trees, names/keys, repeat/lineage references, separate
 Hint/Notes, inline ownership, choice uniqueness/deletion, skip-rule references and
-operands. The Form test adds note 25's cross-form Current Version INSERT rejection.
+operands. `QuestionDeletionTest` covers the finding 26 cascade, direct/grouped
+self-reference deletes, partial-DML retry and 200-row query/DML bounds. These
+platform behaviors require real-org evidence; source conversion is insufficient.
+The Form test adds note 25's cross-form Current Version INSERT rejection.
 Source tests check field inventory/descriptions/permissions and local API names;
 service tests exercise both namespace configurations. Deployment, runtime deletion
 behavior and >=85% Apex coverage still require the approved exact-head hosted run

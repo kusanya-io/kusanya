@@ -39,6 +39,10 @@ resolution (note 25). It does not complete C3.6/.19 rendering/delivery guarantee
 ADRs 0010/0011 record scope, lifecycle gaps and note 24's future object-scoped read
 policy. That policy must be implemented and effective-access tested before any
 Phase 2 definition reader; this unit retains private sharing and no View All.
+Finding 26 replaces unsupported self-lookup metadata restrictions with direct-delete
+Apex protection and cascade/grouped-delete regressions. Notes 27/28 require future
+compiler/delivery tests for Author Notes exclusion, rejection of a repeat counted
+from its own subtree, and rejection of non-answerable skip-rule sources.
 
 Next units must deliver mappings, compilation/validation, immutable publication
 and draft deletion behavior, XLSForm round trips, print view and CLI publication.

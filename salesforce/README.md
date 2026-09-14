@@ -13,6 +13,12 @@ Keep once-only questions as siblings of a repeat, not its children; keep author
 annotations in Author Notes, never Hint. Inline lists use question -> owned list
 -> question backlink creation; ownership cannot be reassigned. See the data model
 for the reverse unlink/delete sequence and deferred lifecycle protections.
+The three Question self-lookups omit metadata delete restrictions: Salesforce
+rejects Restrict on self-lookups (finding 26). A before-delete guard protects
+direct Question batches with outside question dependants, using one query and
+no DML. Form/Form Version cascades bypass it; the deletion tests cover that
+platform distinction and partial-DML retries. Source conversion is not a deploy
+test. Full publication/version deletion protection remains deferred.
 
 The unassigned Admin/Integration/Supervisor permission sets cover seven definition
 objects while preserving ordinary sharing and no View All grants. They do not yet
