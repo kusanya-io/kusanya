@@ -478,3 +478,27 @@ Notes, none blocking:
 `SAFE TO APPROVE: run 34758585587 at head 9da8f13`
 
 `HOLD: PR #8, 0 findings, awaiting hosted Apex and the verifier's fresh-org run`
+
+## 2026-09-14: PR #8 verdict, head `9da8f13`
+
+Final evidence for the first Phase 1 unit. Nothing changed since the source and security review of this head: the head, merge ref 4399356, settings and required checks are the same.
+
+| Check                                                                      | Result                                                                                                                                                                                                                                                                                                                                       |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Salesforce run 34758585587, attempt 1, approved by `cobitechsolutions`     | Success on the exact head. Every Apex step succeeded, the fallback cleanup was skipped after success, and the gate passed.                                                                                                                                                                                                                   |
+| Hosted harness evidence                                                    | Tag `kusanya-ci-v1__34758585587-1__9da8f13fdf55__8e6d70ffe3d9`. 10 tests passed, 16 of 16 executable lines (100.00%), 1 owned scratch org deleted and 0 already deleted. The marker shows `passed` for the full head and run 34758585587-1.                                                                                                  |
+| Credential safety                                                          | 950 log lines across three jobs contain no auth URL, token, scratch username or instance host.                                                                                                                                                                                                                                               |
+| Dev Hub audit at 06:54 UTC                                                 | The CI org record is Deleted, and the setup audit trail logged `deleteScratchOrg` for the same org ID at 13:28 UTC on 13 September. No scratch orgs are active.                                                                                                                                                                              |
+| Verifier fresh-org run at 06:55 UTC, own commands on an export of the head | 35 of 35 components deployed. 10 of 10 tests passed: 9 model tests and the Phase 0 smoke test. Coverage was `FormVersionIdentityHandler` 13 of 13, `FormVersionIdentity` 1 of 1 and `KusanyaRuntime` 2 of 2, and the head's coverage gate accepts the raw result. The org is deleted and confirmed Deleted. Capacity went from 5 to 4 daily. |
+| Required checks and public CI                                              | All five checks are green on the head, and the PR is mergeable and clean.                                                                                                                                                                                                                                                                    |
+| Local checks at this head, from the previous entry                         | 154 of 154 root tests in both shells, service lint, typecheck and 21 of 21 tests, format, scaffold, whitespace and offline source conversion.                                                                                                                                                                                                |
+
+Notes:
+
+- Note 23 is closed by evidence. `rejectsNonPositiveAndFractionalVersions` passed in two real scratch orgs, so Salesforce evaluates the validation rule before rounding into the scale-0 `Version_Number__c`. A fractional 1.5 is rejected, not silently saved as 2. The deployed field is precision 9, scale 0 and not nillable.
+- Notes 24 and 25 remain open for later units, and neither blocks this one. The integration user cannot read administrator-created forms while sharing is Private with no view-all, and that must be decided before Phase 2 reads forms. The insert path of `Current_Version_Matches_Form` is untested, and the service name resolver handles only `__c` names.
+- Not proven by this unit: namespaced execution, effective user access from assigned permission sets, publication and lifecycle enforcement, and C10 tests 10 and 12.
+
+`PASS: PR #8 may be merged`
+
+This is a Phase 1 unit, not the Phase 1 gate. Phase 1 still needs question trees, choices, skip rules, mappings, the compiler, XLSForm import and export, the print view and CLI publish, with tests 10 and 12.
