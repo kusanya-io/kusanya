@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Version_Number_Positive_Integer</fullName>
+    <active>true</active>
+    <description>Reject non-positive and fractional version numbers before number-field rounding.</description>
+    <errorConditionFormula>OR(Version_Number__c &lt; 1, MOD(Version_Number__c, 1) &lt;&gt; 0)</errorConditionFormula>
+    <errorDisplayField>Version_Number__c</errorDisplayField>
+    <errorMessage>Version Number must be a positive whole number.</errorMessage>
+</ValidationRule>

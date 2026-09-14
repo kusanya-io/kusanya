@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Version_Key__c</fullName>
+    <caseSensitive>true</caseSensitive>
+    <description>Internal unique identity derived before save from owning Form ID and positive integral Version Number. Caller values are overwritten; not an external integration identifier.</description>
+    <label>Version Key</label>
+    <length>28</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>true</unique>
+</CustomField>

@@ -1,3 +1,8 @@
+import {
+  createSalesforceNames,
+  type SalesforceNames,
+} from './salesforce-names.js';
+
 /** Validated runtime settings; errors name settings without echoing secret values. */
 export interface Config {
   readonly nodeEnv: 'development' | 'test' | 'production';
@@ -9,6 +14,8 @@ export interface Config {
   readonly databaseSsl: boolean;
   readonly databasePoolMax: number;
   readonly databaseTimeoutMs: number;
+  /** Deployment default only; future tenant connections need their own resolver. */
+  readonly salesforceNames: SalesforceNames;
 }
 
 export class ConfigurationError extends Error {
@@ -72,6 +79,14 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const host = env.HOST ?? '127.0.0.1';
   if (!host.trim() || host !== host.trim())
     throw new ConfigurationError('HOST');
+  let salesforceNames: SalesforceNames;
+  try {
+    salesforceNames = createSalesforceNames(
+      env.SALESFORCE_NAMESPACE_PREFIX ?? '',
+    );
+  } catch {
+    throw new ConfigurationError('SALESFORCE_NAMESPACE_PREFIX');
+  }
   return Object.freeze({
     nodeEnv,
     host,
@@ -86,5 +101,6 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseSsl,
     databasePoolMax: integerSetting(env, 'DATABASE_POOL_MAX', 10, 100),
     databaseTimeoutMs: integerSetting(env, 'DATABASE_TIMEOUT_MS', 3000, 30000),
+    salesforceNames,
   });
 }

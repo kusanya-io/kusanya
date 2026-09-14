@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Default_Target_Object__c</fullName>
+    <description>API name of the default Salesforce target object. No target validation or namespace resolution is implemented by this storage field.</description>
+    <label>Default Target Object</label>
+    <length>255</length>
+    <required>false</required>
+    <type>Text</type>
+</CustomField>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Folder__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>Optional organizing folder. Deleting the folder clears this reference without deleting the form.</description>
+    <label>Folder</label>
+    <referenceTo>Folder__c</referenceTo>
+    <relationshipLabel>Forms</relationshipLabel>
+    <relationshipName>Forms</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

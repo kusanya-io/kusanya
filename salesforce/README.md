@@ -1,7 +1,10 @@
-# Salesforce scaffold
+# Salesforce source
 
-Phase 0 contains SFDX source, a Developer scratch definition and a runtime identity
-smoke test. It implements no collection, mapping, authentication or C10 capability.
+Phase 0 supplies the Developer scratch definition and runtime smoke test. The first
+Phase 1 slice adds Folder, Form and Form Version with version identity/validation,
+model-only permission sets and nine synthetic model tests. No collection, mapping,
+authentication, compiler, publishing or C10 capability is claimed. See
+[the data model](../docs/data-model.md) and ADR 0009 for exact limitations.
 
 ## Iterative development only
 
@@ -48,8 +51,9 @@ target. Quota shortage is `BLOCKED` (exit 75), not a test pass or skip. Tests,
 coverage, unknown failures and cleanup errors fail the run. Creation timeouts need
 exact job/tag reconciliation. See the CI runbook for retry and cleanup restrictions.
 
-Pair-acquisition unit tests prepare for C10 test 14; the Phase 0 runner and source
-still implement only the one-org smoke suite. No tenant acceptance test is claimed.
+Pair-acquisition unit tests prepare for C10 test 14. The existing runner deploys
+the complete reviewed source and runs all local Apex tests, including the new
+model tests, in one org. No tenant acceptance test is claimed.
 
 Hosted verification also persists safe ownership intents at the fixed
 `RUNNER_TEMP/kusanya-scratch-intents.json` path before allocation. The trusted
@@ -60,10 +64,15 @@ cleanup and skips this fallback. It is not a manual target-org deletion tool or 
 Pending/unknown requests still need private reconciliation; runner loss can prevent
 the finalizer. See ADR 0006 and `docs/ci.md` for limits and the cleanup contract.
 
-API 64.0 is a conservative metadata baseline. Namespace is empty because package
-format and registration are deferred. The brief's `ksny` prefix remains subject
-to an availability check and ADR; no package Id is claimed. Every Apex class carries
-a responsibility header. The smoke test checks the version and zero SOQL/DML.
+API 64.0 remains the metadata baseline. `ksny` is registered, but Dev Hub linking
+is blocked by the locked connected-app PKCE setting. Bill's Option 2 explicitly
+permits initial Phase 1 source with `"namespace": ""`; no source/configuration
+switch or package creation is authorized here. Apex and metadata use local API
+references without a hard-coded namespace. Empty-namespace Apex and synthetic
+prefix fixtures do not establish namespaced behavior. Once linking works, the
+suite must run namespaced before the next phase gate (ADRs 0006/0008).
+Every Apex class carries a responsibility header. The original smoke test still
+checks runtime version and zero SOQL/DML; model tests use only synthetic data.
 
 CI's `salesforce-verify.yml` automatically requests protected-environment approval
 for same-repository PRs. Configure `salesforce-ci` reviewers, allowed refs and its

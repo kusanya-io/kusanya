@@ -11,7 +11,33 @@ void test('configuration defaults are bounded, immutable, and use verified datab
   assert.equal(config.databaseSsl, true);
   assert.equal(config.databasePoolMax, 10);
   assert.equal(config.databaseTimeoutMs, 3000);
+  assert.equal(config.salesforceNames.namespacePrefix, '');
+  assert.equal(config.salesforceNames.kusanyaObject('Form__c'), 'Form__c');
+  assert.ok(Object.isFrozen(config.salesforceNames));
   assert.ok(Object.isFrozen(config));
+});
+void test('namespace configuration creates independent empty and namespaced resolvers', () => {
+  const unnamespaced = readConfig({
+    ...validEnvironment,
+    SALESFORCE_NAMESPACE_PREFIX: '',
+  });
+  const namespaced = readConfig({
+    ...validEnvironment,
+    SALESFORCE_NAMESPACE_PREFIX: 'ksny__',
+  });
+  assert.equal(namespaced.salesforceNames.namespacePrefix, 'ksny__');
+  assert.equal(
+    namespaced.salesforceNames.kusanyaObject('Form__c'),
+    'ksny__Form__c',
+  );
+  assert.equal(
+    unnamespaced.salesforceNames.kusanyaObject('Form__c'),
+    'Form__c',
+  );
+  assert.equal(
+    namespaced.salesforceNames.targetObject('Site_Survey__c'),
+    'Site_Survey__c',
+  );
 });
 void test('development and test may explicitly disable database TLS', () => {
   for (const nodeEnv of ['development', 'test'])
@@ -53,6 +79,9 @@ void test('invalid configuration fails without reflecting its value', () => {
     ['NODE_ENV', 'secret-value'],
     ['LOG_LEVEL', 'secret-value'],
     ['HOST', ' '],
+    ['SALESFORCE_NAMESPACE_PREFIX', 'secret-value'],
+    ['SALESFORCE_NAMESPACE_PREFIX', 'ksny'],
+    ['SALESFORCE_NAMESPACE_PREFIX', 'ksny__/secret-value'],
   ] as const)
     assert.throws(
       () => readConfig({ ...validEnvironment, [name]: value }),
