@@ -59,6 +59,38 @@ defaults to 10 (maximum 100). `PORT` defaults to 3000 and `LOG_LEVEL` to info.
 Configuration errors name settings without printing their values. Deployed HTTP
 requires the environment's approved TLS ingress.
 
+## Salesforce namespace configuration
+
+`SALESFORCE_NAMESPACE_PREFIX` defaults to empty for Bill's approved unnamespaced
+Phase 1 work. A namespaced connection supplies its API prefix, for example
+`ksny__`; this does not change Salesforce's project namespace or claim a link.
+`readConfig().salesforceNames` exposes an immutable resolver for that deployment
+default. Future tenant connections must each call `createSalesforceNames(prefix)`
+with their own stored configuration; a request header or global default is not
+tenant selection or authorization.
+
+Import the pure helper from `src/salesforce-names.ts` in source, or
+`dist/src/salesforce-names.js` after `npm run build` for a future CLI adapter:
+
+```ts
+const names = createSalesforceNames(configuredPrefix);
+const objectName = names.kusanyaObject('Form__c');
+const parentField = names.kusanyaField('Form__c');
+const customerField = names.targetField(configuredTargetField);
+const restPath = names.apexRestPath(relativeResource);
+```
+
+Only the `kusanya*` methods add the prefix; their inputs must be local `__c` names.
+The `target*` methods validate one API identifier and preserve customer, standard
+or foreign-package names exactly. They are not SOQL builders or permission checks.
+REST accepts literal relative path segments, not URLs, query strings or escapes;
+the namespace becomes a path segment without its trailing `__`. Future CLI
+publish, XForm bindings and mapping adapters must reuse this boundary and keep
+question/XPath names separate from Salesforce names. They are not implemented yet.
+
+Tests use empty and `ksny__` synthetic configurations, malformed inputs and
+interleaved resolvers. They do not contact Salesforce or prove namespaced execution.
+
 The request error handler preserves integer 4xx statuses and returns only
 `{"error":"Request rejected"}`. Other unhandled errors return 500 with
 `{"error":"Internal server error"}`. Error details, request bodies and URLs are

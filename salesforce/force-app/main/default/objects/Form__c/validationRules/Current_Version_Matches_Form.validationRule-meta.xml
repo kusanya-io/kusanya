@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Current_Version_Matches_Form</fullName>
+    <active>true</active>
+    <description>A form cannot select a version owned by a different form.</description>
+    <errorConditionFormula>AND(NOT(ISBLANK(Current_Version__c)), Current_Version__r.Form__c &lt;&gt; Id)</errorConditionFormula>
+    <errorDisplayField>Current_Version__c</errorDisplayField>
+    <errorMessage>Current Version must belong to this form.</errorMessage>
+</ValidationRule>

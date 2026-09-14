@@ -57,8 +57,11 @@ Provision a dedicated CI-only Developer Edition Dev Hub and privately configure
 only its authorization in the protected `salesforce-ci` environment. Builder and
 verifier credentials stay outside CI. Provisioning/authentication require their
 own explicit operator authorization; this ADR does not create accounts or move a
-secret. Namespace registration and multi-hub linking remain a prerequisite to
-namespaced Phase 1 objects and must be checked in the namespace ADR.
+secret. Bill's Option 2 decision on 13 September permits unnamespaced Phase 1
+development while the `ksny` link is blocked. Namespace registration and linking
+to every applicable target Dev Hub are required before any package creation or
+claim of namespaced behavior, not before the first Phase 1 object. ADR 0008 records
+the approval, risk and eventual namespaced verification requirement.
 
 Serialize the credentialed Apex job across all PRs sharing the CI hub, not merely
 per PR. Do not cancel an active scratch lifecycle. GitHub's pending-run replacement
@@ -281,6 +284,25 @@ The builder never approves its own run, publishes a verifier PASS or merges its 
 Harness updates are proposed as immutable source pins and require independent
 security review before their first credentialed execution. Public fixture tests
 can run before that review; they do not confer trust or prove hosted behavior.
+
+### Option 2: unnamespaced development while linking is blocked (13 September)
+
+Bill approved proceeding with `salesforce/sfdx-project.json` retaining an empty
+namespace. Apex, LWC and metadata must use namespace-compatible local references,
+without hard-coded `ksny__` prefixes or org IDs. External Salesforce object/field
+identifiers and Apex REST paths must resolve through explicit namespace
+configuration, with synthetic fixtures for both empty and `ksny__` prefixes.
+Customer-owned target identifiers remain mapping configuration; they must not be
+blindly prefixed as though they belonged to Kusanya.
+
+This amends the previous pre-object linking prerequisite, not the verification
+allocation, approval, retry, trust or cleanup rules. It authorizes neither CI
+changes nor additional scratch orgs, and no PKCE/connected-app change or package
+creation. Unnamespaced Apex and synthetic prefix tests cannot prove namespaced
+behavior. Namespace-only defects may remain undiscovered until the link works.
+As soon as linking is verified, run the applicable suite in a namespaced scratch
+org before the next phase gate, under the normal verification rules. Any necessary
+source-namespace or CI changes still need their separately reviewed PR and approval.
 
 ## Alternatives considered
 

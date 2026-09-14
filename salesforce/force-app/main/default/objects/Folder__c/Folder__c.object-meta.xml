@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Organizes administrator-owned forms and, in a later phase, job templates. Folder access does not grant collector access.</description>
+    <enableActivities>false</enableActivities>
+    <enableFeeds>false</enableFeeds>
+    <enableHistory>false</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <externalSharingModel>Private</externalSharingModel>
+    <label>Folder</label>
+    <nameField>
+        <description>Human-readable folder name; not a stable integration identifier.</description>
+        <label>Folder Name</label>
+        <type>Text</type>
+    </nameField>
+    <pluralLabel>Folders</pluralLabel>
+    <sharingModel>Private</sharingModel>
+</CustomObject>

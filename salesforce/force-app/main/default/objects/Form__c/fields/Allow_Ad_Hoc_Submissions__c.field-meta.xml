@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Allow_Ad_Hoc_Submissions__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>Whether future collection workflows may allow submissions without an assigned task. Defaults off; this schema provides no submission endpoint.</description>
+    <label>Allow Ad Hoc Submissions</label>
+    <type>Checkbox</type>
+</CustomField>
