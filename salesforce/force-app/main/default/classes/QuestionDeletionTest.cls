@@ -31,13 +31,13 @@ private class QuestionDeletionTest {
         Assert.areEqual(4, [SELECT COUNT() FROM Question__c]);
         Assert.areEqual(1, [SELECT COUNT() FROM Skip_Rule__c]);
 
-        // Salesforce cascades the details without firing their before-delete
-        // triggers. The whole definition, including both rule ends, must delete.
+        // The Form trigger deletes only its owned skip rules first. Salesforce
+        // then cascades details without firing their before-delete triggers.
         Integer queriesBefore = Limits.getQueries();
         Integer dmlBefore = Limits.getDmlStatements();
         delete new Form__c(Id = version.Form__c);
-        Assert.areEqual(queriesBefore, Limits.getQueries());
-        Assert.areEqual(dmlBefore + 1, Limits.getDmlStatements());
+        Assert.areEqual(queriesBefore + 1, Limits.getQueries());
+        Assert.areEqual(dmlBefore + 2, Limits.getDmlStatements());
         Assert.areEqual(0, [SELECT COUNT() FROM Form__c]);
         Assert.areEqual(0, [SELECT COUNT() FROM Form_Version__c]);
         Assert.areEqual(0, [SELECT COUNT() FROM Question__c]);

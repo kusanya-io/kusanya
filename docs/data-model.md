@@ -75,6 +75,15 @@ cascade test covers a section/count/repeat/child/skip-rule definition. A cascade
 can clear a surviving successor's lineage lookup. Full lifecycle protection and
 inline-list cleanup are not implemented by this direct-delete guard.
 
+Direct Form and Form Version deletes first remove only skip rules owned by their
+target questions. This uses one query and at most one all-or-none child delete per
+owner trigger batch, retaining native Source Question Restrict for direct question
+deletes. Cleanup rolls back if owner deletion fails; partial retries do not use
+cached IDs. The Form path performs its own cleanup because cascades bypass the
+Version trigger. Inline lists can still block ancestor deletion until explicitly
+unlinked/deleted; publication/submission-aware protection and the complete C3.11
+lifecycle remain deferred. See ADR 0010 for rollback and bulk regression coverage.
+
 To author inline choices, create the select question with no list, create the list
 with that Owner Question, then set the question's Choice List backlink. Owner
 cannot change or be cleared. To delete, clear the backlink, delete the list (and

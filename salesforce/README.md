@@ -20,6 +20,13 @@ no DML. Form/Form Version cascades bypass it; the deletion tests cover that
 platform distinction and partial-DML retries. Source conversion is not a deploy
 test. Full publication/version deletion protection remains deferred.
 
+Form and direct Form Version deletion first remove only their target-owned skip
+rules (one query, at most one all-or-none child delete), then allow the native
+detail cascade. This preserves Source Question Restrict on direct question
+deletion; failed owner deletion must roll back that cleanup. The synthetic owner
+tests cover rollback, partial deletion, sibling isolation and a 200-Form batch.
+Inline-list cleanup and published/submission-aware deletion remain future work.
+
 The unassigned Admin/Integration/Supervisor permission sets cover seven definition
 objects while preserving ordinary sharing and no View All grants. They do not yet
 allow cross-owner definition reads. ADR 0011 records the decision and required
@@ -36,10 +43,14 @@ $env:KUSANYA_DEV_HUB = 'Kusanya-DevHub'
 node scripts/builder-org.mjs status
 ```
 
-ADR 0012 proposes a Windows argument-quoting correction after the reviewed tool
-failed initial discovery. It requires Claude's security review before the changed
-tool is used for acquisition. Windows arguments must not end in a backslash; omit
-a trailing directory separator or use `/`. Workflow and harness pin are unchanged.
+ADR 0012 records Claude's local-tool approval of the Windows argument-quoting
+correction at `e6720e9411a22246ccf005fcd2b61b31d33195dc`
+([PR #9 comment 5664197630](https://github.com/kusanya-io/kusanya/pull/9#issuecomment-5664197630)).
+Approval covers only `builder-org.mjs status`, `acquire` and `release` under Bill's
+one-development-org authorization, not hosted CI approval or finding 26 closure.
+Windows arguments must not end in a backslash; omit a trailing directory separator
+or use `/`. Workflow and harness pin are unchanged. Pre-existing working-directory
+executable discovery remains deferred hardening (Claude note 29; ADR 0012).
 
 `acquire` creates or returns the one owned, seven-day development org; `release`
 deletes only the positively owned org. `status` inspects without allocating. Never

@@ -1,7 +1,15 @@
 /**
- * Responsibility: invoke bulk-safe identity derivation for form version writes.
- * Publication and lifecycle transitions are outside this trigger's responsibility.
+ * Responsibility: derive version identity on writes and clear owned skip rules before direct deletion.
+ * Publication and full lifecycle transitions remain outside this trigger's responsibility.
  */
-trigger FormVersionIdentity on Form_Version__c(before insert, before update) {
-  FormVersionIdentityHandler.assignKeys(Trigger.new);
+trigger FormVersionIdentity on Form_Version__c(
+  before insert,
+  before update,
+  before delete
+) {
+  if (Trigger.isDelete) {
+    DefinitionDeletionHandler.beforeVersionsDelete(Trigger.oldMap.keySet());
+  } else {
+    FormVersionIdentityHandler.assignKeys(Trigger.new);
+  }
 }

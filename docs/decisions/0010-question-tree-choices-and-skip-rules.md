@@ -48,6 +48,37 @@ repeat, child and skip rule. Cascades can clear self-lookups on surviving record
 notably successor lineage after deleting an earlier Form Version; the direct-delete
 guard does not promise to protect that path. Non-self lookups retain their native
 Restrict behavior. Full version/publication lifecycle protection remains future work.
+
+Development diagnosis after the self-lookup correction found a second cascade
+constraint: native Restrict on Skip Rule's Source Question vetoes a whole Form
+delete even when both rule endpoints belong to the deleting definition. Retain
+that native restriction, including its protection for a direct source-question
+delete. Before a direct Form or Form Version delete, `DefinitionDeletionHandler`
+queries only skip rules whose **target** question belongs to those exact owners,
+then deletes that set with one all-or-none DML statement before the detail cascade.
+Each owner trigger invocation uses one query and at most one internal DML;
+the separate Question guard remains one query and no internal DML. Both owner
+entry points are needed because a Form cascade bypasses the Version trigger.
+The handler runs without sharing to match the owning cascade, adds no read API or
+permission grant, caches no processed IDs and catches no failures. It never deletes
+rules merely because their source is in scope. Ancestor failures must roll back
+child cleanup, including partial-DML retries. Tests check executed-cleanup rollback
+with an explicit transaction savepoint, mixed failed/successful Forms and Versions,
+sibling-version isolation and a 200-Form batch. The inline-list native restriction
+rejects the blocked owner before its trigger; that preservation test is not proof
+of a later automation failure after cleanup. No production test hook is added.
+Undelete/Recycle Bin restoration of explicitly removed skip rules is untested and
+not promised as equivalent to native cascade restoration. Ordinary row/DML limits apply;
+no background cleanup or unlimited cascade size is claimed. Inline-list cleanup
+and published/submission-aware protections remain deferred: this is not complete
+C3.11. These contracts still require Claude's independent runtime verification.
+
+Runtime rejection contracts are explicit in tests: direct self-lookups receive
+Salesforce's `CIRCULAR_DEPENDENCY`, while other custom graph rejections retain
+`FIELD_CUSTOM_VALIDATION_EXCEPTION`. Assignment of a persisted Question's
+non-reparentable Form Version field throws `SObjectException` before DML; the test
+requires that exception, zero DML and unchanged stored ownership/key. These test
+corrections do not relax model validation or allow failed writes to persist.
 The Question/Skip Rule detail chain below Form has three
 levels, within Salesforce's documented [master-detail relationship limits](https://help.salesforce.com/s/articleView?id=platform.relationships_considerations.htm&language=en_US&type=5).
 Complete draft cascade and published/submission-aware deletion still need a
@@ -200,6 +231,8 @@ Hint/Notes, inline ownership, choice uniqueness/deletion, skip-rule references a
 operands. `QuestionDeletionTest` covers the finding 26 cascade, direct/grouped
 self-reference deletes, partial-DML retry and 200-row query/DML bounds. These
 platform behaviors require real-org evidence; source conversion is insufficient.
+`DefinitionDeletionTest` checks owner-scoped skip cleanup, rollback, partial
+owner deletion and bulk bounds without claiming the full publication lifecycle.
 The Form test adds note 25's cross-form Current Version INSERT rejection.
 Source tests check field inventory/descriptions/permissions and local API names;
 service tests exercise both namespace configurations. Deployment, runtime deletion

@@ -361,6 +361,8 @@ test('new Apex uses local references, responsibility headers and API 64 without 
     'QuestionIntegrityHandler',
     'QuestionDefinitionModelTest',
     'QuestionDeletionTest',
+    'DefinitionDeletionHandler',
+    'DefinitionDeletionTest',
     'ChoiceDefinitionHandler',
     'SkipRuleDefinitionHandler',
     'ChoiceAndSkipRuleModelTest',
@@ -379,6 +381,7 @@ test('new Apex uses local references, responsibility headers and API 64 without 
   }
   for (const name of [
     'FormVersionIdentity',
+    'FormDefinitionDeletion',
     'QuestionIntegrity',
     'ChoiceIdentity',
     'ChoiceListIntegrity',

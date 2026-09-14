@@ -1,6 +1,6 @@
 # ADR 0012: Preserve validated Windows Salesforce CLI arguments
 
-- Status: Proposed for Claude security review; Bill approved preparation only
+- Status: Approved for local builder status/acquire/release only, under Bill's one-development-org authorization
 - Date: 2026-09-14
 - Brief sections: C8, C11 Phase 1 verification, C12; ADR 0006
 - Decision owner: Cobitech Solutions
@@ -21,13 +21,16 @@ previous unit tests injected a fake `spawn` instead of crossing the real Windows
 process boundary. Linux directly spawns `sf` and does not take this branch.
 
 Bill approved preparing the minimal launcher correction for Claude's explicit
-security review before another acquisition attempt. This approval does not allow
-credentialed execution of the changed tool yet, acquisition before that review,
-CI workflow or harness pin change, authentication/security setting change, or
-package creation. Bill's one-development-org authorization remains the limit
-after the changed launcher is reviewed.
+security review before another acquisition attempt. Claude subsequently reviewed
+the exact local candidate `e6720e9411a22246ccf005fcd2b61b31d33195dc` and returned
+SAFE TO USE LOCAL BUILDER TOOL for `builder-org.mjs status`, `acquire` and `release`
+in [PR #9 comment 5664197630](https://github.com/kusanya-io/kusanya/pull/9#issuecomment-5664197630).
+That clearance is limited to Bill's one-development-org authorization; it is not
+approval of a CI run, finding 26 closure or merge. It does not authorize a CI
+workflow or harness pin change, authentication/security setting change, package
+creation or another org.
 
-## Proposed decision
+## Decision
 
 Set `windowsVerbatimArguments: platform === 'win32'` on the existing `spawnSync`
 call. Windows already receives manually quoted arguments; disable Node's second
@@ -61,6 +64,10 @@ Executable discovery still relies on trusted working directories and PATH. This
 fix does not harden that pre-existing assumption or authorize substituting a real
 Salesforce launcher. Test fixtures intentionally supply an isolated fake launcher
 and do not inherit Salesforce authentication or invoke the installed CLI.
+Claude note 29 records that `cmd.exe` searches the working directory for `sf`
+before PATH. Setting `NoDefaultCurrentDirectoryInExePath=1` in the client
+environment or using an absolute `sf` path is deferred hardening, not implemented
+or authorized by this correction.
 
 ## Alternatives considered
 
@@ -89,10 +96,10 @@ real-process cases explicitly skip; the platform-neutral contract tests still ru
 Linux public CI success is not proof of Windows process behavior. No fixture
 allocates an org, performs authentication, or uses customer/collector data.
 
-This proposal is not proof that finding 26 is fixed in Salesforce. After Claude
-reviews the launcher, use only the reviewed builder tool under Bill's one-org
-authorization, deploy/test the model there, and release it according to Bill's
-instruction. Development output is never verification evidence. Claude's fresh
+The local-tool approval is not proof that finding 26 is fixed in Salesforce. Use
+only the reviewed builder tool under Bill's one-org authorization, deploy/test the
+model there, and release it according to Bill's instruction. Development output
+is never verification evidence. Claude's fresh
 deployment/deletion probes and the approved exact-head hosted run remain required
 before merge. No C10 acceptance test is claimed by this launcher correction.
 

@@ -206,7 +206,14 @@ private class QuestionDefinitionModelTest {
             )
         );
         self.Parent__c = self.Id;
-        assertRejected(Database.update(self, false));
+        // Salesforce rejects a direct self-lookup before the custom guard.
+        assertRejected(
+            Database.update(self, false),
+            StatusCode.CIRCULAR_DEPENDENCY
+        );
+        Assert.isNull(
+            [SELECT Parent__c FROM Question__c WHERE Id = :self.Id].Parent__c
+        );
     }
 
     @IsTest
@@ -428,7 +435,17 @@ private class QuestionDefinitionModelTest {
         repeat.Repeat_Source_Question__c = foreign.Id;
         assertRejected(Database.update(repeat, false));
         repeat.Repeat_Source_Question__c = repeat.Id;
-        assertRejected(Database.update(repeat, false));
+        assertRejected(
+            Database.update(repeat, false),
+            StatusCode.CIRCULAR_DEPENDENCY
+        );
+        Question__c unchangedRepeat = [
+            SELECT Repeat_Mode__c, Repeat_Source_Question__c
+            FROM Question__c
+            WHERE Id = :repeat.Id
+        ];
+        Assert.areEqual('open', unchangedRepeat.Repeat_Mode__c);
+        Assert.isNull(unchangedRepeat.Repeat_Source_Question__c);
         repeat.Repeat_Source_Question__c = count.Id;
         update repeat;
         count.Type__c = 'decimal';
@@ -465,7 +482,19 @@ private class QuestionDefinitionModelTest {
         current.Previous_Version_Question__c = foreignQuestion.Id;
         assertRejected(Database.update(current, false));
         current.Previous_Version_Question__c = current.Id;
-        assertRejected(Database.update(current, false));
+        assertRejected(
+            Database.update(current, false),
+            StatusCode.CIRCULAR_DEPENDENCY
+        );
+        Assert.areEqual(
+            previous.Id,
+            [
+                SELECT Previous_Version_Question__c
+                FROM Question__c
+                WHERE Id = :current.Id
+            ]
+            .Previous_Version_Question__c
+        );
         Question__c sibling = question(second.Id, 'sibling', 'text', 2);
         insert sibling;
         current.Previous_Version_Question__c = sibling.Id;
@@ -489,8 +518,35 @@ private class QuestionDefinitionModelTest {
         insert second;
         Question__c definition = question(first.Id, 'question', 'text', 1);
         insert definition;
-        definition.Form_Version__c = second.Id;
-        Assert.isFalse(Database.update(definition, false).isSuccess());
+        Integer dmlBefore = Limits.getDmlStatements();
+        Boolean rejected = false;
+        try {
+            // Non-reparentable master-detail ownership is enforced by the
+            // platform at assignment on this persisted record, before DML.
+            definition.Form_Version__c = second.Id;
+        } catch (SObjectException error) {
+            rejected = true;
+            Assert.isTrue(
+                error.getMessage().startsWith('Field is not writeable: ')
+            );
+            // Keep the assertion valid with either local or namespaced names.
+            Assert.isTrue(error.getMessage().endsWith('Form_Version__c'));
+        }
+        Assert.isTrue(
+            rejected,
+            'Persisted definition ownership must be immutable'
+        );
+        Assert.areEqual(dmlBefore, Limits.getDmlStatements());
+        Question__c unchanged = [
+            SELECT Form_Version__c, Question_Key__c
+            FROM Question__c
+            WHERE Id = :definition.Id
+        ];
+        Assert.areEqual(first.Id, unchanged.Form_Version__c);
+        Assert.areEqual(
+            String.valueOf(first.Id) + ':question',
+            unchanged.Question_Key__c
+        );
     }
 
     @IsTest
@@ -692,13 +748,17 @@ private class QuestionDefinitionModelTest {
     }
 
     private static void assertRejected(Database.SaveResult result) {
+        assertRejected(result, StatusCode.FIELD_CUSTOM_VALIDATION_EXCEPTION);
+    }
+
+    private static void assertRejected(
+        Database.SaveResult result,
+        StatusCode expectedStatus
+    ) {
         Assert.isFalse(
             result.isSuccess(),
             'Invalid synthetic definition must not persist'
         );
-        Assert.areEqual(
-            StatusCode.FIELD_CUSTOM_VALIDATION_EXCEPTION,
-            result.getErrors()[0].getStatusCode()
-        );
+        Assert.areEqual(expectedStatus, result.getErrors()[0].getStatusCode());
     }
 }
