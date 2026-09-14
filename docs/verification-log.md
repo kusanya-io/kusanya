@@ -404,3 +404,300 @@ Issue #5 may close when PR #6 merges.
 - Still not proven live: fallback recovery after a failed or cancelled verification, the pre-verification retry exceptions, and the authentication diagnostic labels. Runner loss and remote requests that outlive their CLI process still need private reconciliation. The daily reset time is unconfirmed, and the CI-only Dev Hub is not provisioned.
 - This branch, PR #4, was brought up to date with `main` by a merge commit, keeping every entry. It changes only this file, so its Salesforce gate uses the approved documentation exemption, with no approval and no scratch org.
 - Still due before Phase 1: the `ksny` namespace availability check and its ADR, and Bill's confirmation or revision of the Apache-2.0 service licence in ADR 0002.
+
+## 2026-09-11: Read-only diagnosis of the ksny namespace-link failure
+
+Scope: the builder's request to confirm the `ksny` registration and the absent Dev Hub link, and to diagnose the Link Namespace error `invalid_request: missing required code challenge`. There is no pull request yet; the builder's branch `docs/service-licence-confirmation` is unpushed at acbd7b2. No settings, connected apps, credentials, scratch orgs, CI or support cases were touched.
+
+Confirmed read-only at 19:23 UTC:
+
+- The holder org 00Dbm00000yxbH7EAI, under local alias `Kusanya-Namespace`, is a Developer Edition, non-sandbox org on USA876 with `NamespacePrefix = ksny`.
+- The Dev Hub 00Dbm00000yeiz3EAA has zero `NamespaceRegistry` rows for any prefix, so the link is absent.
+- Both orgs' `OauthOidc` settings metadata show `isPkceRequired = false`, so the org-wide PKCE requirement is off in each.
+- The Dev Hub has exactly one connected application, "SalesforceDX Namespace Registry". Automated Process created it at 11:30 UTC on 10 September, when Dev Hub was enabled. It is not listed as retrievable `ConnectedApp` metadata, and its standard fields expose no PKCE setting. No external client apps exist.
+- `NamespaceRegistry.NamespaceOrg` is not createable through the API, so no API path exists to write a link.
+
+Diagnosis:
+
+- The error arrives before any namespace-org sign-in, so neither org's policy can apply yet. The requirement must come from the connected app named in the popup's request.
+- With org-wide PKCE off in both orgs, the likely cause is that the Dev Hub's automatically created "SalesforceDX Namespace Registry" app requires PKCE while the Salesforce-generated Environment Hub flow sends no code challenge. That makes it a Salesforce-side incompatibility.
+- The app's PKCE flag is not readable by API, so this is an inference until Bill views the app's OAuth settings.
+- Salesforce's Known Issue a028c00000qQ0CBAA0 confirms Link Namespace depends on a Dev Hub connected app with callback `/environmenthub/soma-callback.apexp`. Its workaround creates such an app, which is outside the approved scope. In 2026 that is also constrained by connected-app creation and security changes.
+- A third-party article suggests unticking PKCE on the app. That is not a Salesforce-supported remedy, and it is the change the approval forbids.
+
+Recommendation: Bill views the app's OAuth settings read-only, then Salesforce Support is asked for a supported fix. Any change to the app's PKCE flag, or the Known Issue workaround, needs Bill's separate approval and verifier review before and after. The drafted support request was given to Bill and not sent.
+
+No verdict applies. Linking stays incomplete, and ADR 0008's Phase 1 prerequisite is still open.
+
+## 2026-09-13: Option 1 stopped; Namespace Registry app PKCE is locked by Salesforce
+
+Bill approved one temporary PKCE change on the Dev Hub's "SalesforceDX Namespace Registry" app to link `ksny`. The approval required stopping without any change if the control was unticked or not editable. The verifier recorded a read-only baseline at 12:09:45 UTC first.
+
+Builder report, recorded locally in ADR 0008 at 9bb1f65, not pushed:
+
+- On the app's Edit form, PKCE was checked and disabled, with the text "To change this required setting, contact Support."
+- Edit was cancelled without saving, so no window started and no link was attempted.
+- The builder also opened the app's Delete confirmation by mistake and cancelled it.
+
+Verifier check, read-only, at 12:44:49 UTC:
+
+- Both org identities match the approval: Dev Hub 00Dbm00000yeiz3EAA, and holder 00Dbm00000yxbH7EAI with `NamespacePrefix = ksny`.
+- `NamespaceRegistry` still has 0 rows, the same as the baseline.
+- The Dev Hub still has exactly one connected application, "SalesforceDX Namespace Registry". Its `LastModifiedDate` is unchanged from the baseline, 2026-09-10T11:30:21Z by Automated Process, so it was neither saved nor deleted.
+- The setup audit trail has no entries after 17:07 UTC on 11 September, so no setting was saved.
+- The org-wide `isPkceRequired` is still false.
+
+Conclusion:
+
+- The app-level PKCE requirement is now directly observed. Salesforce has made it a required setting that only Support can change, so the earlier diagnosis is confirmed.
+- The Link Namespace flow cannot succeed from this org without Salesforce. No admin-side workaround remains within the approved security boundaries.
+- The two routes left are a Salesforce Support request, and Option 2: continue Phase 1 without a namespace and link before any package is created.
+- Option 2 needs Bill's approval and amendments to ADR 0006 and ADR 0008.
+- Linking stays incomplete, and no verdict applies.
+
+## 2026-09-13: Source and security review of PR #8 head `9da8f13` before approving run 34758585587
+
+Scope: the first Phase 1 unit. It adds Folder, Form and Form Version metadata, a version-identity trigger, three model-only permission sets, and the service's Salesforce name resolver, plus ADRs 0002, 0006, 0008 and 0009. This is a source and security review before Bill approves Apex, not the phase gate. No scratch org was created.
+
+What was checked:
+
+- Identity and trust boundary. The merge ref 4399356 matches the head. No workflow changed. The only new `scripts/` file is a public-CI source test, and the credentialed harness stays pinned at 1d0edc1. PR metadata and Apex run only inside the scratch org, contain no callouts, and never reach the runner's Dev Hub session. `sfdx-project.json` and the scratch definition are unchanged, with an empty namespace.
+- Brief C4. Every listed Form and Form_Version field is present, and Folder is added. Every object, field and name field has a description. No `ksny__` prefix or org ID appears in the source.
+- Model. Form and Folder are private roots. Form_Version is a non-reparentable master-detail to Form. Current_Version and Folder lookups clear on delete. Version_Key (Text 28, unique, case-sensitive) is derived in a before trigger with no queries or DML, and a caller-supplied key is overwritten. Validation rules reject a non-positive or fractional version number, and a current version from another form.
+- Permission sets. Admin has create, read, edit and delete; Integration has create, read and edit; Supervisor has read only. None has view-all or modify-all, user or setup permissions, or class, tab or app access, and none is assigned. The derived key is read-only.
+- Service. `createSalesforceNames` prefixes only Kusanya-owned `__c` names. It preserves standard, customer and foreign-package names byte for byte, builds namespaced Apex REST paths, and rejects traversal, query and injection input. The deployment default does not select a tenant.
+- Tests at the head: 154 of 154 root tests in Git Bash and PowerShell; service lint, typecheck and 21 of 21 tests; format, scaffold and whitespace checks; offline source conversion. Public CI 34758585542 is green.
+- Settings are unchanged. Dev Hub capacity at 13:07 UTC was 3 of 3 active and 6 of 6 daily.
+
+Notes, none blocking:
+
+- Note 23. The fractional-version rule assumes Salesforce evaluates the validation rule before rounding the scale-0 `Version_Number__c`. Only the hosted Apex run can show this. If Salesforce rounds first, `rejectsNonPositiveAndFractionalVersions` fails, and 1.5 would save as 2. The fix would then be a non-zero scale with the whole-number rule.
+- Note 24. Form and Folder are private, and Integration and Supervisor have no view-all. The integration user will not read forms that administrators create, and supervisors will see only their own. Decide the sharing model or the permission-set grants before Phase 2 reads forms.
+- Note 25. `Current_Version_Matches_Form` is tested on update but not on insert. The resolver handles only `__c`; relationship (`__r`) and other suffixes will be needed later, as ADR 0009 acknowledges.
+
+`SAFE TO APPROVE: run 34758585587 at head 9da8f13`
+
+`HOLD: PR #8, 0 findings, awaiting hosted Apex and the verifier's fresh-org run`
+
+## 2026-09-14: PR #8 verdict, head `9da8f13`
+
+Final evidence for the first Phase 1 unit. Nothing changed since the source and security review of this head: the head, merge ref 4399356, settings and required checks are the same.
+
+| Check                                                                      | Result                                                                                                                                                                                                                                                                                                                                       |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Salesforce run 34758585587, attempt 1, approved by `cobitechsolutions`     | Success on the exact head. Every Apex step succeeded, the fallback cleanup was skipped after success, and the gate passed.                                                                                                                                                                                                                   |
+| Hosted harness evidence                                                    | Tag `kusanya-ci-v1__34758585587-1__9da8f13fdf55__8e6d70ffe3d9`. 10 tests passed, 16 of 16 executable lines (100.00%), 1 owned scratch org deleted and 0 already deleted. The marker shows `passed` for the full head and run 34758585587-1.                                                                                                  |
+| Credential safety                                                          | 950 log lines across three jobs contain no auth URL, token, scratch username or instance host.                                                                                                                                                                                                                                               |
+| Dev Hub audit at 06:54 UTC                                                 | The CI org record is Deleted, and the setup audit trail logged `deleteScratchOrg` for the same org ID at 13:28 UTC on 13 September. No scratch orgs are active.                                                                                                                                                                              |
+| Verifier fresh-org run at 06:55 UTC, own commands on an export of the head | 35 of 35 components deployed. 10 of 10 tests passed: 9 model tests and the Phase 0 smoke test. Coverage was `FormVersionIdentityHandler` 13 of 13, `FormVersionIdentity` 1 of 1 and `KusanyaRuntime` 2 of 2, and the head's coverage gate accepts the raw result. The org is deleted and confirmed Deleted. Capacity went from 5 to 4 daily. |
+| Required checks and public CI                                              | All five checks are green on the head, and the PR is mergeable and clean.                                                                                                                                                                                                                                                                    |
+| Local checks at this head, from the previous entry                         | 154 of 154 root tests in both shells, service lint, typecheck and 21 of 21 tests, format, scaffold, whitespace and offline source conversion.                                                                                                                                                                                                |
+
+Notes:
+
+- Note 23 is closed by evidence. `rejectsNonPositiveAndFractionalVersions` passed in two real scratch orgs, so Salesforce evaluates the validation rule before rounding into the scale-0 `Version_Number__c`. A fractional 1.5 is rejected, not silently saved as 2. The deployed field is precision 9, scale 0 and not nillable.
+- Notes 24 and 25 remain open for later units, and neither blocks this one. The integration user cannot read administrator-created forms while sharing is Private with no view-all, and that must be decided before Phase 2 reads forms. The insert path of `Current_Version_Matches_Form` is untested, and the service name resolver handles only `__c` names.
+- Not proven by this unit: namespaced execution, effective user access from assigned permission sets, publication and lifecycle enforcement, and C10 tests 10 and 12.
+
+`PASS: PR #8 may be merged`
+
+This is a Phase 1 unit, not the Phase 1 gate. Phase 1 still needs question trees, choices, skip rules, mappings, the compiler, XLSForm import and export, the print view and CLI publish, with tests 10 and 12.
+
+## 2026-09-14: PR #8 merged
+
+- PR #8 was squash-merged by `cobitechsolutions` at 08:32 UTC as e97882d. The merged tree is identical to the verified head 9da8f13, so the PASS in review 5194796568 applies to `main`'s content.
+- This branch, PR #7, was brought up to date with `main` by a merge commit, keeping every entry. It still changes only this file, so its Salesforce gate uses the documentation exemption.
+- Still open: notes 24 and 25 for later Phase 1 units, the `ksny` Dev Hub link through Salesforce Support, a namespaced suite run once linking works, and C10 tests 10 and 12.
+
+## 2026-09-14: Source and security review of PR #9 head `e694453`; deployment blocker
+
+Scope: the question-tree unit, covering Question, Choice List, Choice and Skip Rule, four integrity handlers and triggers, permission-set extensions, the `__r` name resolver, and ADRs 0010 and 0011. The review was requested before Bill approves Salesforce run 34829135270.
+
+What passed locally and in source review:
+
+- Trust boundary. No workflow changed; the only script change is the public-CI source test. The harness is still pinned at 1d0edc1, and the project and scratch definitions are unchanged. The merge ref 68ebfc6 matches the head.
+- Tests at the head: 157 of 157 root tests in Git Bash and PowerShell; service lint, typecheck and 24 of 24 tests; format, scaffold and whitespace checks; offline conversion to 105 components. Public CI 34829135322 is green.
+- Source. All C4 fields are present, with descriptions and restricted picklists. Tree validation checks old and new parent edges, detects cycles, and uses three bounded queries with no DML of its own. The trigger-only `without sharing` handlers return no data. The three permission sets cover the seven objects with no view-all, modify-all or other grant types. ADR 0011 correctly defers cross-owner reads to a separately tested change. The resolver adds bounded `kusanyaRelationship` and `targetRelationship` methods.
+- Capacity and settings were unchanged before the verifier run.
+
+Verifier fresh-org run, 09:51 UTC, on an export of the exact head:
+
+- Deployment failed: 96 of 166 components succeeded and 70 failed. Salesforce rejected `Question__c.Parent__c`, `Question__c.Repeat_Source_Question__c` and `Question__c.Previous_Version_Question__c` with "Cannot add a self-lookup relationship child with cascade or restrict options to the object itself". Each field declares `<deleteConstraint>Restrict</deleteConstraint>` on a Question-to-Question lookup. Everything referencing those fields then failed to compile: `QuestionIntegrityHandler`, the `QuestionIntegrity` trigger, `QuestionDefinitionModelTest`, and all three permission sets.
+- No Apex test or deletion probe ran. The org was deleted and confirmed Deleted, no scratch orgs are active, and daily capacity went from 6 to 5.
+- Local checks and offline source conversion cannot detect this platform rule; only a real deployment does.
+
+Findings:
+
+- Finding 26, blocker. PR #9 does not deploy.
+  - A self-lookup cannot use Restrict. Salesforce allows only Clear (SetNull), which is the default.
+  - To keep ADR 0010's intent that deleting a parent must not silently change repeat scope, remove the delete constraints from the three self-lookups. Enforce the protection in a `before delete` trigger on Question instead.
+  - That trigger refuses deleting a question still referenced as Parent, Repeat Source or Previous Version by a question outside the same delete operation.
+  - Master-detail cascade deletes of a Form or Form Version do not fire child delete triggers. Confirm this with a test that deletes a Form containing a section, repeat, child and skip rule.
+  - Add tests for direct deletion of a referenced parent, for deleting a parent together with its children, and for the other two references.
+  - Re-run a real deployment before requesting review.
+- Note 27. The integration user can read and edit `Author_Notes__c`. That is plausible for future XLSForm import and export, so C3.19 will rest entirely on the compiler and delivery allowlist, which must be tested there.
+- Note 28. Two things are accepted, and are compiler-time checks only: a repeat whose count source sits inside the same repeat, and a skip rule sourced from a non-answerable question such as a section. The deletion and edge-case probes will be re-run on the fixed head.
+
+`HOLD: run 34829135270 at head e694453`. Do not approve: it would fail at deployment, consume a scratch org, and leave that head non-retryable.
+
+`HOLD: PR #9, 1 finding` (26)
+
+## 2026-09-14: Local security review of the Windows Salesforce launcher, PR #9 local candidate `e6720e9`
+
+Scope: the builder's unpushed candidate e6720e9, whose parent is acbad1d on top of published head e694453. This is a local tool review before Bill's one authorized development org is used. It is not a CI approval, a closure of finding 26, or a merge verdict.
+
+Context: `node scripts/builder-org.mjs acquire` failed on Windows during read-only discovery, before any allocation. Node escaped the client's already-quoted `cmd.exe` arguments a second time.
+
+What changed: `scripts/salesforce-client.mjs` now sets `windowsVerbatimArguments` on Windows only, and additionally rejects Windows arguments that end in a backslash. There are new real-process tests with a fake `sf.cmd` and a capture fixture, plus ADR 0012 and a README note. The CI workflow, guards, lifecycle and the harness pin 1d0edc1 are unchanged.
+
+What was checked:
+
+- Identity. The builder clone head is e6720e9 with a clean working tree and parent acbad1d. The only changed `scripts/` files are the client, its tests, the two fixture files and the form-model test. The workflow still pins 1d0edc1 twice.
+- Quoting. The command line is now `cmd.exe /d /s /c sf "arg" ...`. Because the text after `/c` does not start with a quote, `/s` strips nothing. Inside quotes, `& | < > ^ ( )` are literal. Quotes, `%`, `!`, control characters and now trailing backslashes are rejected before any process starts, so an argument cannot close its quote or smuggle an argument into `sf.cmd`'s parser. The Linux path is unchanged, and the option is ignored there.
+- Fixtures. The fake `sf.cmd` only forwards arguments to `capture-argv.mjs`, which uses no Salesforce modules, authentication, files or network. The tests pass a minimal environment (`SystemRoot`, a fixture-first `PATH`, `PATHEXT`, the Node path), so neither the installed CLI nor any credential is reachable.
+- Tests in a verifier-owned worktree at e6720e9, later removed: client subset 10 of 10 and all root tests 161 of 161, in both Git Bash and PowerShell; service lint, typecheck and 24 of 24 tests; Prettier and the scaffold check. The negative control confirms the old quoting fails through real `cmd.exe`.
+
+Note 29, pre-existing and not blocking: on Windows, `cmd.exe` searches the working directory for `sf` before `PATH`, as ADR 0012 acknowledges. The client runs from repository folders, so a committed `sf.cmd` there would run with local builder authentication. Acceptable for the builder's own trusted checkout. Harden later by setting `NoDefaultCurrentDirectoryInExePath=1` in the client environment, or by resolving an absolute `sf` path outside the repository.
+
+Operational: run 34829135270 on the published head was still waiting at 12:44 UTC and was not cancelled. It must be cancelled, not approved.
+
+`SAFE TO USE LOCAL BUILDER TOOL: e6720e9`, for `builder-org.mjs` status, acquire and release under Bill's one-org authorization only. Development output is not verification evidence.
+
+`HOLD: PR #9, 1 finding` (finding 26 stays open until the pushed head deploys in the verifier's fresh org and passes its tests and deletion probes).
+
+## 2026-09-14: Re-verification of PR #9 head `bc5affc`; finding 26 closed
+
+Scope: the finding 26 fix (acbad1d), the Windows launcher already cleared at e6720e9, and bc5affc, which adds owner-scoped skip-rule cleanup before Form and Form Version deletion. Requested before Bill approves hosted run 34846612699.
+
+Trust boundary and identity:
+
+- The PR head is bc5affc. No workflow changed, and the harness pin 1d0edc1 appears twice as before. The project and scratch definitions are unchanged. Since e6720e9, the only script change adds two class names to `scripts/form-model.test.mjs`.
+- Codex's development org `kusanya-builder-v1`, created at 12:50 UTC, shows Deleted. No scratch org was active before the verifier run.
+
+Source review:
+
+- The three Question self-lookups no longer declare `deleteConstraint`.
+- The `QuestionIntegrity` before-delete guard uses one query with `LIMIT 1` and no DML. It rejects the whole batch with a generic message when any question outside the batch references a deleted question as Parent, Repeat Source or Previous Version.
+- `DefinitionDeletionHandler` is without sharing, holds no state, and is called only from the Form and Form Version before-delete triggers. Each call queries skip rules whose target question belongs to those exact owners and deletes them in one all-or-none statement. The platform checks delete access on the owners before the trigger runs. Source Question's native Restrict is kept.
+- `SkipRuleDefinitionHandler` requires the source and target to share a version, so an owner's cleanup covers every rule sourced in that owner.
+- Test corrections: `CIRCULAR_DEPENDENCY` for direct self-lookups, and an `SObjectException` on assignment for the non-reparentable Form Version. Both still assert that nothing changed.
+- ADR 0010, the data model, the roadmap and the README record notes 27, 28 and 29 and the remaining gaps.
+
+Local, in a verifier-owned detached worktree of bc5affc (removed afterwards):
+
+- Root tests: 161 of 161.
+- Service: lint, typecheck, and 24 of 24 tests.
+- Prettier, run with the repository's own dependencies, and the scaffold check: both clean.
+- Public CI 34846612683 is green.
+
+Verifier fresh org `kusanya-verifier-v1__claude-pr9__bc5affcd0f62`, created 13:14 UTC from the head's own scratch definition:
+
+- Deployment: Succeeded, 109 of 109 components, 0 errors.
+- `RunLocalTests` with coverage: Passed, 51 of 51.
+  - QuestionDefinitionModelTest 17, ChoiceAndSkipRuleModelTest 10, FormDefinitionModelTest 10, QuestionDeletionTest 7, DefinitionDeletionTest 6, KusanyaRuntimeTest 1.
+  - Org-wide coverage 99%. Every class and trigger is at 100%, except ChoiceDefinitionHandler at 98%.
+- Probes: anonymous Apex, synthetic data, each probe rolled back, 0 rows left. `Kusanya_Admin` was assigned to the scratch admin so anonymous Apex could compile against field access.
+  - P1. A whole Form deletes: a section, an integer count, a from_answer repeat, a child, two skip rules and Current Version set. 0 questions and 0 rules remain.
+  - P2. Deleting a lineage predecessor directly is refused with the generic guard message. Deleting version 1 succeeds, clears the surviving successor's lineage lookup as documented, and keeps version 2's own rule.
+  - P3. A cross-version skip rule is refused on insert and on update.
+  - P4. Deleting a skip source directly is refused by the native Restrict. Deleting the target cascades its rule, and the source then deletes.
+  - P5. An inline list blocks Form deletion with `DELETE_FAILED`, as documented. After unlinking and deleting the list, the Form deletes.
+  - P6. Choice values are trimmed on save. `a ` and ` a` are duplicates of `a`, `A` is distinct, and a single space is refused as required-missing.
+  - P7. Note 28: a repeat counted from its own child, and a section as a skip source, are both still accepted, as documented.
+  - P8. Undeleting a deleted Form restores the version and both questions, but 0 of its skip rules.
+  - P9. Undeleting only a child from a deleted parent-and-child group restores the child with Parent cleared.
+  - P10. The guard message does not name or identify the dependant record.
+- Cleanup: the org was deleted and shows Deleted, with 0 active. Daily capacity went from 4 to 3 of 6.
+
+Finding 26 is closed: the head deploys, and the deletion design behaves as ADR 0010 describes in a real org.
+
+Note 30, non-blocking, for the lifecycle unit:
+
+- Recycle Bin restoration is unsafe for definitions. An undeleted Form comes back without its skip rules (P8). An undeleted child can come back outside its repeat (P9).
+- The lifecycle service should either restore what was removed or refuse the restore, with a test.
+- ADR 0010 should record this as observed behaviour rather than "untested".
+
+Operational:
+
+- Run 34829135270 on e694453 is still waiting.
+- Run 34846612699 on bc5affc is pending behind it on the global Apex concurrency slot.
+- Cancel the old run first, then approve the new one.
+
+`SAFE TO APPROVE: run 34846612699 at head bc5affc`, after run 34829135270 is cancelled.
+
+`HOLD: PR #9, 0 findings`. This becomes PASS once the hosted run succeeds on this exact head and the gate is green.
+
+## 2026-09-14: Read-only diagnosis of run 34846612699 attempt 1 and retry clearance, PR #9 head `bc5affc`
+
+Scope: Bill rejected run 34829135270 and approved run 34846612699, which failed. This is a read-only diagnosis. No scratch org, container run, rerun, approval or secret change was made.
+
+Evidence:
+
+- The Apex job 103984075830 ran from 13:48:14 to 13:48:28 UTC. The step "Confirm reviewed commit and trusted workflow" printed `Verifying PR 9 at head bc5affc…`, then after about 11.5 seconds printed `unexpected end of JSON input` and exited 1.
+- That text is what `gh api --jq` prints when a response body is empty or cut off. It came from one of the step's four separate pull request lookups. The guard's own mismatch message was not printed.
+- The token permissions were Actions, Contents, Metadata and PullRequests, all read.
+- The same step passed on every earlier executed Apex run: 34523564584, 34619677398, 34623685881 and 34758585587. The workflow has not changed since 87b008a.
+- A live lookup at 13:55 UTC returned head bc5affc, repository kusanya-io/kusanya, base main and state open. No workflow run was queued or in progress.
+- GitHub's status feed lists no incident on 14 September. The most recent was 13 September, 09:16 to 10:44 UTC.
+- Jobs API steps: every credentialed step was `skipped`, including harness checkout, CLI install, both rechecks, authentication, verification and cleanup. The logout step's exit 127 follows from the CLI never being installed.
+
+Retry budget:
+
+- The pinned `apex-run-budget.mjs` and `apex-pr-policy.mjs` from 1d0edc1 were exported to the scratchpad. They were run read-only against live history, with only this run's listing changed to attempt 2.
+- The exact-head history has one Salesforce run, 34846612699, attempt 1. That attempt is counted as `failed-infrastructure`, retryable, because its failed job's verify step is completed and skipped.
+- Old run 34829135270 on e694453 is filtered out by head.
+- Result: `allowed: true`, `kind: infrastructure-retry`, "One infrastructure retry remains for this head and UTC day."
+
+Note 31, non-blocking, a later tripwire change: the confirm step makes four separate `gh api` calls with no retry, so one dropped response fails the run. A reviewed change could fetch and parse the pull request once, with a bounded retry and a clear error. The logout step could skip when `sf` is absent. Do not change the workflow or pin for this retry.
+
+`SAFE TO APPROVE: ONE same-head infrastructure retry of run 34846612699 at bc5affc`, using "Re-run all jobs" with one environment approval. If it fails the same way again, stop and send the log.
+
+`HOLD: PR #9, 0 findings`. This becomes PASS once the hosted run succeeds on this exact head and the gate is green.
+
+## 2026-09-14: PR #9 hosted Apex evidence, run 34846612699 attempt 2 at `bc5affc`; PASS
+
+Scope: independent review of the hosted retry's log, the Dev Hub cleanup, and credential hygiene. No scratch org or fresh-org run was created; my 13:14 UTC fresh-org run on this same head remains the independent runtime evidence.
+
+Run and head:
+
+- Attempt 2 completed as success on bc5affc. The policy, Apex and gate jobs all succeeded.
+- The pull request head is unchanged. It is up to date with main e97882d, the merge state is CLEAN, and all five checks are green.
+- The workflow, the harness pin 1d0edc1 and the ADRs are unchanged since review 5198161599.
+
+Apex job 104005342261, full log of 531 lines:
+
+- Every step succeeded, except the fallback cleanup step, which was correctly skipped.
+- The confirm step printed the exact head, and the stale-head check passed.
+- The in-job budget recheck returned `allowed: true, kind: infrastructure-retry`.
+- Result: `Apex for bc5affc…: 51 passed; 286/287 executable lines (99.65%)`.
+- There is exactly one marker: schema 1, role `ci`, run `34846612699-2`, full head bc5affc, started 14:03:09.910Z, outcome `passed`, retryable false.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted. Tag `kusanya-ci-v1__34846612699-2__bc5affcd0f62__d01396573f6d`.
+
+Dev Hub:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00Dcb00000NiiBN, created 14:03:14 and last modified 14:04:01 UTC.
+- The Setup Audit Trail has `deleteScratchOrg` for "00Dcb00000NiiBN" at 14:04:03 UTC. ActiveScratchOrg has 0 rows.
+
+Credential hygiene:
+
+- The scan found no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys, or email addresses.
+- All 10 `***` masks are GitHub redactions: the auth URL secret once in an env display, `GH_TOKEN` and checkout tokens, and the checkout auth header.
+
+Finding 26 remains closed. Notes 27 to 31 remain for later reviewed units and do not block this one. This is a Phase 1 unit, not the phase gate.
+
+`PASS: PR #9 may be merged`
+
+## 2026-09-14: PR #9 merged
+
+Bill squash-merged PR #9 as 1ec8488. Its tree, 61ad122, is identical to the verified head bc5affc, so the hosted Apex evidence from run 34846612699 attempt 2 and my fresh-org run apply to main unchanged. Main CI 34876934759 passed.
+
+Carried forward to later reviewed units, none blocking:
+
+- Note 24: the ADR 0011 read policy and its effective-access tests before any Phase 2 definition reader.
+- Note 25: the untested insert path of the Current Version rule; the resolver handles only `__c`.
+- Note 27: Author Notes exclusion must be proven at the compiler and delivery layer.
+- Note 28: compile-time rejection of a repeat counted from its own subtree and of non-answerable skip sources.
+- Note 29: working-directory executable discovery in the Windows launcher.
+- Note 30: undelete restores a Form without its skip rules, and a lone child without its parent.
+- Note 31: a single dropped GitHub API response fails the confirm step, and logout fails when the CLI is absent.
+- A namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
