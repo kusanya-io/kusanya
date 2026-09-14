@@ -119,11 +119,14 @@ including cycles possible under partial DML. Detach before reversing edges.
 Order is positive/whole, not unique and not executable scheduling.
 
 Target names are single API identifiers, not expressions, traversal paths or IDs.
-Store customer/foreign namespaces exactly as supplied; only explicitly Kusanya-owned
+Preserve customer/foreign name spelling and namespaces after Salesforce's pre-trigger
+boundary-whitespace normalization; only explicitly Kusanya-owned
 schema names receive the configured prefix outside Salesforce. Record Type is an
 optional DeveloperName; publish must resolve it on the target, check availability
 and reject ambiguity. No target schema, CRUD/FLS or record-type access is checked
-by storage. Reference Matching Field is required and may be `Id` or `Name`; future
+by storage. The lexical rule even accepts `Account__r`/`Account__R` as Target Object
+(Claude note 34); the publisher must Describe-check and reject identifiers that
+are not actual target objects/fields. Reference Matching Field is required and may be `Id` or `Name`; future
 publish/lookup logic must check uniqueness and refuse zero/multiple matches.
 
 Repeat kind requires a repeat Question; main/reference kinds have no Repeat
@@ -133,9 +136,14 @@ answerability and executable instance scope are compiler work. Sibling/deeper-re
 aggregation must not be silently inferred.
 
 Field Mapping Source Kind is explicitly `question` or `constant`. Question mode
-requires Question and no constant text. Constant mode forbids Question and preserves
-literal text; `0`/`false` are not missing. Null/empty Constant Value means an explicit
-blank in constant mode, not omission. The derived SHA-256 Target Key prevents
+requires Question and no constant text. Constant mode forbids Question;
+`0`/`false` are not missing. Salesforce trims leading/trailing spaces, tabs and
+newlines before triggers, retains interior spaces, and converts whitespace-only
+or empty values to null (Claude finding 33). Constant Value stores that normalized
+literal, not byte-for-byte input. Null means an explicit blank in constant mode,
+not omission. Whitespace-sensitive constants require lossless representation or
+explicit import rejection before claiming C3.12 round trips; see ADR 0013.
+The derived SHA-256 Target Key prevents
 case-variant duplicate target assignments within one mapping and is never portable
 identity. All twelve C4 transforms are stored, not run. Nullable Match Status has
 no success default; saved diagnostics must never authorize publication.

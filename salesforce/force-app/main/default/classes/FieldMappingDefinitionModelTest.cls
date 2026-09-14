@@ -57,13 +57,29 @@ private class FieldMappingDefinitionModelTest {
     }
 
     @IsTest
-    static void representsZeroFalseWhitespaceAndBlankConstantsExplicitly() {
+    static void storesConstantsWithSalesforceWhitespaceNormalization() {
         Mapping__c owner = createMapping();
         List<Field_Mapping__c> fields = new List<Field_Mapping__c>();
         List<String> values = new List<String>{
             '0',
             'false',
-            '  exact literal  ',
+            '  exact  literal  ',
+            '\t tabbed \t',
+            '\nline\r\n',
+            ' \t\r\n ',
+            '',
+            null
+        };
+        // Salesforce normalizes boundary whitespace before the write trigger.
+        // Interior spaces survive; whitespace-only and empty values become null.
+        List<String> expected = new List<String>{
+            '0',
+            'false',
+            'exact  literal',
+            'tabbed',
+            'line',
+            null,
+            null,
             null
         };
         for (Integer i = 0; i < values.size(); i++) {
@@ -87,7 +103,28 @@ private class FieldMappingDefinitionModelTest {
             Assert.areEqual('constant', saved.get(fields[i].Id).Source_Kind__c);
             Assert.isNull(saved.get(fields[i].Id).Question__c);
             Assert.areEqual(
-                values[i],
+                expected[i],
+                saved.get(fields[i].Id).Constant_Value__c
+            );
+        }
+        // Rotate the inputs and verify the same normalization on existing records.
+        for (Integer i = 0; i < fields.size(); i++) {
+            fields[i].Constant_Value__c = values[
+                Math.mod(i + 1, values.size())
+            ];
+        }
+        update fields;
+        saved = new Map<Id, Field_Mapping__c>(
+            [
+                SELECT Source_Kind__c, Question__c, Constant_Value__c
+                FROM Field_Mapping__c
+            ]
+        );
+        for (Integer i = 0; i < fields.size(); i++) {
+            Assert.areEqual('constant', saved.get(fields[i].Id).Source_Kind__c);
+            Assert.isNull(saved.get(fields[i].Id).Question__c);
+            Assert.areEqual(
+                expected[Math.mod(i + 1, values.size())],
                 saved.get(fields[i].Id).Constant_Value__c
             );
         }

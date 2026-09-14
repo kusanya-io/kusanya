@@ -248,6 +248,8 @@ private class MappingDefinitionModelTest {
 
     @IsTest
     static void handlerRejectsRatherThanNormalizesWhitespaceOrMissingValues() {
+        // This calls the handler directly, bypassing Salesforce's pre-trigger
+        // text normalization; it does not assert how whitespace persists via DML.
         Form_Version__c version = createVersion(
             'Synthetic raw identifier input'
         );
@@ -373,9 +375,9 @@ private class MappingDefinitionModelTest {
         insert definition;
         repeat.Type__c = 'text';
         repeat.Repeat_Mode__c = null;
-        Integer queriesBefore = Limits.getQueries();
         assertRejected(Database.update(repeat, false));
-        Assert.areEqual(queriesBefore + 4, Limits.getQueries());
+        // A fully rejected partial DML operation can restore the query counter.
+        // Check rejection and stored state here; measure the successful path below.
         Assert.areEqual(
             'repeat',
             [SELECT Type__c FROM Question__c WHERE Id = :repeat.Id].Type__c
@@ -383,7 +385,9 @@ private class MappingDefinitionModelTest {
         definition.Kind__c = 'main';
         definition.Repeat_Question__c = null;
         update definition;
+        Integer queriesBefore = Limits.getQueries();
         update repeat;
+        Assert.areEqual(queriesBefore + 4, Limits.getQueries());
         Assert.areEqual(
             'text',
             [SELECT Type__c FROM Question__c WHERE Id = :repeat.Id].Type__c

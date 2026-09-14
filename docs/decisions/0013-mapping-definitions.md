@@ -49,8 +49,13 @@ Target Object, all configured target fields and optional Record Type use one ASC
 API identifier, matching the existing external resolver's lexical contract:
 `^[A-Za-z][A-Za-z0-9]*(?:_{1,2}[A-Za-z0-9]+)*$`. There are no traversals, expressions,
 URLs or queries in these slots. Preserve spelling and foreign/customer namespaces;
-never prepend the Kusanya namespace to target configuration. Validation does not
-assert that a lexically valid identifier exists or is writable.
+never prepend the Kusanya namespace to target configuration. Salesforce trims
+boundary whitespace before validation, so this preserves the normalized identifier,
+not its surrounding input whitespace (Claude note 34). Validation does not
+assert that a lexically valid identifier exists or is writable. Claude's note 34
+confirms that `Account__r`/`Account__R` pass this lexical check as Target Object;
+the future publisher must use Describe to reject non-object/non-field identifiers,
+not infer schema validity from a suffix or the regular expression.
 
 Record Type stores a portable DeveloperName, not a label or Salesforce ID. Empty
 means no explicit record-type override. The publisher must resolve against the
@@ -68,11 +73,19 @@ No collector Salesforce user, licence or sharing record is introduced.
 
 Add `Source_Kind` (`question` by default, or `constant`) to Field Mapping. A question
 source requires a same-version Question and no constant text. A constant source
-requires no Question and preserves literal text, including `0` and `false`. An
-empty/null Constant Value in constant mode explicitly means a blank constant;
-Salesforce does not preserve an empty string separately from null. A distinct
-typed-null/omit operation is not represented. Do not silently infer the source from
-truthiness or trim constant content. Change mode and its fields together.
+requires no Question. `0` and `false` remain literal values, not missing values.
+Claude's [PR #10 review 5201392981](https://github.com/kusanya-io/kusanya/pull/10#pullrequestreview-5201392981)
+(finding 33) established that Salesforce trims
+leading/trailing spaces, tabs and newlines **before triggers**, while retaining
+interior spaces. Whitespace-only and empty strings become null. Storage therefore
+holds the platform-normalized literal, not a byte-for-byte copy of the input.
+The handler does not add its own trimming or reconstruct discarded whitespace.
+Null Constant Value in constant mode explicitly means a blank constant; a distinct
+typed-null/omit operation is not represented. Do not infer the source from
+truthiness. Change mode and its fields together. Whitespace-sensitive constants
+need a lossless representation or explicit import rejection before any C3.12
+round-trip claim; silently exporting normalized text as unchanged input is not
+acceptable. The regression asserts normalization on insert and update.
 
 Question sources may be outside a repeat, preserving once-only values reused by
 both HWWS-shaped repeat mappings. This model checks ownership, not executable
@@ -157,6 +170,12 @@ sources, constants, target identity, same-version ownership, graph changes,
 reverse edits and deletion. Static contracts check descriptions, picklists and
 permission boundaries. The hosted exact-head Apex run and Claude's independent
 fresh-org run are required; no development org output is verification evidence.
+
+Finding 32 in that same review observed that a fully rejected
+`Database.update(..., false)` restores the measured SOQL counter even though the
+guard ran. The reverse-type regression retains rejection/stored-state assertions
+and measures the four-query bound only on the successful, unlinked type change.
+These test/documentation corrections do not change metadata or handler behavior.
 
 No C10 test is claimed. Publish schema/CRUD/FLS/record-type checks, picklist matching,
 lookup ambiguity handling, transactional writes, idempotency, collector stamps,
