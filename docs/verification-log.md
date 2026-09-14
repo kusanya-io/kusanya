@@ -701,3 +701,60 @@ Carried forward to later reviewed units, none blocking:
 - Note 30: undelete restores a Form without its skip rules, and a lone child without its parent.
 - Note 31: a single dropped GitHub API response fails the confirm step, and logout fails when the CLI is absent.
 - A namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
+
+## 2026-09-14: Source and security review of PR #10 head `ca90e4a`; two Apex test failures
+
+Scope: the mapping-definition unit. It adds Mapping and Field Mapping, the MappingDefinition and FieldMappingDefinition triggers and handlers, and mapping probes in the Question delete and type-change guard. It also covers the permission-set extensions and ADR 0013, with ADR 0011 amended. The review was requested before Bill approves run 34879906645.
+
+Trust boundary:
+
+- No change to workflows, the harness, packages, the project or the scratch definition. The pin 1d0edc1 appears twice.
+- The script changes are source-contract tests. `mapping-model.test.mjs` imports only `node:assert`, `node:fs` and `node:test`.
+- The head is based on main 5e4e681.
+
+Local, in a verifier-owned detached worktree:
+
+- Root tests: 167 of 167.
+- Service: lint, typecheck, and 25 of 25 tests.
+- Prettier, the scaffold check and offline conversion: clean.
+- Public CI 34879906584 is green.
+
+Source review:
+
+- Mapping is a non-reparentable master-detail child of Form Version, and Field Mapping of Mapping. Both inherit private sharing.
+- The permission sets add only these two objects: Admin CRUD, Integration read, create and edit, and Supervisor read. View All and Modify All are false on all nine objects. Target Key is read-only.
+- The handlers are trigger-only and without sharing. They return no data, give generic errors, and use fixed locking queries with no DML.
+- The identifier regex is linear and refuses dots, spaces, operators and leading digits.
+
+Verifier fresh org `kusanya-verifier-v1__claude-pr10__ca90e4a9a036` (00DQL00000bbjnL2AQ), created 18:22 UTC from the head's own scratch definition:
+
+- Deployment: Succeeded, 140 of 140 components.
+- `RunLocalTests` with coverage: Failed, 79 of 81, with 99% org-wide coverage. Two tests failed:
+  - `MappingDefinitionModelTest.mappedRepeatTypeMustRemainRepeatUntilUnlinked`, line 378: `Expected: 10, Actual: 6`.
+  - `FieldMappingDefinitionModelTest.representsZeroFalseWhitespaceAndBlankConstantsExplicitly`, line 89: expected `'  exact literal  '`, actual `'exact literal'`.
+- Probes: anonymous Apex, synthetic data, one rolled-back transaction per probe, 0 rows left. `Kusanya_Admin` was assigned to the scratch admin.
+  - P1. A whole Form deletes in the HWWS shape: a reference mapping parenting two repeat mappings, shared once-only sources, a `false` constant and a skip rule. 6 questions, 3 mappings, 6 field mappings and 1 skip rule go to 0.
+  - P2. Deleting version 1 directly keeps the sibling version's mapping and its question reference.
+  - P3. Direct deletes are refused while a field mapping or repeat mapping references the question. A mixed batch with an unreferenced question is refused whole. After the field mapping is removed, the question deletes.
+  - P4. Deleting a parent mapping is refused alone and with one child. It succeeds with every child in the batch.
+  - P5. A mapped repeat cannot become a section. An unmapped one can. A repeat mapping cannot point at a text question.
+  - P6. A two-cycle, a reversed edge in one batch, a lookup field without a parent, and a self-parent (`CIRCULAR_DEPENDENCY`) are all refused.
+  - P7. Cross-version field-mapping questions, parent mappings and repeat questions are refused.
+  - P8. Target Key overwrites a caller-supplied value. It refuses a case variant in the same mapping, a duplicate in the same batch, and a rename onto an existing field. The same field in another mapping is allowed.
+  - P9. Source Kind rules hold. `0` is preserved. Null and empty constants are both stored as null blanks, and Match Status defaults to null.
+  - P10. Traversal and expression identifiers, a raw record-type ID, a collector-stamp traversal, a fractional Order and kind mismatches are refused. `Account__r` and `Account__R` are accepted.
+  - P11. The Mapping and Field Mapping owners are not writeable.
+  - P12. Undeleting a Form restores its mappings and field mappings with their references intact, but not its skip rules (note 30).
+  - P13. Error messages do not name dependants.
+  - Trim probe. Salesforce trims leading and trailing whitespace before the triggers run. Identifiers `Account\n`, `Account` and `Account\t` are stored as `Account`. Constants `\nline\n` and `\tTab` are stored as `line` and `Tab`. A whitespace-only constant becomes null. Inner spaces are kept.
+- The org is kept, not deleted, so a test-and-docs-only fix can be re-checked without a new daily slot. It expires on its own within one day. At this review 2 of 6 daily slots were left; this org used one of them.
+
+Findings:
+
+- Finding 32, blocker. The query-count assertion at `MappingDefinitionModelTest` line 378 fails. A fully rejected `allOrNone=false` update leaves no queries in `Limits.getQueries()`. The guard's behaviour is correct. Remove the assertion, or measure cost on a successful path.
+- Finding 33, blocker. Constants do not keep surrounding whitespace, so the test at line 89 fails. ADR 0013, around lines 71 to 75, and `docs/data-model.md` line 137 wrongly promise literal, untrimmed constants. Correct the contract, and assert the trimmed storage and whitespace-only-as-blank behaviour.
+- Note 34, non-blocking. The identifier rule is lexical and accepts `__r`-suffixed and 255-character names. The future publisher must describe-check the target and reject non-object suffixes, with a test.
+
+`HOLD: run 34879906645 at head ca90e4a`. Do not approve it: it would end as a non-retryable failed-tests result and use a scarce daily slot. Cancel it.
+
+`HOLD: PR #10, 2 findings` (32, 33)
