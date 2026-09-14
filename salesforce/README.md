@@ -36,6 +36,11 @@ $env:KUSANYA_DEV_HUB = 'Kusanya-DevHub'
 node scripts/builder-org.mjs status
 ```
 
+ADR 0012 proposes a Windows argument-quoting correction after the reviewed tool
+failed initial discovery. It requires Claude's security review before the changed
+tool is used for acquisition. Windows arguments must not end in a backslash; omit
+a trailing directory separator or use `/`. Workflow and harness pin are unchanged.
+
 `acquire` creates or returns the one owned, seven-day development org; `release`
 deletes only the positively owned org. `status` inspects without allocating. Never
 create a second builder org or share its receipt across machines. Pending creation
