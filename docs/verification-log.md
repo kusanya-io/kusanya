@@ -541,3 +541,26 @@ Findings:
 `HOLD: run 34829135270 at head e694453`. Do not approve: it would fail at deployment, consume a scratch org, and leave that head non-retryable.
 
 `HOLD: PR #9, 1 finding` (26)
+
+## 2026-09-14: Local security review of the Windows Salesforce launcher, PR #9 local candidate `e6720e9`
+
+Scope: the builder's unpushed candidate e6720e9, whose parent is acbad1d on top of published head e694453. This is a local tool review before Bill's one authorized development org is used. It is not a CI approval, a closure of finding 26, or a merge verdict.
+
+Context: `node scripts/builder-org.mjs acquire` failed on Windows during read-only discovery, before any allocation. Node escaped the client's already-quoted `cmd.exe` arguments a second time.
+
+What changed: `scripts/salesforce-client.mjs` now sets `windowsVerbatimArguments` on Windows only, and additionally rejects Windows arguments that end in a backslash. There are new real-process tests with a fake `sf.cmd` and a capture fixture, plus ADR 0012 and a README note. The CI workflow, guards, lifecycle and the harness pin 1d0edc1 are unchanged.
+
+What was checked:
+
+- Identity. The builder clone head is e6720e9 with a clean working tree and parent acbad1d. The only changed `scripts/` files are the client, its tests, the two fixture files and the form-model test. The workflow still pins 1d0edc1 twice.
+- Quoting. The command line is now `cmd.exe /d /s /c sf "arg" ...`. Because the text after `/c` does not start with a quote, `/s` strips nothing. Inside quotes, `& | < > ^ ( )` are literal. Quotes, `%`, `!`, control characters and now trailing backslashes are rejected before any process starts, so an argument cannot close its quote or smuggle an argument into `sf.cmd`'s parser. The Linux path is unchanged, and the option is ignored there.
+- Fixtures. The fake `sf.cmd` only forwards arguments to `capture-argv.mjs`, which uses no Salesforce modules, authentication, files or network. The tests pass a minimal environment (`SystemRoot`, a fixture-first `PATH`, `PATHEXT`, the Node path), so neither the installed CLI nor any credential is reachable.
+- Tests in a verifier-owned worktree at e6720e9, later removed: client subset 10 of 10 and all root tests 161 of 161, in both Git Bash and PowerShell; service lint, typecheck and 24 of 24 tests; Prettier and the scaffold check. The negative control confirms the old quoting fails through real `cmd.exe`.
+
+Note 29, pre-existing and not blocking: on Windows, `cmd.exe` searches the working directory for `sf` before `PATH`, as ADR 0012 acknowledges. The client runs from repository folders, so a committed `sf.cmd` there would run with local builder authentication. Acceptable for the builder's own trusted checkout. Harden later by setting `NoDefaultCurrentDirectoryInExePath=1` in the client environment, or by resolving an absolute `sf` path outside the repository.
+
+Operational: run 34829135270 on the published head was still waiting at 12:44 UTC and was not cancelled. It must be cancelled, not approved.
+
+`SAFE TO USE LOCAL BUILDER TOOL: e6720e9`, for `builder-org.mjs` status, acquire and release under Bill's one-org authorization only. Development output is not verification evidence.
+
+`HOLD: PR #9, 1 finding` (finding 26 stays open until the pushed head deploys in the verifier's fresh org and passes its tests and deletion probes).
