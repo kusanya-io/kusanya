@@ -502,3 +502,9 @@ Notes:
 `PASS: PR #8 may be merged`
 
 This is a Phase 1 unit, not the Phase 1 gate. Phase 1 still needs question trees, choices, skip rules, mappings, the compiler, XLSForm import and export, the print view and CLI publish, with tests 10 and 12.
+
+## 2026-09-14: PR #8 merged
+
+- PR #8 was squash-merged by `cobitechsolutions` at 08:32 UTC as e97882d. The merged tree is identical to the verified head 9da8f13, so the PASS in review 5194796568 applies to `main`'s content.
+- This branch, PR #7, was brought up to date with `main` by a merge commit, keeping every entry. It still changes only this file, so its Salesforce gate uses the documentation exemption.
+- Still open: notes 24 and 25 for later Phase 1 units, the `ksny` Dev Hub link through Salesforce Support, a namespaced suite run once linking works, and C10 tests 10 and 12.
