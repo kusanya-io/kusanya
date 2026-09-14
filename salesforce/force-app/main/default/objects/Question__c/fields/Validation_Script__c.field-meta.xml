@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Validation_Script__c</fullName>
+    <description>Optional phase-2 JavaScript validation source. The builder must warn unless its rule also exists as an XPath constraint; this unit stores but never executes it.</description>
+    <label>Validation Script</label>
+    <length>32768</length>
+    <type>LongTextArea</type>
+    <visibleLines>3</visibleLines>
+</CustomField>

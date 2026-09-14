@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Reusable privately owned set of selectable values, or a list explicitly owned by one select question. Sharing and lifecycle are independent of the referencing form.</description>
+    <enableActivities>false</enableActivities>
+    <enableFeeds>false</enableFeeds>
+    <enableHistory>false</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <externalSharingModel>Private</externalSharingModel>
+    <label>Choice List</label>
+    <nameField>
+        <description>Human-readable choice list name; not a stable cross-org export identifier.</description>
+        <label>Choice List Name</label>
+        <type>Text</type>
+    </nameField>
+    <pluralLabel>Choice Lists</pluralLabel>
+    <sharingModel>Private</sharingModel>
+</CustomObject>

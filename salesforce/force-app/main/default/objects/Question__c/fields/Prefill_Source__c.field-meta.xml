@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Prefill_Source__c</fullName>
+    <description>Configured source identifier for a reference question's later prefill binding. Contains no deployment-specific org ID and grants no target-record access.</description>
+    <label>Prefill Source</label>
+    <length>255</length>
+    <required>false</required>
+    <type>Text</type>
+</CustomField>

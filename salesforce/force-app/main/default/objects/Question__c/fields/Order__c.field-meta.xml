@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Order__c</fullName>
+    <defaultValue>1</defaultValue>
+    <description>Positive integral order within the same parent, or among root questions. Defaults to 1; equal positions are allowed until a later authoring/compiler ordering policy is applied.</description>
+    <label>Order</label>
+    <precision>9</precision>
+    <required>true</required>
+    <scale>0</scale>
+    <type>Number</type>
+</CustomField>

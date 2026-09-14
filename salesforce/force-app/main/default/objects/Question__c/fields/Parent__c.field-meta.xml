@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Parent__c</fullName>
+    <description>Optional section or repeat parent in this same version. A null parent keeps a once-only question outside every repeat; only explicit descendants inherit a repeat scope. Apex blocks direct Question deletion while another question outside the delete batch refers to this node. Parent cascades bypass that guard and may clear outside lookups.</description>
+    <label>Parent</label>
+    <referenceTo>Question__c</referenceTo>
+    <relationshipLabel>Children</relationshipLabel>
+    <relationshipName>Children</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

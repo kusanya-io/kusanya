@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Cascade_Level_Positive_Integer</fullName>
+    <active>true</active>
+    <description>Reject non-positive and fractional cascade level values before number-field rounding.</description>
+    <errorConditionFormula>AND(NOT(ISBLANK(Cascade_Level__c)), OR(Cascade_Level__c &lt; 1, MOD(Cascade_Level__c, 1) &lt;&gt; 0))</errorConditionFormula>
+    <errorDisplayField>Cascade_Level__c</errorDisplayField>
+    <errorMessage>Cascade Level must be a positive whole number.</errorMessage>
+</ValidationRule>

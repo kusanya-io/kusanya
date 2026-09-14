@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Require_Live_Photo__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>Whether a photo question must capture a new image rather than select an existing image; defaults false. Enforced by the later compiler and client.</description>
+    <label>Require Live Photo</label>
+    <type>Checkbox</type>
+</CustomField>

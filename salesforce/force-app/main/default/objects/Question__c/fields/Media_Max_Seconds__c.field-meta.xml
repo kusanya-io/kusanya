@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Media_Max_Seconds__c</fullName>
+    <description>Optional positive whole maximum duration for audio or video capture. Client enforcement belongs to the compiler and collection path.</description>
+    <label>Media Max Seconds</label>
+    <precision>9</precision>
+    <required>false</required>
+    <scale>0</scale>
+    <type>Number</type>
+</CustomField>

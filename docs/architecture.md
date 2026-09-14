@@ -39,15 +39,25 @@ There is no product database schema yet. See [data model status](data-model.md),
 
 ## Initial Phase 1 source
 
-The first model slice adds Folder, Form and Form Version metadata, model-only
-permission sets, declarative validation and a bulk-safe derived version identity.
-It does not expose a form/publish API or implement compilation. C10 tests 10 and
+The model slices add Folder, Form, Form Version, Question, Choice List, Choice and
+Skip Rule metadata, model-only permission sets, declarative validation and derived
+identities. Question parent scope distinguishes once-only siblings from repeat
+children; Hint and Author Notes are separate fields. Integrity triggers reject
+invalid trees/references/ownership without exposing definition data. Stored skip
+conditions are not yet compiled. These slices expose no form/publish API or
+collector delivery path. C10 tests 10 and
 12 remain unimplemented, not represented by source/smoke tests.
+
+Private definition ownership still blocks cross-owner integration/supervisor reads.
+ADR 0011 records a future object-scoped read-all policy, not a current permission
+grant. A reviewed implementation with effective-access tests must precede any
+Phase 2 definition reader. Read access, publishing write authorization and collector
+task/tenant authorization remain distinct boundaries.
 
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure
 `createSalesforceNames(prefix)` service helper qualifies explicitly Kusanya-owned
-names, preserves explicit customer/standard/foreign target identifiers and builds
+object/field/relationship names, preserves explicit customer/standard/foreign target identifiers and builds
 namespace-aware Apex REST paths. The deployment default is
 `SALESFORCE_NAMESPACE_PREFIX`, not tenant identity or authorization; future tenant
 connections and CLI/compiler/mapping adapters must supply their own configuration.

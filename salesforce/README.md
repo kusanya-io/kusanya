@@ -1,10 +1,37 @@
 # Salesforce source
 
 Phase 0 supplies the Developer scratch definition and runtime smoke test. The first
-Phase 1 slice adds Folder, Form and Form Version with version identity/validation,
-model-only permission sets and nine synthetic model tests. No collection, mapping,
+Phase 1 slice added Folder, Form and Form Version with version identity/validation.
+The current unit adds Question (sections/repeats), Choice List, Choice and Skip
+Rule, integrity triggers and synthetic model tests. No collection, mapping,
 authentication, compiler, publishing or C10 capability is claimed. See
-[the data model](../docs/data-model.md) and ADR 0009 for exact limitations.
+[the data model](../docs/data-model.md) and ADRs 0009/0010 for exact limitations.
+
+Question tree updates validate the entire affected version and protect partial-DML
+outcomes. Detach children before changing container roles or reversing parent edges.
+Keep once-only questions as siblings of a repeat, not its children; keep author
+annotations in Author Notes, never Hint. Inline lists use question -> owned list
+-> question backlink creation; ownership cannot be reassigned. See the data model
+for the reverse unlink/delete sequence and deferred lifecycle protections.
+The three Question self-lookups omit metadata delete restrictions: Salesforce
+rejects Restrict on self-lookups (finding 26). A before-delete guard protects
+direct Question batches with outside question dependants, using one query and
+no DML. Form/Form Version cascades bypass it; the deletion tests cover that
+platform distinction and partial-DML retries. Source conversion is not a deploy
+test. Full publication/version deletion protection remains deferred.
+
+Form and direct Form Version deletion first remove only their target-owned skip
+rules (one query, at most one all-or-none child delete), then allow the native
+detail cascade. This preserves Source Question Restrict on direct question
+deletion; failed owner deletion must roll back that cleanup. The synthetic owner
+tests cover rollback, partial deletion, sibling isolation and a 200-Form batch.
+Inline-list cleanup and published/submission-aware deletion remain future work.
+
+The unassigned Admin/Integration/Supervisor permission sets cover seven definition
+objects while preserving ordinary sharing and no View All grants. They do not yet
+allow cross-owner definition reads. ADR 0011 records the decision and required
+future reviewed implementation/effective-access tests before a Phase 2 reader
+(Claude note 24).
 
 ## Iterative development only
 
@@ -15,6 +42,15 @@ authorizes use of the local development Dev Hub:
 $env:KUSANYA_DEV_HUB = 'Kusanya-DevHub'
 node scripts/builder-org.mjs status
 ```
+
+ADR 0012 records Claude's local-tool approval of the Windows argument-quoting
+correction at `e6720e9411a22246ccf005fcd2b61b31d33195dc`
+([PR #9 comment 5664197630](https://github.com/kusanya-io/kusanya/pull/9#issuecomment-5664197630)).
+Approval covers only `builder-org.mjs status`, `acquire` and `release` under Bill's
+one-development-org authorization, not hosted CI approval or finding 26 closure.
+Windows arguments must not end in a backslash; omit a trailing directory separator
+or use `/`. Workflow and harness pin are unchanged. Pre-existing working-directory
+executable discovery remains deferred hardening (Claude note 29; ADR 0012).
 
 `acquire` creates or returns the one owned, seven-day development org; `release`
 deletes only the positively owned org. `status` inspects without allocating. Never

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Choice_List__c</fullName>
+    <description>Owning choice list. Choices inherit its access and deletion behavior and cannot be reparented.</description>
+    <label>Choice List</label>
+    <referenceTo>Choice_List__c</referenceTo>
+    <relationshipLabel>Choices</relationshipLabel>
+    <relationshipName>Choices</relationshipName>
+    <relationshipOrder>0</relationshipOrder>
+    <reparentableMasterDetail>false</reparentableMasterDetail>
+    <type>MasterDetail</type>
+    <writeRequiresMasterRead>false</writeRequiresMasterRead>
+</CustomField>
