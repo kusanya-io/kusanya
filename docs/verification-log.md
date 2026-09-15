@@ -701,3 +701,152 @@ Carried forward to later reviewed units, none blocking:
 - Note 30: undelete restores a Form without its skip rules, and a lone child without its parent.
 - Note 31: a single dropped GitHub API response fails the confirm step, and logout fails when the CLI is absent.
 - A namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
+
+## 2026-09-14: Source and security review of PR #10 head `ca90e4a`; two Apex test failures
+
+Scope: the mapping-definition unit. It adds Mapping and Field Mapping, the MappingDefinition and FieldMappingDefinition triggers and handlers, and mapping probes in the Question delete and type-change guard. It also covers the permission-set extensions and ADR 0013, with ADR 0011 amended. The review was requested before Bill approves run 34879906645.
+
+Trust boundary:
+
+- No change to workflows, the harness, packages, the project or the scratch definition. The pin 1d0edc1 appears twice.
+- The script changes are source-contract tests. `mapping-model.test.mjs` imports only `node:assert`, `node:fs` and `node:test`.
+- The head is based on main 5e4e681.
+
+Local, in a verifier-owned detached worktree:
+
+- Root tests: 167 of 167.
+- Service: lint, typecheck, and 25 of 25 tests.
+- Prettier, the scaffold check and offline conversion: clean.
+- Public CI 34879906584 is green.
+
+Source review:
+
+- Mapping is a non-reparentable master-detail child of Form Version, and Field Mapping of Mapping. Both inherit private sharing.
+- The permission sets add only these two objects: Admin CRUD, Integration read, create and edit, and Supervisor read. View All and Modify All are false on all nine objects. Target Key is read-only.
+- The handlers are trigger-only and without sharing. They return no data, give generic errors, and use fixed locking queries with no DML.
+- The identifier regex is linear and refuses dots, spaces, operators and leading digits.
+
+Verifier fresh org `kusanya-verifier-v1__claude-pr10__ca90e4a9a036` (00DQL00000bbjnL2AQ), created 18:22 UTC from the head's own scratch definition:
+
+- Deployment: Succeeded, 140 of 140 components.
+- `RunLocalTests` with coverage: Failed, 79 of 81, with 99% org-wide coverage. Two tests failed:
+  - `MappingDefinitionModelTest.mappedRepeatTypeMustRemainRepeatUntilUnlinked`, line 378: `Expected: 10, Actual: 6`.
+  - `FieldMappingDefinitionModelTest.representsZeroFalseWhitespaceAndBlankConstantsExplicitly`, line 89: expected `'  exact literal  '`, actual `'exact literal'`.
+- Probes: anonymous Apex, synthetic data, one rolled-back transaction per probe, 0 rows left. `Kusanya_Admin` was assigned to the scratch admin.
+  - P1. A whole Form deletes in the HWWS shape: a reference mapping parenting two repeat mappings, shared once-only sources, a `false` constant and a skip rule. 6 questions, 3 mappings, 6 field mappings and 1 skip rule go to 0.
+  - P2. Deleting version 1 directly keeps the sibling version's mapping and its question reference.
+  - P3. Direct deletes are refused while a field mapping or repeat mapping references the question. A mixed batch with an unreferenced question is refused whole. After the field mapping is removed, the question deletes.
+  - P4. Deleting a parent mapping is refused alone and with one child. It succeeds with every child in the batch.
+  - P5. A mapped repeat cannot become a section. An unmapped one can. A repeat mapping cannot point at a text question.
+  - P6. A two-cycle, a reversed edge in one batch, a lookup field without a parent, and a self-parent (`CIRCULAR_DEPENDENCY`) are all refused.
+  - P7. Cross-version field-mapping questions, parent mappings and repeat questions are refused.
+  - P8. Target Key overwrites a caller-supplied value. It refuses a case variant in the same mapping, a duplicate in the same batch, and a rename onto an existing field. The same field in another mapping is allowed.
+  - P9. Source Kind rules hold. `0` is preserved. Null and empty constants are both stored as null blanks, and Match Status defaults to null.
+  - P10. Traversal and expression identifiers, a raw record-type ID, a collector-stamp traversal, a fractional Order and kind mismatches are refused. `Account__r` and `Account__R` are accepted.
+  - P11. The Mapping and Field Mapping owners are not writeable.
+  - P12. Undeleting a Form restores its mappings and field mappings with their references intact, but not its skip rules (note 30).
+  - P13. Error messages do not name dependants.
+  - Trim probe. Salesforce trims leading and trailing whitespace before the triggers run. Identifiers `Account\n`, `Account` and `Account\t` are stored as `Account`. Constants `\nline\n` and `\tTab` are stored as `line` and `Tab`. A whitespace-only constant becomes null. Inner spaces are kept.
+- The org is kept, not deleted, so a test-and-docs-only fix can be re-checked without a new daily slot. It expires on its own within one day. At this review 2 of 6 daily slots were left; this org used one of them.
+
+Findings:
+
+- Finding 32, blocker. The query-count assertion at `MappingDefinitionModelTest` line 378 fails. A fully rejected `allOrNone=false` update leaves no queries in `Limits.getQueries()`. The guard's behaviour is correct. Remove the assertion, or measure cost on a successful path.
+- Finding 33, blocker. Constants do not keep surrounding whitespace, so the test at line 89 fails. ADR 0013, around lines 71 to 75, and `docs/data-model.md` line 137 wrongly promise literal, untrimmed constants. Correct the contract, and assert the trimmed storage and whitespace-only-as-blank behaviour.
+- Note 34, non-blocking. The identifier rule is lexical and accepts `__r`-suffixed and 255-character names. The future publisher must describe-check the target and reject non-object suffixes, with a test.
+
+`HOLD: run 34879906645 at head ca90e4a`. Do not approve it: it would end as a non-retryable failed-tests result and use a scarce daily slot. Cancel it.
+
+`HOLD: PR #10, 2 findings` (32, 33)
+
+## 2026-09-15: Pre-push verification of PR #10 local candidate `623378e`
+
+Scope: the builder's unpushed candidate 623378e, whose parent is ca90e4a. It answers findings 32 and 33 and records note 34. Requested before push, so the remaining scratch capacity is kept for hosted Apex.
+
+Identity and scope:
+
+- The builder clone is at 623378e, one commit ahead of remote head ca90e4a. It was fetched read-only into `refs/remotes/codex/pr10`.
+- Exactly four files change: `MappingDefinitionModelTest.cls`, `FieldMappingDefinitionModelTest.cls`, ADR 0013 and `docs/data-model.md`. Under `salesforce/`, only the two test classes differ.
+
+Review:
+
+- Finding 32. The rejected reverse-type update still asserts the rejection and the stored `repeat` type. The `+4` query assertion moves to the successful type change after unlinking: three fixed Question guard queries plus the mapped-repeat probe.
+- Finding 33. The constant regression covers boundary spaces, tabs, `\r\n`, whitespace-only, empty, null, `0` and `false`. It expects trimmed boundaries, interior spaces kept, and whitespace-only or empty values as null. It checks insert and a rotated update.
+- ADR 0013 and the data model now describe the normalized contract. Whitespace-sensitive constants need a lossless representation or explicit rejection before any C3.12 round-trip claim.
+- Note 34 is recorded for publisher Describe validation.
+
+Evidence:
+
+- Daily capacity had reset to 6 of 6 by 07:44 UTC, consistent with a reset near 07:00 UTC.
+- Kept verifier org 00DQL00000bbjnL2AQ, still Active with yesterday's ca90e4a metadata:
+  - The first redeploy was refused by source tracking with `SourceConflictError`, and that test run executed the old classes only. It is not evidence.
+  - The redeploy of the full 623378e source with `--ignore-conflicts` at 07:48 UTC succeeded, 140 of 140.
+  - `RunLocalTests` passed 81 of 81, including both previously failing tests. Coverage was 473 of 475 lines, 99%.
+- The org was deleted and shows Deleted, with audit `deleteScratchOrg` "00DQL00000bbjnL" at 07:49:15 UTC. ActiveScratchOrg has 0 rows, and daily capacity stays 6 of 6.
+- Local, in detached worktrees that were removed afterwards: root tests 167 of 167, service 25 of 25, Prettier, the scaffold check and `git diff --check` all clean.
+- The ca90e4a probes P1 to P13 remain valid, because handlers and metadata are unchanged.
+
+Operational: run 34879906645 on ca90e4a was still waiting at 07:44 UTC. Bill cancels it. The builder then pushes exactly 623378e. The verifier confirms the pushed head and the new run's trust boundary before SAFE TO APPROVE.
+
+`SAFE TO PUSH: 623378e (findings 32 and 33 answered)`
+
+`HOLD: PR #10, 2 findings` (32, 33), pending hosted success on the pushed head.
+
+## 2026-09-15: PR #10 pushed head `623378e` and run 34945663516 cleared for approval
+
+- The PR head is exactly 623378e, with tree e04391c, identical to the verified local candidate. It is one commit on ca90e4a, based on main 5e4e681, from the same repository.
+- Changed files from ca90e4a: the two test classes, ADR 0013 and `docs/data-model.md`. Workflows, harness scripts, packages, the project and scratch definitions are unchanged. The pin 1d0edc1 appears twice.
+- Salesforce run 34945663516: `pull_request` event, exact head, attempt 1. The policy job succeeded (classification and exact-head budget). The Apex job is waiting with 0 steps. It is the only waiting run.
+- Public CI 34945663738 succeeded on the exact head.
+- Old run 34879906645 on ca90e4a completed after its rejection with no Apex steps. Its head differs, so it is outside this head's budget.
+- At 08:16 UTC, 6 of 6 daily and 3 of 3 active scratch orgs were free. 0 were active.
+
+`SAFE TO APPROVE: run 34945663516 at head 623378e`
+
+`HOLD: PR #10, 2 findings` (32, 33), pending hosted success with an exact-head marker and a Deleted org.
+
+## 2026-09-16: PR #10 hosted Apex evidence, run 34945663516 attempt 1 at `623378e`; PASS
+
+Run and head:
+
+- Attempt 1 succeeded on the exact head. The `salesforce-ci` approval was by cobitechsolutions. The policy, Apex and gate jobs all succeeded.
+- The PR head is unchanged. It is up to date with main 5e4e681, the merge state is CLEAN, and all five checks are green.
+
+Apex job 104304413061, full log of 531 lines:
+
+- The confirm step printed the exact head, and the stale-head check passed.
+- The in-job budget recheck returned `allowed: true, kind: initial`.
+- Result: `81 passed; 473/475 executable lines (99.58%)`.
+- There is exactly one marker: schema 1, role `ci`, run `34945663516-1`, full head 623378e, started 20:23:22.566Z, outcome `passed`, retryable false.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted. Tag `kusanya-ci-v1__34945663516-1__623378eec361__ab75e796a3d6`. The fallback cleanup was skipped after success, and logout succeeded.
+
+Dev Hub:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00DRu00000YJXgz, created 20:23:27 and last modified 20:24:27 UTC.
+- Setup Audit Trail has `deleteScratchOrg` for "00DRu00000YJXgz" at 20:24:32 UTC. ActiveScratchOrg has 0 rows.
+
+Credential hygiene: the scan found no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys or email addresses. All 10 masks are GitHub redactions.
+
+Note 35, non-blocking: the only warning is GitHub's Node.js 20 deprecation notice for the pinned `actions/checkout` and `actions/setup-node` SHAs, forced to Node 24. Updating those pins needs a separately reviewed workflow change.
+
+Findings 32 and 33 are closed. Note 34 is recorded. Notes 24, 25 and 27 to 31 carry forward, and note 35 is added. This is a Phase 1 model unit, not the phase gate.
+
+`PASS: PR #10 may be merged`
+
+## 2026-09-16: PR #10 merged
+
+Bill squash-merged PR #10 as f435129. Its tree, e04391c, is identical to the verified head 623378e, so the hosted Apex evidence from run 34945663516 and my kept-org run apply to main unchanged. Main CI 35024347296 passed.
+
+Carried forward to later reviewed units, none blocking:
+
+- Note 24: the ADR 0011 read policy and its effective-access tests, now including Mapping and Field Mapping, before any Phase 2 definition reader.
+- Note 25: the untested insert path of the Current Version rule; the resolver handles only `__c`.
+- Note 27: Author Notes exclusion must be proven at the compiler and delivery layer.
+- Note 28: compile-time rejection of a repeat counted from its own subtree and of non-answerable skip sources.
+- Note 29: working-directory executable discovery in the Windows launcher.
+- Note 30: undelete restores a Form without its skip rules, and a lone child without its parent.
+- Note 31: a single dropped GitHub API response fails the confirm step, and logout fails when the CLI is absent.
+- Note 34: the target identifier rule is lexical and accepts names such as `Account__r`; the publisher must Describe-check targets.
+- Note 35: the pinned `actions/checkout` and `actions/setup-node` target Node.js 20; updating them needs a separately reviewed workflow change.
+- Whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013).
+- A namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
