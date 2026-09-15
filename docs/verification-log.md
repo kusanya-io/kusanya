@@ -758,3 +758,36 @@ Findings:
 `HOLD: run 34879906645 at head ca90e4a`. Do not approve it: it would end as a non-retryable failed-tests result and use a scarce daily slot. Cancel it.
 
 `HOLD: PR #10, 2 findings` (32, 33)
+
+## 2026-09-15: Pre-push verification of PR #10 local candidate `623378e`
+
+Scope: the builder's unpushed candidate 623378e, whose parent is ca90e4a. It answers findings 32 and 33 and records note 34. Requested before push, so the remaining scratch capacity is kept for hosted Apex.
+
+Identity and scope:
+
+- The builder clone is at 623378e, one commit ahead of remote head ca90e4a. It was fetched read-only into `refs/remotes/codex/pr10`.
+- Exactly four files change: `MappingDefinitionModelTest.cls`, `FieldMappingDefinitionModelTest.cls`, ADR 0013 and `docs/data-model.md`. Under `salesforce/`, only the two test classes differ.
+
+Review:
+
+- Finding 32. The rejected reverse-type update still asserts the rejection and the stored `repeat` type. The `+4` query assertion moves to the successful type change after unlinking: three fixed Question guard queries plus the mapped-repeat probe.
+- Finding 33. The constant regression covers boundary spaces, tabs, `\r\n`, whitespace-only, empty, null, `0` and `false`. It expects trimmed boundaries, interior spaces kept, and whitespace-only or empty values as null. It checks insert and a rotated update.
+- ADR 0013 and the data model now describe the normalized contract. Whitespace-sensitive constants need a lossless representation or explicit rejection before any C3.12 round-trip claim.
+- Note 34 is recorded for publisher Describe validation.
+
+Evidence:
+
+- Daily capacity had reset to 6 of 6 by 07:44 UTC, consistent with a reset near 07:00 UTC.
+- Kept verifier org 00DQL00000bbjnL2AQ, still Active with yesterday's ca90e4a metadata:
+  - The first redeploy was refused by source tracking with `SourceConflictError`, and that test run executed the old classes only. It is not evidence.
+  - The redeploy of the full 623378e source with `--ignore-conflicts` at 07:48 UTC succeeded, 140 of 140.
+  - `RunLocalTests` passed 81 of 81, including both previously failing tests. Coverage was 473 of 475 lines, 99%.
+- The org was deleted and shows Deleted, with audit `deleteScratchOrg` "00DQL00000bbjnL" at 07:49:15 UTC. ActiveScratchOrg has 0 rows, and daily capacity stays 6 of 6.
+- Local, in detached worktrees that were removed afterwards: root tests 167 of 167, service 25 of 25, Prettier, the scaffold check and `git diff --check` all clean.
+- The ca90e4a probes P1 to P13 remain valid, because handlers and metadata are unchanged.
+
+Operational: run 34879906645 on ca90e4a was still waiting at 07:44 UTC. Bill cancels it. The builder then pushes exactly 623378e. The verifier confirms the pushed head and the new run's trust boundary before SAFE TO APPROVE.
+
+`SAFE TO PUSH: 623378e (findings 32 and 33 answered)`
+
+`HOLD: PR #10, 2 findings` (32, 33), pending hosted success on the pushed head.
