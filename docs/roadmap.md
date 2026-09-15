@@ -3,7 +3,9 @@
 Only Claude can close a phase by recording a verdict in `docs/verification-log.md`.
 Bill relayed Claude's Phase 0 PASS in PR #3 review 5177252674 and the first Phase 1
 unit PASS in PR #8 review 5194796568 (merged as `e97882d`). The question-tree unit
-is in development. The builder does not issue its own gate verdict.
+passed Claude verification and merged as `1ec8488`; its verification log merged
+through PR #7. Mapping definitions are now in development. The builder does not
+issue its own gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
 | --------- | --------------------------------------------------------------------------- | ---------------------------------------------- |
@@ -44,6 +46,13 @@ Apex protection and cascade/grouped-delete regressions. Notes 27/28 require futu
 compiler/delivery tests for Author Notes exclusion, rejection of a repeat counted
 from its own subtree, and rejection of non-answerable skip-rule sources.
 
-Next units must deliver mappings, compilation/validation, immutable publication
+The mapping-definition unit (ADR 0013) adds Mapping/Field Mapping storage,
+same-version parent dependencies, explicit constants, portable target names and
+deletion/reverse-reference guards. It extends ADR 0011's future read allowlist to
+these definitions without granting cross-owner access now. No mapping execution
+or target schema validation is claimed. Note 30's observed undelete gaps and
+notes 29/31's tool/CI hardening stay deferred to their appropriate reviewed units.
+
+Next units must deliver compilation/validation, immutable publication
 and draft deletion behavior, XLSForm round trips, print view and CLI publication.
 No model unit claims C10 tests 10/12. Do not mark Phase 1 complete from model tests.

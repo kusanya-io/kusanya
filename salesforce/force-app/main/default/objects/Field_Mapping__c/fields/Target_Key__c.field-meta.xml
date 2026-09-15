@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Target_Key__c</fullName>
+    <caseSensitive>false</caseSensitive>
+    <description>Internal SHA-256 identity derived before save from owning Mapping ID and case-normalized Target Field. Unique case-insensitively; caller values are overwritten. Read-only to assigned permission sets and excluded from portable exports.</description>
+    <label>Target Key</label>
+    <length>64</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>true</unique>
+</CustomField>

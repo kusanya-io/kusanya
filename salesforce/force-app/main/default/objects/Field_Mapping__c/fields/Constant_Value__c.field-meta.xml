@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Constant_Value__c</fullName>
+    <description>Literal constant preserved for later mapping execution, separate from a question answer. Source Kind constant makes an empty value an explicit blank constant; a blank value is not inferred as a question source.</description>
+    <label>Constant Value</label>
+    <length>32768</length>
+    <type>LongTextArea</type>
+    <visibleLines>6</visibleLines>
+</CustomField>
