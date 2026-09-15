@@ -791,3 +791,16 @@ Operational: run 34879906645 on ca90e4a was still waiting at 07:44 UTC. Bill can
 `SAFE TO PUSH: 623378e (findings 32 and 33 answered)`
 
 `HOLD: PR #10, 2 findings` (32, 33), pending hosted success on the pushed head.
+
+## 2026-09-15: PR #10 pushed head `623378e` and run 34945663516 cleared for approval
+
+- The PR head is exactly 623378e, with tree e04391c, identical to the verified local candidate. It is one commit on ca90e4a, based on main 5e4e681, from the same repository.
+- Changed files from ca90e4a: the two test classes, ADR 0013 and `docs/data-model.md`. Workflows, harness scripts, packages, the project and scratch definitions are unchanged. The pin 1d0edc1 appears twice.
+- Salesforce run 34945663516: `pull_request` event, exact head, attempt 1. The policy job succeeded (classification and exact-head budget). The Apex job is waiting with 0 steps. It is the only waiting run.
+- Public CI 34945663738 succeeded on the exact head.
+- Old run 34879906645 on ca90e4a completed after its rejection with no Apex steps. Its head differs, so it is outside this head's budget.
+- At 08:16 UTC, 6 of 6 daily and 3 of 3 active scratch orgs were free. 0 were active.
+
+`SAFE TO APPROVE: run 34945663516 at head 623378e`
+
+`HOLD: PR #10, 2 findings` (32, 33), pending hosted success with an exact-head marker and a Deleted org.
