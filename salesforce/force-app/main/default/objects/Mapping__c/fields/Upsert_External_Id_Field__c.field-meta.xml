@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Upsert_External_Id_Field__c</fullName>
+    <description>Optional target external-ID field API name for later upsert execution. Preserve customer or foreign namespace verbatim. Publication must validate the field and permissions; this definition does not perform an upsert.</description>
+    <label>Upsert External Id Field</label>
+    <length>255</length>
+    <required>false</required>
+    <type>Text</type>
+</CustomField>

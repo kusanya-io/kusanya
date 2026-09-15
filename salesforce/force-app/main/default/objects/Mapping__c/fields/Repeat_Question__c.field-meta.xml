@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Repeat_Question__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>Repeat node establishing this mapping scope in the same form version. Repeat mappings require it; main and reference mappings leave it empty. Apex guards direct referenced Question deletion; owner cascades remain native.</description>
+    <label>Repeat Question</label>
+    <referenceTo>Question__c</referenceTo>
+    <relationshipLabel>Repeat Mappings</relationshipLabel>
+    <relationshipName>Repeat_Mappings</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

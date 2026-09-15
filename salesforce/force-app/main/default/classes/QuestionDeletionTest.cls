@@ -205,7 +205,7 @@ private class QuestionDeletionTest {
     }
 
     @IsTest
-    static void bulkDeletionUsesOneQueryAndNoInternalDml() {
+    static void bulkDeletionUsesThreeQueriesAndNoInternalDml() {
         Form_Version__c version = createVersion('Synthetic bulk deletion');
         List<Question__c> definitions = new List<Question__c>();
         for (Integer index = 0; index < 200; index++) {
@@ -225,7 +225,7 @@ private class QuestionDeletionTest {
             definitions,
             false
         );
-        Assert.areEqual(queriesBefore + 1, Limits.getQueries());
+        Assert.areEqual(queriesBefore + 3, Limits.getQueries());
         Assert.areEqual(dmlBefore + 1, Limits.getDmlStatements());
         Assert.areEqual(200, results.size());
         assertAllDeleted(results);

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Form_Version__c</fullName>
+    <description>Owning form definition version. Mappings inherit its access and deletion behavior and cannot move to another version.</description>
+    <label>Form Version</label>
+    <referenceTo>Form_Version__c</referenceTo>
+    <relationshipLabel>Mappings</relationshipLabel>
+    <relationshipName>Mappings</relationshipName>
+    <relationshipOrder>0</relationshipOrder>
+    <reparentableMasterDetail>false</reparentableMasterDetail>
+    <type>MasterDetail</type>
+    <writeRequiresMasterRead>false</writeRequiresMasterRead>
+</CustomField>

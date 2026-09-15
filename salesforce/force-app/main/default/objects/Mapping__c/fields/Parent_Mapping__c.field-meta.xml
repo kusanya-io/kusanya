@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Parent_Mapping__c</fullName>
+    <description>Optional same-version mapping dependency supplying the record for Parent Lookup Field. Parent dependencies must be acyclic. Apex guards direct deletion while a mapping outside the delete batch depends on it; owner cascades bypass child triggers.</description>
+    <label>Parent Mapping</label>
+    <referenceTo>Mapping__c</referenceTo>
+    <relationshipLabel>Child Mappings</relationshipLabel>
+    <relationshipName>Child_Mappings</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

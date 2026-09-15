@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Collector_Field__c</fullName>
+    <description>Optional target field API name for the authenticated collector stamp. Preserve customer or foreign namespace verbatim. Later ingestion supplies this trusted value, never a form answer or Salesforce collector user.</description>
+    <label>Collector Field</label>
+    <length>255</length>
+    <required>false</required>
+    <type>Text</type>
+</CustomField>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Target_Field__c</fullName>
+    <description>Portable target field API name on the owning mapping Target Object. Store it verbatim with any customer or foreign namespace preserved. Later publication validates existence, type, permissions and transform compatibility.</description>
+    <label>Target Field</label>
+    <length>255</length>
+    <required>true</required>
+    <type>Text</type>
+</CustomField>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Match_Detail__c</fullName>
+    <description>Optional authoring diagnostic detail explaining match status or warnings. This text is advisory only, never executable input or an authorization decision; later publication recomputes its checks.</description>
+    <label>Match Detail</label>
+    <length>32768</length>
+    <type>LongTextArea</type>
+    <visibleLines>6</visibleLines>
+</CustomField>

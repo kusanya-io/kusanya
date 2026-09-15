@@ -44,6 +44,51 @@ void test('target object and field names are unchanged for both configurations',
   }
 });
 
+void test('mapping definition names and customer targets stay distinct in both configurations', () => {
+  const target = {
+    object: 'vendor__Observation__c',
+    field: 'vendor__Result__c',
+    parent: 'Site__c',
+    collector: 'Collector__c',
+    submission: 'Submission_Key__c',
+  };
+  for (const prefix of ['', 'ksny__']) {
+    const names = createSalesforceNames(prefix);
+    for (const object of ['Mapping__c', 'Field_Mapping__c'])
+      assert.equal(names.kusanyaObject(object), `${prefix}${object}`);
+    for (const field of [
+      'Target_Object__c',
+      'Target_Field__c',
+      'Source_Kind__c',
+      'Constant_Value__c',
+      'Parent_Lookup_Field__c',
+      'Collector_Field__c',
+      'Submission_Field__c',
+    ])
+      assert.equal(names.kusanyaField(field), `${prefix}${field}`);
+    for (const relationship of [
+      'Mapping__r',
+      'Parent_Mapping__r',
+      'Repeat_Question__r',
+      'Question__r',
+      'Mappings__r',
+      'Field_Mappings__r',
+    ])
+      assert.equal(
+        names.kusanyaRelationship(relationship),
+        `${prefix}${relationship}`,
+      );
+    assert.equal(names.targetObject(target.object), target.object);
+    for (const field of [
+      target.field,
+      target.parent,
+      target.collector,
+      target.submission,
+    ])
+      assert.equal(names.targetField(field), field);
+  }
+});
+
 void test('owned parent and child relationship names use the configured prefix', () => {
   for (const namespacePrefix of ['', 'ksny__']) {
     const names = createSalesforceNames(namespacePrefix);

@@ -26,11 +26,27 @@ public without sharing class QuestionIntegrityHandler {
                 OR Previous_Version_Question__c IN :deletingIds)
             LIMIT 1
         ];
-        if (!outsideDependants.isEmpty()) {
+        List<Mapping__c> repeatMappings = [
+            SELECT Id
+            FROM Mapping__c
+            WHERE Repeat_Question__c IN :deletingIds
+            LIMIT 1
+        ];
+        List<Field_Mapping__c> fieldMappings = [
+            SELECT Id
+            FROM Field_Mapping__c
+            WHERE Question__c IN :deletingIds
+            LIMIT 1
+        ];
+        if (
+            !outsideDependants.isEmpty() ||
+            !repeatMappings.isEmpty() ||
+            !fieldMappings.isEmpty()
+        ) {
             // Fail this batch together; do not disclose hidden dependant records.
             for (Question__c question : deleting.values()) {
                 question.addError(
-                    'Cannot delete questions referenced by questions outside this delete batch.'
+                    'Cannot delete questions referenced by definitions outside this delete batch.'
                 );
             }
         }
@@ -44,6 +60,7 @@ public without sharing class QuestionIntegrityHandler {
         Set<Id> referenceIds = new Set<Id>();
         Set<Id> choiceListIds = new Set<Id>();
         Set<Id> questionIds = new Set<Id>();
+        Set<Id> changedRepeatIds = new Set<Id>();
         for (Question__c question : incoming) {
             question.Question_Key__c = null;
             if (question.Form_Version__c != null) {
@@ -63,6 +80,12 @@ public without sharing class QuestionIntegrityHandler {
                 questionIds.add(question.Id);
                 if (original != null) {
                     choiceListIds.add(original.get(question.Id).Choice_List__c);
+                    if (
+                        original.get(question.Id).Type__c == 'repeat' &&
+                        question.Type__c != 'repeat'
+                    ) {
+                        changedRepeatIds.add(question.Id);
+                    }
                 }
             }
         }
@@ -121,6 +144,17 @@ public without sharing class QuestionIntegrityHandler {
         );
 
         Boolean valid = true;
+        if (!changedRepeatIds.isEmpty()) {
+            List<Mapping__c> dependants = [
+                SELECT Id
+                FROM Mapping__c
+                WHERE Repeat_Question__c IN :changedRepeatIds
+                LIMIT 1
+            ];
+            if (!dependants.isEmpty()) {
+                valid = false;
+            }
+        }
         for (Question__c question : incoming) {
             if (
                 !validName(question.Name) ||
