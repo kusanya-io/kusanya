@@ -832,3 +832,21 @@ Note 35, non-blocking: the only warning is GitHub's Node.js 20 deprecation notic
 Findings 32 and 33 are closed. Note 34 is recorded. Notes 24, 25 and 27 to 31 carry forward, and note 35 is added. This is a Phase 1 model unit, not the phase gate.
 
 `PASS: PR #10 may be merged`
+
+## 2026-09-16: PR #10 merged
+
+Bill squash-merged PR #10 as f435129. Its tree, e04391c, is identical to the verified head 623378e, so the hosted Apex evidence from run 34945663516 and my kept-org run apply to main unchanged. Main CI 35024347296 passed.
+
+Carried forward to later reviewed units, none blocking:
+
+- Note 24: the ADR 0011 read policy and its effective-access tests, now including Mapping and Field Mapping, before any Phase 2 definition reader.
+- Note 25: the untested insert path of the Current Version rule; the resolver handles only `__c`.
+- Note 27: Author Notes exclusion must be proven at the compiler and delivery layer.
+- Note 28: compile-time rejection of a repeat counted from its own subtree and of non-answerable skip sources.
+- Note 29: working-directory executable discovery in the Windows launcher.
+- Note 30: undelete restores a Form without its skip rules, and a lone child without its parent.
+- Note 31: a single dropped GitHub API response fails the confirm step, and logout fails when the CLI is absent.
+- Note 34: the target identifier rule is lexical and accepts names such as `Account__r`; the publisher must Describe-check targets.
+- Note 35: the pinned `actions/checkout` and `actions/setup-node` target Node.js 20; updating them needs a separately reviewed workflow change.
+- Whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013).
+- A namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
