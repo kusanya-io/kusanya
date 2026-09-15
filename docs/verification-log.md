@@ -804,3 +804,31 @@ Operational: run 34879906645 on ca90e4a was still waiting at 07:44 UTC. Bill can
 `SAFE TO APPROVE: run 34945663516 at head 623378e`
 
 `HOLD: PR #10, 2 findings` (32, 33), pending hosted success with an exact-head marker and a Deleted org.
+
+## 2026-09-16: PR #10 hosted Apex evidence, run 34945663516 attempt 1 at `623378e`; PASS
+
+Run and head:
+
+- Attempt 1 succeeded on the exact head. The `salesforce-ci` approval was by cobitechsolutions. The policy, Apex and gate jobs all succeeded.
+- The PR head is unchanged. It is up to date with main 5e4e681, the merge state is CLEAN, and all five checks are green.
+
+Apex job 104304413061, full log of 531 lines:
+
+- The confirm step printed the exact head, and the stale-head check passed.
+- The in-job budget recheck returned `allowed: true, kind: initial`.
+- Result: `81 passed; 473/475 executable lines (99.58%)`.
+- There is exactly one marker: schema 1, role `ci`, run `34945663516-1`, full head 623378e, started 20:23:22.566Z, outcome `passed`, retryable false.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted. Tag `kusanya-ci-v1__34945663516-1__623378eec361__ab75e796a3d6`. The fallback cleanup was skipped after success, and logout succeeded.
+
+Dev Hub:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00DRu00000YJXgz, created 20:23:27 and last modified 20:24:27 UTC.
+- Setup Audit Trail has `deleteScratchOrg` for "00DRu00000YJXgz" at 20:24:32 UTC. ActiveScratchOrg has 0 rows.
+
+Credential hygiene: the scan found no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys or email addresses. All 10 masks are GitHub redactions.
+
+Note 35, non-blocking: the only warning is GitHub's Node.js 20 deprecation notice for the pinned `actions/checkout` and `actions/setup-node` SHAs, forced to Node 24. Updating those pins needs a separately reviewed workflow change.
+
+Findings 32 and 33 are closed. Note 34 is recorded. Notes 24, 25 and 27 to 31 carry forward, and note 35 is added. This is a Phase 1 model unit, not the phase gate.
+
+`PASS: PR #10 may be merged`
