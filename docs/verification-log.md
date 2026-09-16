@@ -850,3 +850,90 @@ Carried forward to later reviewed units, none blocking:
 - Note 35: the pinned `actions/checkout` and `actions/setup-node` target Node.js 20; updating them needs a separately reviewed workflow change.
 - Whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013).
 - A namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
+
+## 2026-09-16: Source and security review of PR #12 head `1eace21`, the bounded XForm compiler
+
+Scope: the first compiler unit. It adds `service/src/compiler` (types, definition decoding, expression parsing, compilation and rendering), its tests and fixtures, the optional offline `scripts/check-compiler-odk.mjs`, ADR 0014 and compiler documentation. The review was requested before Bill approves run 35060206558.
+
+Trust boundary:
+
+- No workflow, harness, Salesforce, permission, package or lockfile change, and no new dependency. The pin 1d0edc1 appears twice. The head is one commit on current main f5f4eb1.
+- No verifier scratch org was created or needed: nothing under `salesforce/` changed since PR #10, which already has hosted and fresh-org evidence.
+
+Local, in a detached worktree:
+
+- Root tests 167 of 167, service 70 of 70, lint, typecheck, Prettier and the scaffold check.
+- Public CI 35060206544 is green.
+
+Independent probes, run against a locally built `compileForm` with synthetic input only:
+
+- Author Notes and Regex Example never reach XML; Hint does. Diagnostics carry a code and a structural location only. This is the compiler half of note 27.
+- XML injection attempts through title, label, hint, constraint message and choice values are escaped in text and attributes.
+- A choice value containing both quote kinds compiles to a correct concat literal. Unknown functions, `instance()`, predicates, axes, foreign roots, wrong arity and comment syntax are refused.
+- Sibling-repeat, deeper-repeat and non-answerable references are refused; same-repeat and root references work.
+- Direct, self, inherited and repeat-count dependency cycles are caught, while self-referencing constraints remain allowed.
+- A repeat counted from inside its own subtree is refused, which answers note 28 at the compiler.
+- Accessors, proxies, a `__proto__` key, sparse and extended arrays and unknown fields are refused. `Object.prototype` stays clean and the input is not mutated.
+- Control characters and lone surrogates are refused, astral characters survive, and CR is escaped.
+- Reordered questions and choices produce identical bytes.
+- Depth, question count, reused-list expansion, expression length and nesting stop at the documented limits.
+- Reserved and malformed question names are refused.
+
+Validator, reproduced independently: ODK Validate 1.20.0 was downloaded, its SHA-256 confirmed as the pinned `92756ea4`, and the script run with Java 21. Four fixtures valid, both negative controls rejected. My own nested repeat forms also parse.
+
+Note 36, non-blocking: nested repeats emit relative counts, `jr:count="../n"` and `jr:count="../_ksny_count_x"`, while root repeats emit absolute paths. The ODK specification does not define the evaluation context for `jr:count`, and its example uses an absolute path. Validate parses both nested forms, but parsing is not evaluation. If a client evaluates against the repeat's parent, the relative path reads one level too high. Test nested counted repeats in ODK Collect and Enketo before any C10.2 or C10.3 claim, and record the gap in `docs/compiler.md`.
+
+Capacity at 05:58 UTC: 5 of 6 daily and 3 of 3 active, with none in use.
+
+`SAFE TO APPROVE: run 35060206558 at head 1eace21`
+
+`HOLD: PR #12, 0 findings`, pending hosted success with an exact-head marker and a Deleted org.
+
+## 2026-09-16: PR #12 hosted Apex evidence, run 35060206558 attempt 1 at `1eace21`; PASS
+
+Run and head:
+
+- Attempt 1 succeeded on the exact head. The `salesforce-ci` approval was by cobitechsolutions. The policy, Apex and gate jobs all succeeded.
+- The PR head is unchanged and up to date with main f5f4eb1. Merge state is CLEAN, and all five checks are green.
+
+Apex job 104678794852, full log of 531 lines:
+
+- The confirm step printed the exact head, and the stale-head check passed.
+- The in-job budget recheck returned `allowed: true, kind: initial`.
+- Result: `Apex for 1eace21: 81 passed; 473/475 executable lines (99.58%)`, matching the PR #10 baseline because no Salesforce source changed.
+- Exactly one marker: schema 1, role `ci`, run `35060206558-1`, full head 1eace21, started 06:08:05.265Z, outcome `passed`, retryable false.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted, tag `kusanya-ci-v1__35060206558-1__1eace21c9f62__1c4b56c183af`. Fallback cleanup skipped after success, logout succeeded.
+
+Dev Hub, checked independently:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00DEc00000liKHk, created 06:08:09 and last modified 06:09:06 UTC.
+- Setup Audit Trail has `deleteScratchOrg` for "00DEc00000liKHk" at 06:09:09 UTC. ActiveScratchOrg has 0 rows, and 4 of 6 daily slots remain.
+
+Credential hygiene: no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys or email addresses. All 10 masks are GitHub redactions. The only warning is note 35's Node.js 20 deprecation notice.
+
+The compiler evidence rests on the source review and probes recorded in the previous entry, together with the independently reproduced ODK Validate run.
+
+Note 36 stays open for the runtime unit: nested `jr:count` evaluation must be tested in ODK Collect and Enketo before any C10.2 or C10.3 claim. Notes 24, 25, 27 to 31, 34 and 35 carry forward; notes 27 and 28 are answered at the compiler layer only, and delivery and publication still owe their own tests. This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
+
+`PASS: PR #12 may be merged`
+
+## 2026-09-16: PR #12 merged
+
+Bill merged PR #12 as bff5791. Its tree, 329dfc7, is identical to the verified head 1eace21, so the hosted Apex evidence from run 35060206558, my source review, my compiler probes and my reproduced ODK Validate run all apply to main unchanged. Main CI 35062941552 passed.
+
+Carried forward to later reviewed units, none blocking:
+
+- Note 24: the ADR 0011 read policy and its effective-access tests, including Mapping and Field Mapping, before any Phase 2 definition reader.
+- Note 25: the untested insert path of the Current Version rule; the resolver handles only `__c`.
+- Note 27: Author Notes exclusion is answered in the compiler only. Delivery and publication still need their own regression that notes never reach collector output.
+- Note 28: a repeat counted from its own subtree and non-answerable skip sources are now rejected by the compiler. Storage still accepts them, so authoring and import paths must keep reporting the compiler's rejection.
+- Note 29: working-directory executable discovery in the Windows launcher.
+- Note 30: undelete restores a Form without its skip rules, and a lone child without its parent.
+- Note 31: a single dropped GitHub API response fails the confirm step, and logout fails when the CLI is absent.
+- Note 34: the target identifier rule is lexical and accepts names such as `Account__r`; the publisher must Describe-check targets.
+- Note 35: the pinned `actions/checkout` and `actions/setup-node` target Node.js 20; updating them needs a separately reviewed workflow change.
+- Note 36: nested repeats emit relative `jr:count` paths whose evaluation context the ODK specification does not define. Test nested counted repeats in ODK Collect and Enketo, and record the gap in `docs/compiler.md`, before any C10.2 or C10.3 claim.
+- Whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013).
+- A namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
+
+Phase 1 remains in progress. Publication, adapters, mapping execution, XLSForm round trips, print view and CLI publishing are still outstanding, and no C10 acceptance test is claimed by any unit so far.
