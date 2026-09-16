@@ -1129,3 +1129,33 @@ Evidence limitation carried forward: I have not reproduced the Enketo browser pr
 Also outstanding: whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013), a namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
 
 Phase 1 remains in progress. Publication, adapters, mapping execution, XLSForm round trips and CLI publishing are still outstanding, and no C10 acceptance test is claimed by any unit so far.
+
+## 2026-09-16: Source and security review of PR #18 head `b8989c5`, authoring bundles and the XLSForm table profile
+
+Scope: `service/src/interchange/bundle.ts` and `xlsform-tables.ts`, their tests, the offline `check-interchange-fixtures.mjs`, ADR 0017, the interchange runbook, and ADR 0016's recording of note 39. The review was requested before Bill approves run 35087014934.
+
+Trust boundary:
+
+- No workflow, credentialed harness, Salesforce, permission, namespace or package change. All four manifests and lockfiles are untouched, as is the runtime probe package, and the pin 1d0edc1 appears twice. The head is one commit on current main 0f1b209.
+- The compiler and print modules are unchanged, so nothing in this unit can alter collector XML.
+
+Local, in a detached worktree: root tests 252 of 252, service 151 of 151, lint, typecheck, format check and scaffold. The interchange checker ran its eight round trips and refused each changed projection. Public CI 35087014933 is green.
+
+Verifier probes, synthetic input only:
+
+- Numbers at the JSON text boundary. `3`, `3.00e0` and `0.30e1` are accepted and stored as `3`. `1.0000000000000001`, `12345678901234567890`, `1e-400` and `1e400` are refused with `BUNDLE_INPUT_NUMBER`, so silent rounding and underflow cannot pass. `+3`, `03`, `0x3` and `3.` are syntax errors, and `-0` normalizes to `0` as ADR 0017 states.
+- Strict parsing. Duplicate keys are refused rather than last-key-wins. `__proto__` and `constructor` keys, extra envelope keys, a wrong `kind`, a live object instead of a string, trailing commas, trailing text, comments and `NaN` each have their own rejection code. `Object.prototype` stays clean.
+- Round-trip fidelity. An awkward definition re-imports to identical canonical JSON, compiles to byte-identical XML and is idempotent on re-export. It preserves an unused choice list, author notes, an empty-string default, the literal string `false`, a null constant and a title with double spacing and an accent, with no trimming or Unicode normalization.
+- Table tampering. Editing a survey label, settings title or choice label; dropping a column; adding a row; renumbering a source index; editing a source chunk; swapping two distinct choice rows; blanking a cell; removing a row; adding an unknown sheet; and putting a number in a cell are all refused with a specific code and location. A clean import reproduces exactly the bundle JSON.
+- Chunking. Twelve emoji-heavy annotations produced 7 chunks of at most 30,000 units. No chunk ends with a high surrogate or begins with a low surrogate, every chunk is well-formed UTF-16, the joined text parses, and the annotations survive exactly. A truncated middle chunk is caught.
+- Hostile object shapes. Cycles, proxies, accessors, sparse arrays, over-deep nesting and oversize text are refused, and inputs are not mutated.
+
+Note 40, non-blocking, for the first unit that writes a real workbook or CSV: cells are plain JSON strings here and nothing executes, and the profile correctly preserves author text verbatim, including cells beginning with `=`, `+`, `-` and `@`. My probe produced survey cells `=1+1`, `+cmd|calc`, `@SUM(A1)` and `-2+3`. Altering them here would break the projection comparison, so neutralization belongs in the future writer: write display cells as explicit text or prefix the dangerous leading characters, keep `kusanya_source` byte-exact, and reverse or mirror that transformation on import so the round trip still holds. Record it in ADR 0017's consequences beside the converter-equivalence gap.
+
+Notes 36, 37 and 39 stay open, and the Enketo probe remains unreproduced by me pending Bill's decision.
+
+Capacity at 11:12 UTC: 4 of 6 daily and 3 of 3 active, with none in use.
+
+`SAFE TO APPROVE: run 35087014934 at head b8989c5`
+
+`HOLD: PR #18, 0 findings`, pending hosted success with an exact-head marker and a Deleted org.
