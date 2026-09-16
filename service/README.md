@@ -12,6 +12,13 @@ and ADR 0014. `ok: true` means structural compilation only, not publish-ready or
 verified Collect/Enketo behavior. Existing unit tests include synthetic compiler,
 XPath, output-allowlist and resource-boundary regressions.
 
+The pure `renderPrintView(formInput, mappingInput)` function at `src/print/render.ts`
+shares compiler preparation and emits bounded, static reviewer-only HTML. It shows
+compiled logic, choices, supplied mappings and separate author annotations. It is
+not collector content, a publishing check or an HTTP endpoint. See the
+[print contract and synthetic export runbook](../docs/print-view.md) and ADR 0016.
+No print/browser dependency is added to the service.
+
 Optional [client runtime probes](../docs/runtime-validation.md) live in
 `scripts/runtime` at repository root, with a separate Node 22 tooling lockfile.
 They exercise synthetic forms in Enketo and Collect's pinned JavaRosa engine;
