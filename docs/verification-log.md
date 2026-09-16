@@ -1129,3 +1129,91 @@ Evidence limitation carried forward: I have not reproduced the Enketo browser pr
 Also outstanding: whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013), a namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
 
 Phase 1 remains in progress. Publication, adapters, mapping execution, XLSForm round trips and CLI publishing are still outstanding, and no C10 acceptance test is claimed by any unit so far.
+
+## 2026-09-16: Source and security review of PR #18 head `b8989c5`, authoring bundles and the XLSForm table profile
+
+Scope: `service/src/interchange/bundle.ts` and `xlsform-tables.ts`, their tests, the offline `check-interchange-fixtures.mjs`, ADR 0017, the interchange runbook, and ADR 0016's recording of note 39. The review was requested before Bill approves run 35087014934.
+
+Trust boundary:
+
+- No workflow, credentialed harness, Salesforce, permission, namespace or package change. All four manifests and lockfiles are untouched, as is the runtime probe package, and the pin 1d0edc1 appears twice. The head is one commit on current main 0f1b209.
+- The compiler and print modules are unchanged, so nothing in this unit can alter collector XML.
+
+Local, in a detached worktree: root tests 252 of 252, service 151 of 151, lint, typecheck, format check and scaffold. The interchange checker ran its eight round trips and refused each changed projection. Public CI 35087014933 is green.
+
+Verifier probes, synthetic input only:
+
+- Numbers at the JSON text boundary. `3`, `3.00e0` and `0.30e1` are accepted and stored as `3`. `1.0000000000000001`, `12345678901234567890`, `1e-400` and `1e400` are refused with `BUNDLE_INPUT_NUMBER`, so silent rounding and underflow cannot pass. `+3`, `03`, `0x3` and `3.` are syntax errors, and `-0` normalizes to `0` as ADR 0017 states.
+- Strict parsing. Duplicate keys are refused rather than last-key-wins. `__proto__` and `constructor` keys, extra envelope keys, a wrong `kind`, a live object instead of a string, trailing commas, trailing text, comments and `NaN` each have their own rejection code. `Object.prototype` stays clean.
+- Round-trip fidelity. An awkward definition re-imports to identical canonical JSON, compiles to byte-identical XML and is idempotent on re-export. It preserves an unused choice list, author notes, an empty-string default, the literal string `false`, a null constant and a title with double spacing and an accent, with no trimming or Unicode normalization.
+- Table tampering. Editing a survey label, settings title or choice label; dropping a column; adding a row; renumbering a source index; editing a source chunk; swapping two distinct choice rows; blanking a cell; removing a row; adding an unknown sheet; and putting a number in a cell are all refused with a specific code and location. A clean import reproduces exactly the bundle JSON.
+- Chunking. Twelve emoji-heavy annotations produced 7 chunks of at most 30,000 units. No chunk ends with a high surrogate or begins with a low surrogate, every chunk is well-formed UTF-16, the joined text parses, and the annotations survive exactly. A truncated middle chunk is caught.
+- Hostile object shapes. Cycles, proxies, accessors, sparse arrays, over-deep nesting and oversize text are refused, and inputs are not mutated.
+
+Note 40, non-blocking, for the first unit that writes a real workbook or CSV: cells are plain JSON strings here and nothing executes, and the profile correctly preserves author text verbatim, including cells beginning with `=`, `+`, `-` and `@`. My probe produced survey cells `=1+1`, `+cmd|calc`, `@SUM(A1)` and `-2+3`. Altering them here would break the projection comparison, so neutralization belongs in the future writer: write display cells as explicit text or prefix the dangerous leading characters, keep `kusanya_source` byte-exact, and reverse or mirror that transformation on import so the round trip still holds. Record it in ADR 0017's consequences beside the converter-equivalence gap.
+
+Notes 36, 37 and 39 stay open, and the Enketo probe remains unreproduced by me pending Bill's decision.
+
+Capacity at 11:12 UTC: 4 of 6 daily and 3 of 3 active, with none in use.
+
+`SAFE TO APPROVE: run 35087014934 at head b8989c5`
+
+`HOLD: PR #18, 0 findings`, pending hosted success with an exact-head marker and a Deleted org.
+
+## 2026-09-16: PR #18 hosted Apex evidence, run 35087014934 attempt 1 at `b8989c5`; PASS
+
+Run and head:
+
+- Attempt 1 succeeded on the exact head, approved for `salesforce-ci` by cobitechsolutions. The policy, Apex and gate jobs all succeeded.
+- The PR head is unchanged and up to date with main 0f1b209. Merge state is CLEAN, and all five checks are green.
+
+Apex job 104764209775, full log of 531 lines:
+
+- The confirm step printed the exact head, and the stale-head check passed.
+- The in-job budget recheck returned `allowed: true, kind: initial`.
+- Result: `81 passed; 473/475 executable lines (99.58%)`, matching the established baseline because no Salesforce source changed.
+- Exactly one marker: schema 1, role `ci`, run `35087014934-1`, full head b8989c5, started 11:24:01.462Z, outcome `passed`, retryable false.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted, tag `kusanya-ci-v1__35087014934-1__b8989c5271dc__ba1d9ce00c35`. Fallback cleanup skipped after success, logout succeeded.
+
+Dev Hub, checked independently:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00DRL00000WHzuH, created 11:24:06 and last modified 11:25:00 UTC.
+- Setup Audit Trail has `deleteScratchOrg` for "00DRL00000WHzuH" at 11:25:11 UTC. ActiveScratchOrg has 0 rows.
+
+Credential hygiene: no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys or email addresses in the full log. All 10 masks are GitHub redactions. The only warning is note 35's Node.js 20 deprecation notice.
+
+The interchange evidence rests on the previous entry: exact-decimal JSON handling, duplicate-key refusal, byte-identical round trips, refusal of every table tamper tried, correct astral chunking and refusal of hostile object shapes.
+
+Open items carried forward, none blocking this unit: note 40 on neutralizing spreadsheet formula prefixes in a future workbook or CSV writer, with an ADR 0017 consequences update; note 39 on gating reviewer HTML delivery; note 36 on the untested Collect Android UI; note 37 on client-specific count reduction; the Enketo probe still unreproduced by the verifier; and notes 24, 25, 27 to 31, 34 and 35. Note 38 is answered.
+
+This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
+
+`PASS: PR #18 may be merged`
+
+## 2026-09-16: PR #18 merged
+
+Bill squash-merged PR #18 as 3caea7a. Its tree, 5191040, is identical to the verified head b8989c5, so the hosted Apex evidence from run 35087014934, my source and security review, and my interchange probes all apply to main unchanged. Main CI 35092417058 passed.
+
+Carried forward to later reviewed units, none blocking:
+
+- Note 24: the ADR 0011 read policy and its effective-access tests, including Mapping and Field Mapping, before any Phase 2 definition reader.
+- Note 25: the untested insert path of the Current Version rule; the resolver handles only `__c`.
+- Note 27: Author Notes exclusion is proven in the compiler only. Delivery and publication still need their own regression.
+- Note 28: the compiler rejects a repeat counted from its own subtree and non-answerable skip sources; storage still accepts them.
+- Note 29: working-directory executable discovery in the Windows launcher.
+- Note 30: undelete restores a Form without its skip rules, and a lone child without its parent.
+- Note 31: a single dropped GitHub API response fails the confirm step, and logout fails when the CLI is absent.
+- Note 34: the target identifier rule is lexical and accepts names such as `Account__r`; the publisher must Describe-check targets.
+- Note 35: the pinned `actions/checkout` and `actions/setup-node` target Node.js 20; updating them needs a separately reviewed workflow change.
+- Note 36: the actual Collect Android UI is still untested. Engine evidence exists for JavaRosa, which I reproduced, and for Enketo, which I have not. Bill's device or emulator decision is outstanding.
+- Note 37: JavaRosa retains already-created instances when a repeat count drops, while Enketo removes a trailing answered row. Choose one publication or ingestion rule and test it in both engines before C10.2 or C10.3.
+- Note 39: the first unit that delivers the reviewer HTML must gate on `audience`, require reviewer authorization, send `Cache-Control: no-store`, keep the CSP as a real response header with `X-Content-Type-Options: nosniff`, and test that a collector-scoped principal cannot fetch it. ADR 0016 records this.
+- Note 40: the first unit that writes a real workbook or CSV must neutralize leading `=`, `+`, `-` and `@` in display cells, keep `kusanya_source` byte-exact, and mirror or reverse that transformation on import. ADR 0017's consequences should record this.
+
+Note 38 remains answered by the isolation tripwire.
+
+Evidence limitation carried forward: I have not reproduced the Enketo browser probe, because it requires installing optional packages carrying five advisories, two of them high. That result remains the builder's alone until Bill authorizes the installation, and none of that tooling is cleared for production or customer XML.
+
+Also outstanding: whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013), the table profile is not proven through an external XLSForm converter, a namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
+
+Phase 1 remains in progress. Publication, adapters, mapping execution and CLI publishing are still outstanding, and no C10 acceptance test is claimed by any unit so far.
