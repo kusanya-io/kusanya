@@ -36,9 +36,19 @@ dependencies. No tool binaries are committed or shipped with the product.
 The container retains upstream licences/notices. Recheck the full image inventory
 before a release, including operating-system packages and copied npm notices.
 
-ODK Collect, JavaRosa, ODK Validate and Enketo are planned integrations, not shipped
-Phase 0 dependencies. Select exact versions and inspect each component's licence in
-the integration ADR; an Enketo server distribution and its renderer may have
-different dependencies or licence obligations. No upstream source was copied here.
+ADR 0014 introduces **ODK Validate 1.20.0** as an optional local development tool,
+not a bundled service dependency. Its release includes JavaRosa 5.1.0. The pinned
+[Validate licence](https://github.com/getodk/validate/blob/v1.20.0/LICENSE.md) is
+Apache-2.0; [the tagged build](https://github.com/getodk/validate/blob/v1.20.0/build.gradle)
+records JavaRosa and the other bundled libraries. The upstream jar stays in ignored
+`work/`, retains upstream notices and is not committed or copied into any image.
+`scripts/check-compiler-odk.mjs` checks the release SHA-256 before running synthetic
+fixtures offline. Reinventory all transitive licences before any redistribution.
+
+ODK Collect and Enketo remain planned runtime integrations, not shipped dependencies
+or deployed services. ADR 0014 identifies intended compatibility targets, not proven
+runtime compatibility. An Enketo server distribution and its renderer may have
+different dependencies or licence obligations; inspect the selected distribution
+before deployment. No upstream source was copied here and no npm dependency was added.
 
 No paid dependency is introduced. Adding one requires Bill's approval under C12.

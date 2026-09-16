@@ -4,7 +4,8 @@ Only Claude can close a phase by recording a verdict in `docs/verification-log.m
 Bill relayed Claude's Phase 0 PASS in PR #3 review 5177252674 and the first Phase 1
 unit PASS in PR #8 review 5194796568 (merged as `e97882d`). The question-tree unit
 passed Claude verification and merged as `1ec8488`; its verification log merged
-through PR #7. Mapping definitions are now in development. The builder does not
+through PR #7. Mapping definitions passed PR #10 and merged as `f435129`; the log
+merged through PR #11 as `f5f4eb1`. The bounded compiler unit is now in development. The builder does not
 issue its own gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
@@ -53,6 +54,15 @@ these definitions without granting cross-owner access now. No mapping execution
 or target schema validation is claimed. Note 30's observed undelete gaps and
 notes 29/31's tool/CI hardening stay deferred to their appropriate reviewed units.
 
-Next units must deliver compilation/validation, immutable publication
+The first compiler unit (ADR 0014) implements neutral-bundle tree/choice/skip
+validation and deterministic XML generation inside the service. It tests Author
+Notes exclusion and the note 28 invalid repeat/skip states. Offline synthetic
+ODK Validate checks are not Collect/Enketo execution or acceptance evidence.
+Dynamic-count reduction, richer XPath/options, JavaScript-to-XPath equivalence and
+automatic per-artifact JavaRosa validation remain required before corresponding
+runtime/publish claims. No CI or harness change is included; notes 29/31/35 remain
+separate reviewed tooling/workflow work.
+
+Next units must complete compilation/runtime validation, immutable publication
 and draft deletion behavior, XLSForm round trips, print view and CLI publication.
 No model unit claims C10 tests 10/12. Do not mark Phase 1 complete from model tests.
