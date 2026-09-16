@@ -1102,3 +1102,30 @@ Open items carried forward, none blocking this unit: note 39 on gating future de
 This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
 
 `PASS: PR #16 may be merged`
+
+## 2026-09-16: PR #16 merged
+
+Bill merged PR #16 as fc64c38. Its tree, 7514ffb, is identical to the verified head 21aa80b, so the hosted Apex evidence from run 35078524828, my source and security review, my proven compiler byte equivalence and my print-view probes all apply to main unchanged.
+
+Note 38 is answered: the optional probe dependencies are kept out of the root and service manifests, lockfiles, workflows and container build by `scripts/runtime-isolation.test.mjs`, whose 85 cases I verified by mutation.
+
+Carried forward to later reviewed units, none blocking:
+
+- Note 24: the ADR 0011 read policy and its effective-access tests, including Mapping and Field Mapping, before any Phase 2 definition reader.
+- Note 25: the untested insert path of the Current Version rule; the resolver handles only `__c`.
+- Note 27: Author Notes exclusion is proven in the compiler only. Delivery and publication still need their own regression.
+- Note 28: the compiler rejects a repeat counted from its own subtree and non-answerable skip sources; storage still accepts them.
+- Note 29: working-directory executable discovery in the Windows launcher.
+- Note 30: undelete restores a Form without its skip rules, and a lone child without its parent.
+- Note 31: a single dropped GitHub API response fails the confirm step, and logout fails when the CLI is absent.
+- Note 34: the target identifier rule is lexical and accepts names such as `Account__r`; the publisher must Describe-check targets.
+- Note 35: the pinned `actions/checkout` and `actions/setup-node` target Node.js 20; updating them needs a separately reviewed workflow change.
+- Note 36: the actual Collect Android UI is still untested. Engine evidence exists for JavaRosa, which I reproduced, and for Enketo, which I have not. Bill's device or emulator decision is outstanding.
+- Note 37: JavaRosa retains already-created instances when a repeat count drops, while Enketo removes a trailing answered row. Choose one publication or ingestion rule and test it in both engines before C10.2 or C10.3.
+- Note 39: the first unit that delivers the reviewer HTML must gate on `audience`, require reviewer authorization, never reuse a collector or public route, send `Cache-Control: no-store` with no shared cache, keep the Content-Security-Policy as a real response header with `X-Content-Type-Options: nosniff`, and test that a collector-scoped principal cannot fetch it. ADR 0016's consequences should record this.
+
+Evidence limitation carried forward: I have not reproduced the Enketo browser probe, because it requires installing optional packages carrying five advisories, two of them high. That result remains the builder's alone until Bill authorizes the installation, and none of that tooling is cleared for production or customer XML.
+
+Also outstanding: whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013), a namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
+
+Phase 1 remains in progress. Publication, adapters, mapping execution, XLSForm round trips and CLI publishing are still outstanding, and no C10 acceptance test is claimed by any unit so far.
