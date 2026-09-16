@@ -978,3 +978,33 @@ On Bill's device question, my recommendation is a purpose-made emulator image ra
 `SAFE TO APPROVE: run 35065752715 at head 17bf838`
 
 `HOLD: PR #14, 0 findings`, pending hosted success with an exact-head marker and a Deleted org.
+
+## 2026-09-16: PR #14 hosted Apex evidence, run 35065752715 attempt 1 at `17bf838`; PASS
+
+Run and head:
+
+- Attempt 1 succeeded on the exact head, approved for `salesforce-ci` by cobitechsolutions. The policy, Apex and gate jobs all succeeded.
+- The PR head is unchanged and up to date with main f8bf523. Merge state is CLEAN, and all five checks are green.
+
+Apex job 104695602752, full log of 531 lines:
+
+- The confirm step printed the exact head, and the stale-head check passed.
+- The in-job budget recheck returned `allowed: true, kind: initial`.
+- Result: `81 passed; 473/475 executable lines (99.58%)`, matching the PR #12 baseline because no Salesforce source changed.
+- Exactly one marker: schema 1, role `ci`, run `35065752715-1`, full head 17bf838, started 07:17:48.019Z, outcome `passed`, retryable false.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted, tag `kusanya-ci-v1__35065752715-1__17bf8389aceb__12a8a88fa564`. Fallback cleanup skipped after success, logout succeeded.
+
+Dev Hub, checked independently:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00DRL00000WHR7q, created 07:17:52 and last modified 07:18:57 UTC.
+- Setup Audit Trail has `deleteScratchOrg` for "00DRL00000WHR7q" at 07:19:01 UTC. ActiveScratchOrg has 0 rows, and 5 of 6 daily slots remain.
+
+Credential hygiene: no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys or email addresses in the full log. All 10 masks are GitHub redactions. The only warning is note 35's Node.js 20 deprecation notice.
+
+The runtime evidence rests on the previous entry: the source and security review, the reproduced pinned ODK Validate run, and the reproduced JavaRosa 6.0.0 probe with all four jar hashes matched.
+
+Open items carried forward, none blocking this unit: note 36 narrowed to the actual Collect Android UI, pending Bill's device or emulator decision; note 37 on client-specific count reduction, which needs a publication or ingestion rule tested in both engines before C10.2 or C10.3; note 38 on keeping probe dependencies out of the service and root lockfiles; the unreproduced Enketo browser probe, which stays the builder's result until Bill authorizes that install; and notes 24, 25, 27 to 31, 34 and 35.
+
+This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
+
+`PASS: PR #14 may be merged`
