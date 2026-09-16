@@ -44,10 +44,11 @@ unsupported package parts and be rejected; broad OOXML normalization is not part
 of this unit.
 
 Bound compressed input to 12 MB, each expanded part to 10 MB and total expanded
-content to 20 MB before decompression. The existing table limits still apply after
-XML decoding: four sheets, 6,000 rows per sheet, 100,000 cells, 32,767 UTF-16 units
-per cell and 8,000,000 accumulated cell units. Failures expose structural codes and
-locations, not author content or parser excerpts.
+content to 20 MB before decompression. Declared uncompressed sizes cap allocation,
+and the 12 MB compressed-input limit also caps inflate work. The existing table
+limits still apply after XML decoding: four sheets, 6,000 rows per sheet, 100,000
+cells, 32,767 UTF-16 units per cell and 8,000,000 accumulated cell units. Failures
+expose structural codes and locations, not author content or parser excerpts.
 
 Use `fflate` 0.8.3 (MIT) for bounded ZIP creation/extraction and `saxes` 6.0.0
 (ISC, with `xmlchars` under MIT) for strict streaming XML parsing. They are free,

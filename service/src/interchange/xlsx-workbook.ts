@@ -65,7 +65,8 @@ function escapeText(value: string): string {
   return value
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
+    .replaceAll('>', '&gt;')
+    .replaceAll('\r', '&#13;');
 }
 function columnName(index: number): string {
   let value = index + 1;

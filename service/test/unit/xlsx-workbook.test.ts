@@ -95,6 +95,30 @@ void test('writes every cell as exact inline text so formula prefixes never exec
   }
 });
 
+void test('round-trips carriage returns in labels and author notes exactly', () => {
+  const label = 'label with CR\rthen CRLF\r\nthen LF\nend';
+  const authorNotes = 'note with CR\rthen CRLF\r\nthen LF\nend';
+  const form = simpleForm([
+    question('answer', {
+      label,
+      authorNotes,
+    }),
+  ]);
+  const exported = exportXlsFormWorkbook(form, emptyMappings);
+  assert.ok(exported.ok);
+  const survey = strFromU8(
+    unzipSync(exported.workbook)['xl/worksheets/sheet1.xml']!,
+  );
+  assert.ok(survey.includes('label with CR&#13;then CRLF&#13;\nthen LF\nend'));
+  const imported = importXlsFormWorkbook(exported.workbook);
+  assert.ok(imported.ok);
+  assert.equal(imported.bundle.definition.questions[0]!.label, label);
+  assert.equal(
+    imported.bundle.definition.questions[0]!.authorNotes,
+    authorNotes,
+  );
+});
+
 void test('rejects formulas, typed cells, comments and changed visible projections', () => {
   const { workbook } = fixture();
   const formula = rewrite(workbook, (entries) => {
