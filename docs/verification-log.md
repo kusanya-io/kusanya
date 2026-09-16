@@ -850,3 +850,41 @@ Carried forward to later reviewed units, none blocking:
 - Note 35: the pinned `actions/checkout` and `actions/setup-node` target Node.js 20; updating them needs a separately reviewed workflow change.
 - Whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013).
 - A namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
+
+## 2026-09-16: Source and security review of PR #12 head `1eace21`, the bounded XForm compiler
+
+Scope: the first compiler unit. It adds `service/src/compiler` (types, definition decoding, expression parsing, compilation and rendering), its tests and fixtures, the optional offline `scripts/check-compiler-odk.mjs`, ADR 0014 and compiler documentation. The review was requested before Bill approves run 35060206558.
+
+Trust boundary:
+
+- No workflow, harness, Salesforce, permission, package or lockfile change, and no new dependency. The pin 1d0edc1 appears twice. The head is one commit on current main f5f4eb1.
+- No verifier scratch org was created or needed: nothing under `salesforce/` changed since PR #10, which already has hosted and fresh-org evidence.
+
+Local, in a detached worktree:
+
+- Root tests 167 of 167, service 70 of 70, lint, typecheck, Prettier and the scaffold check.
+- Public CI 35060206544 is green.
+
+Independent probes, run against a locally built `compileForm` with synthetic input only:
+
+- Author Notes and Regex Example never reach XML; Hint does. Diagnostics carry a code and a structural location only. This is the compiler half of note 27.
+- XML injection attempts through title, label, hint, constraint message and choice values are escaped in text and attributes.
+- A choice value containing both quote kinds compiles to a correct concat literal. Unknown functions, `instance()`, predicates, axes, foreign roots, wrong arity and comment syntax are refused.
+- Sibling-repeat, deeper-repeat and non-answerable references are refused; same-repeat and root references work.
+- Direct, self, inherited and repeat-count dependency cycles are caught, while self-referencing constraints remain allowed.
+- A repeat counted from inside its own subtree is refused, which answers note 28 at the compiler.
+- Accessors, proxies, a `__proto__` key, sparse and extended arrays and unknown fields are refused. `Object.prototype` stays clean and the input is not mutated.
+- Control characters and lone surrogates are refused, astral characters survive, and CR is escaped.
+- Reordered questions and choices produce identical bytes.
+- Depth, question count, reused-list expansion, expression length and nesting stop at the documented limits.
+- Reserved and malformed question names are refused.
+
+Validator, reproduced independently: ODK Validate 1.20.0 was downloaded, its SHA-256 confirmed as the pinned `92756ea4`, and the script run with Java 21. Four fixtures valid, both negative controls rejected. My own nested repeat forms also parse.
+
+Note 36, non-blocking: nested repeats emit relative counts, `jr:count="../n"` and `jr:count="../_ksny_count_x"`, while root repeats emit absolute paths. The ODK specification does not define the evaluation context for `jr:count`, and its example uses an absolute path. Validate parses both nested forms, but parsing is not evaluation. If a client evaluates against the repeat's parent, the relative path reads one level too high. Test nested counted repeats in ODK Collect and Enketo before any C10.2 or C10.3 claim, and record the gap in `docs/compiler.md`.
+
+Capacity at 05:58 UTC: 5 of 6 daily and 3 of 3 active, with none in use.
+
+`SAFE TO APPROVE: run 35060206558 at head 1eace21`
+
+`HOLD: PR #12, 0 findings`, pending hosted success with an exact-head marker and a Deleted org.
