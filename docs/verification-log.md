@@ -1033,3 +1033,99 @@ Evidence limitation carried forward: I have not reproduced the Enketo browser pr
 Also outstanding: whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013), a namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
 
 Phase 1 remains in progress. Publication, adapters, mapping execution, XLSForm round trips, print view and CLI publishing are still outstanding, and no C10 acceptance test is claimed by any unit so far.
+
+## 2026-09-16: Source and security review of PR #16 head `21aa80b`, the reviewer-only print view
+
+Scope: the extraction of `prepareForm` from `compile.ts`, the new `service/src/print` renderer, mapping-summary decoding and styles, the note 38 isolation tripwire, the synthetic export script, ADR 0016 and the print runbook. The review was requested before Bill approves run 35078524828.
+
+Trust boundary:
+
+- No workflow, credentialed harness, Salesforce, permission, namespace or package change. All four manifests and lockfiles are untouched, and the pin 1d0edc1 appears twice. The head is one commit on current main bb292e6.
+
+Compiler equivalence, tested rather than assumed. I built both main and this head and compared their output directly:
+
+- Six shared fixtures, the four ODK fixtures and both repeat-runtime fixtures, produce byte-identical XML and identical warnings.
+- Seven verifier-built definitions, including trees, selects with hostile text, fixed and answer-driven repeats and three that must be rejected, produce identical result objects. The dependency-cycle, reference-scope and input-shape rejections keep the same codes and locations.
+
+Print view, probed with hostile content in the title, labels, hints, author notes, constraint message, choice labels and a mapping constant:
+
+- Tags in the output are limited to `a article aside body code dd div dl dt footer h1 h2 h3 h4 head header html li main meta nav ol p section span style title`. There is no `script`, `img`, `iframe`, `object`, `embed` or `form`.
+- Attributes are limited to `aria-label aria-labelledby charset class href http-equiv id lang name`. No event handlers, and no supplied text reaches an attribute.
+- Every `href` is a generated local anchor such as `#q-1` or `#m-1`. No `javascript:` and no external URL.
+- One inline `<style>` and no `<link>`. The CSP `sha256` matches the actual stylesheet, so an altered stylesheet stops applying.
+- The hostile payload appears only as escaped text.
+
+Mapping summaries: proxies, accessors, a `__proto__` key, unknown fields, traversal target names, unknown or non-answerable question references, a constant and question supplied together, case-insensitive duplicate targets, parent cycles, a matching field on a main mapping and a repeat question on a main mapping are each refused with a specific code and location. `Object.prototype` stays clean.
+
+Determinism and immutability: identical inputs give identical HTML; reversing questions, choice lists, mappings and field lists gives identical HTML; neither input is mutated; and a definition the compiler rejects is rejected identically by the print view, so there is no permissive preview.
+
+Note 38 is answered, and I verified the tripwire fires. Adding `playwright-core` to the root manifest in my own worktree made `scripts/runtime-isolation.test.mjs` fail 2 of its 85 cases; restoring the manifest returned all 85 to passing. The test is explicit that it is a source-level regression check, not a security boundary.
+
+Local, in a detached worktree: root tests 252 of 252, service 112 of 112, lint, typecheck, format check and scaffold. Public CI 35078524764 is green.
+
+Note 39, non-blocking, for whichever unit first delivers this HTML: the output intentionally contains author-only content, and `audience: 'reviewer-only'` should gate delivery rather than merely describe it. Require reviewer authorization at the boundary, never a collector or public route, send `Cache-Control: no-store` with no shared cache, keep the CSP as a real response header with `X-Content-Type-Options: nosniff`, and test that a collector-scoped principal cannot fetch it. Record this in ADR 0016's consequences.
+
+Notes 36 and 37 stay open, and the Enketo probe remains unreproduced by me pending Bill's decision.
+
+Capacity at 09:27 UTC: 5 of 6 daily and 3 of 3 active, with none in use.
+
+`SAFE TO APPROVE: run 35078524828 at head 21aa80b`
+
+`HOLD: PR #16, 0 findings`, pending hosted success with an exact-head marker and a Deleted org.
+
+## 2026-09-16: PR #16 hosted Apex evidence, run 35078524828 attempt 1 at `21aa80b`; PASS
+
+Run and head:
+
+- Attempt 1 succeeded on the exact head, approved for `salesforce-ci` by cobitechsolutions. The policy, Apex and gate jobs all succeeded.
+- The PR head is unchanged and up to date with main bb292e6. Merge state is CLEAN, and all five checks are green.
+
+Apex job 104736726647, full log of 531 lines:
+
+- The confirm step printed the exact head, and the stale-head check passed.
+- The in-job budget recheck returned `allowed: true, kind: initial`.
+- Result: `81 passed; 473/475 executable lines (99.58%)`, matching the established baseline because no Salesforce source changed.
+- Exactly one marker: schema 1, role `ci`, run `35078524828-1`, full head 21aa80b, started 09:46:01.566Z, outcome `passed`, retryable false.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted, tag `kusanya-ci-v1__35078524828-1__21aa80bb30ec__8179e442252f`. Fallback cleanup skipped after success, logout succeeded.
+
+Dev Hub, checked independently:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00DRK00000avp7c, created 09:46:06 and last modified 09:47:14 UTC.
+- Setup Audit Trail has `deleteScratchOrg` for "00DRK00000avp7c" at 09:47:29 UTC. ActiveScratchOrg has 0 rows.
+
+Credential hygiene: no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys or email addresses in the full log. All 10 masks are GitHub redactions. The only warning is note 35's Node.js 20 deprecation notice.
+
+The print-view evidence rests on the previous entry: proven byte-identical compiler output across the `prepare.ts` refactor, the enumerated inert HTML output, refusal of hostile mapping shapes, deterministic rendering and the note 38 tripwire verified by mutation.
+
+Open items carried forward, none blocking this unit: note 39 on gating future delivery of the reviewer HTML, including an ADR 0016 consequences update; note 36 on the untested Collect Android UI; note 37 on client-specific count reduction; the Enketo probe still unreproduced by the verifier; and notes 24, 25, 27 to 31, 34 and 35. Note 38 is answered.
+
+This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
+
+`PASS: PR #16 may be merged`
+
+## 2026-09-16: PR #16 merged
+
+Bill merged PR #16 as fc64c38. Its tree, 7514ffb, is identical to the verified head 21aa80b, so the hosted Apex evidence from run 35078524828, my source and security review, my proven compiler byte equivalence and my print-view probes all apply to main unchanged.
+
+Note 38 is answered: the optional probe dependencies are kept out of the root and service manifests, lockfiles, workflows and container build by `scripts/runtime-isolation.test.mjs`, whose 85 cases I verified by mutation.
+
+Carried forward to later reviewed units, none blocking:
+
+- Note 24: the ADR 0011 read policy and its effective-access tests, including Mapping and Field Mapping, before any Phase 2 definition reader.
+- Note 25: the untested insert path of the Current Version rule; the resolver handles only `__c`.
+- Note 27: Author Notes exclusion is proven in the compiler only. Delivery and publication still need their own regression.
+- Note 28: the compiler rejects a repeat counted from its own subtree and non-answerable skip sources; storage still accepts them.
+- Note 29: working-directory executable discovery in the Windows launcher.
+- Note 30: undelete restores a Form without its skip rules, and a lone child without its parent.
+- Note 31: a single dropped GitHub API response fails the confirm step, and logout fails when the CLI is absent.
+- Note 34: the target identifier rule is lexical and accepts names such as `Account__r`; the publisher must Describe-check targets.
+- Note 35: the pinned `actions/checkout` and `actions/setup-node` target Node.js 20; updating them needs a separately reviewed workflow change.
+- Note 36: the actual Collect Android UI is still untested. Engine evidence exists for JavaRosa, which I reproduced, and for Enketo, which I have not. Bill's device or emulator decision is outstanding.
+- Note 37: JavaRosa retains already-created instances when a repeat count drops, while Enketo removes a trailing answered row. Choose one publication or ingestion rule and test it in both engines before C10.2 or C10.3.
+- Note 39: the first unit that delivers the reviewer HTML must gate on `audience`, require reviewer authorization, never reuse a collector or public route, send `Cache-Control: no-store` with no shared cache, keep the Content-Security-Policy as a real response header with `X-Content-Type-Options: nosniff`, and test that a collector-scoped principal cannot fetch it. ADR 0016's consequences should record this.
+
+Evidence limitation carried forward: I have not reproduced the Enketo browser probe, because it requires installing optional packages carrying five advisories, two of them high. That result remains the builder's alone until Bill authorizes the installation, and none of that tooling is cleared for production or customer XML.
+
+Also outstanding: whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013), a namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
+
+Phase 1 remains in progress. Publication, adapters, mapping execution, XLSForm round trips and CLI publishing are still outstanding, and no C10 acceptance test is claimed by any unit so far.
