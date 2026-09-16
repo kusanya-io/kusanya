@@ -181,7 +181,7 @@ Synthetic `FormDefinitionModelTest`, `QuestionDefinitionModelTest`,
 deployment and Apex behavior require the approved hosted run and independent
 verification. No C10 acceptance test is claimed by this slice.
 
-The remaining Salesforce work includes executable mapping validation/ingestion, compilation, publication,
+The remaining Salesforce work includes executable mapping validation/ingestion, compiler adapters and publication,
 version lifecycle, jobs/tasks/prefill, assignment groups, collectors, submissions/answers,
 scoring and operational audit records. Every future object and field must carry a
 description. Target customer objects and fields are mapping data, never constants
@@ -193,3 +193,19 @@ retention constraints will be designed and tested before adding the first tables
 Salesforce refresh credentials must be encrypted at rest with rotatable keys.
 
 No credentials or raw production seed records may become automated test fixtures.
+
+## Portable compiler boundary
+
+ADR 0014 and [the compiler contract](compiler.md) define a pure in-memory bundle
+of form identity, questions, choice lists and skip rules. No Salesforce fields or
+permissions change in that unit. It uses portable question names, not Salesforce
+record IDs or namespaced API names; future Salesforce readers/importers must resolve
+their connection's namespace before constructing it. Existing empty/`ksny__` resolver
+fixtures do not prove a namespaced deployment.
+
+The compiler checks question reference scope and excludes Author Notes from generated
+XML (notes 27/28). It does not yet validate Mapping/Field Mapping execution scope,
+target Describe/CRUD/FLS, record types, collector/submission stamp conflicts or lookup
+uniqueness (notes 24/34). Mapping definitions are deliberately outside this input
+schema, not accepted and then ignored. Compilation creates no Salesforce artifact,
+cannot publish a version and does not fix lifecycle/undelete gaps.

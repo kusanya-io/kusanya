@@ -44,9 +44,26 @@ Skip Rule, Mapping and Field Mapping metadata, model-only permission sets, decla
 identities. Question parent scope distinguishes once-only siblings from repeat
 children; Hint and Author Notes are separate fields. Integrity triggers reject
 invalid trees/references/ownership without exposing definition data. Stored skip
-conditions are not yet compiled. These slices expose no form/publish API or
+conditions can now be compiled from a portable in-memory definition. These slices expose no form/publish API or
 collector delivery path. C10 tests 10 and
 12 remain unimplemented, not represented by source/smoke tests.
+
+The first [compiler unit](compiler.md) is a pure TypeScript module inside the
+service, as permitted by C2 (ADR 0014). It accepts a strict, bounded neutral bundle,
+validates question/choice/skip-rule structure, parses a limited XPath grammar,
+checks repeat-relative references and dependency cycles, and emits deterministic
+ODK XForm XML. An explicit output allowlist excludes Author Notes and Regex Example;
+Hint remains collector-facing. There is no Salesforce reader/adapter, persistence,
+HTTP route, publishing call or permission change. Salesforce remains the authoring
+source of truth; this neutral input is not a replacement database.
+
+A successful result is marked `validation: structural-only`, not publish-ready.
+The optional offline ODK Validate probe covers synthetic definitions. Every real
+publication still needs JavaRosa validation, target/access checks and immutable
+storage. Dynamic counted repeats warn that reducing counts retains old instances;
+exact-cardinality behavior still needs a separately tested policy. Unsupported
+configured options fail explicitly rather than being silently removed. No Collect,
+Enketo or C10 compatibility claim is made from XML generation alone.
 
 Mapping definitions store a reference/main/repeat dependency graph and explicit
 question-or-constant field sources. They preserve once-only answers shared across
