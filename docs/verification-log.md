@@ -937,3 +937,99 @@ Carried forward to later reviewed units, none blocking:
 - A namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
 
 Phase 1 remains in progress. Publication, adapters, mapping execution, XLSForm round trips, print view and CLI publishing are still outstanding, and no C10 acceptance test is claimed by any unit so far.
+
+## 2026-09-16: Source and security review of PR #14 head `17bf838`, client-engine regressions and draft metadata
+
+Scope: the compiler's metadata fix, new repeat-runtime fixtures and tests, the optional `scripts/runtime` probe package for Enketo and JavaRosa, ADR 0015 and the runtime runbook. The review was requested before Bill approves run 35065752715.
+
+Trust boundary:
+
+- No workflow, credentialed harness, Salesforce metadata, permission, namespace, project or package change. Root and service manifests and lockfiles are untouched, and the pin 1d0edc1 appears twice. The head is one commit on current main f8bf523.
+- `scripts/runtime` carries its own manifest and lockfile. Nothing in the service, CI or a root install pulls it in.
+
+Product change: `render.ts` emits `orx:meta` and `orx:instanceID` in the already declared OpenRosa namespace, binds `/data/orx:meta/orx:instanceID`, and wraps the generated calculation in `once()`. The rest of the diff is tests, fixtures, optional probes and documentation.
+
+Local, in a detached worktree:
+
+- Root tests 167 of 167, service 75 of 75, lint, typecheck, Prettier and the scaffold check. A Prettier warning during my run came from my own scratch file; the tracked tree is clean.
+- Public CI 35065752630 is green.
+- My PR #12 compiler probes still pass at this head: no author-only leakage, no XML or XPath injection, deterministic bytes, hostile input refused.
+
+Reproduced independently:
+
+- ODK Validate 1.20.0, jar hash `92756ea4`: four fixtures valid, both negative controls rejected. The metadata change does not break parsing.
+- JavaRosa 6.0.0, the engine pinned by Collect v2026.3.4. All four jars were downloaded and each SHA-256 matched the manifest. The probe passed with Zulu 21:
+  - Nested counts start `[0,0]`, become `[2,3]` independently per outer instance, with the fixed inner helper at `[3,3]`.
+  - A serialized draft reloads with `[2,3]`, 11 distinct answers and the once-only answer.
+  - The instance ID is stable across reload, and the old-metadata negative control reproduces ID regeneration.
+  - The wrong-count-path negative control is detected: `[2,2]` where `[0,0]` was expected.
+  - Section-scoped and root-sourced counts behave, and a reduction retains existing instances.
+
+Not reproduced: the Enketo browser probe. Running it requires installing optional packages whose tree carries five advisories, two high. The script reads safely: it asserts pinned versions, uses a fresh throwaway browser profile, aborts every page request, is watchdogged, and asserts zero attempted requests. The builder's Enketo result stands unreproduced until Bill authorizes that install.
+
+Note 36 is narrowed, not closed. Nested relative `jr:count` now has engine evidence in both clients, and I reproduced the JavaRosa half. The outstanding gap is the actual Collect Android UI.
+
+Note 37, non-blocking, for publication and ingestion: JavaRosa retains already-created instances when a count drops, while the builder's Enketo run removes a trailing answered row. The same form and action therefore produce different submitted data per client, so a submitted repeat count cannot be assumed to equal the answered count, and mapping execution would write different numbers of target records. Decide one rule before C10.2 or C10.3, test it in both engines, and make the compiler warning say the behaviour is client-specific.
+
+Note 38, non-blocking, for dependency hygiene: the advisories are recorded and the isolation is real. Keep it that way with a test asserting the root and service lockfiles never contain these packages, and keep the networked `npm install` step explicit in the runbook. Deploying Enketo or processing customer XML with these packages needs its own security review.
+
+On Bill's device question, my recommendation is a purpose-made emulator image rather than a phone in daily use, with a dedicated offline synthetic project, no client org data and no Collect upgrade. The decision is Bill's.
+
+`SAFE TO APPROVE: run 35065752715 at head 17bf838`
+
+`HOLD: PR #14, 0 findings`, pending hosted success with an exact-head marker and a Deleted org.
+
+## 2026-09-16: PR #14 hosted Apex evidence, run 35065752715 attempt 1 at `17bf838`; PASS
+
+Run and head:
+
+- Attempt 1 succeeded on the exact head, approved for `salesforce-ci` by cobitechsolutions. The policy, Apex and gate jobs all succeeded.
+- The PR head is unchanged and up to date with main f8bf523. Merge state is CLEAN, and all five checks are green.
+
+Apex job 104695602752, full log of 531 lines:
+
+- The confirm step printed the exact head, and the stale-head check passed.
+- The in-job budget recheck returned `allowed: true, kind: initial`.
+- Result: `81 passed; 473/475 executable lines (99.58%)`, matching the PR #12 baseline because no Salesforce source changed.
+- Exactly one marker: schema 1, role `ci`, run `35065752715-1`, full head 17bf838, started 07:17:48.019Z, outcome `passed`, retryable false.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted, tag `kusanya-ci-v1__35065752715-1__17bf8389aceb__12a8a88fa564`. Fallback cleanup skipped after success, logout succeeded.
+
+Dev Hub, checked independently:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00DRL00000WHR7q, created 07:17:52 and last modified 07:18:57 UTC.
+- Setup Audit Trail has `deleteScratchOrg` for "00DRL00000WHR7q" at 07:19:01 UTC. ActiveScratchOrg has 0 rows, and 5 of 6 daily slots remain.
+
+Credential hygiene: no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys or email addresses in the full log. All 10 masks are GitHub redactions. The only warning is note 35's Node.js 20 deprecation notice.
+
+The runtime evidence rests on the previous entry: the source and security review, the reproduced pinned ODK Validate run, and the reproduced JavaRosa 6.0.0 probe with all four jar hashes matched.
+
+Open items carried forward, none blocking this unit: note 36 narrowed to the actual Collect Android UI, pending Bill's device or emulator decision; note 37 on client-specific count reduction, which needs a publication or ingestion rule tested in both engines before C10.2 or C10.3; note 38 on keeping probe dependencies out of the service and root lockfiles; the unreproduced Enketo browser probe, which stays the builder's result until Bill authorizes that install; and notes 24, 25, 27 to 31, 34 and 35.
+
+This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
+
+`PASS: PR #14 may be merged`
+
+## 2026-09-16: PR #14 merged
+
+Bill merged PR #14 as 6356a87. Its tree, 0456ab1, is identical to the verified head 17bf838, so the hosted Apex evidence from run 35065752715, my source and security review, and my reproduced ODK Validate and JavaRosa runs all apply to main unchanged. Main CI 35069148632 passed.
+
+Carried forward to later reviewed units, none blocking:
+
+- Note 24: the ADR 0011 read policy and its effective-access tests, including Mapping and Field Mapping, before any Phase 2 definition reader.
+- Note 25: the untested insert path of the Current Version rule; the resolver handles only `__c`.
+- Note 27: Author Notes exclusion is proven in the compiler only. Delivery and publication still need their own regression.
+- Note 28: the compiler rejects a repeat counted from its own subtree and non-answerable skip sources; storage still accepts them, so authoring and import paths must surface those rejections.
+- Note 29: working-directory executable discovery in the Windows launcher.
+- Note 30: undelete restores a Form without its skip rules, and a lone child without its parent.
+- Note 31: a single dropped GitHub API response fails the confirm step, and logout fails when the CLI is absent.
+- Note 34: the target identifier rule is lexical and accepts names such as `Account__r`; the publisher must Describe-check targets.
+- Note 35: the pinned `actions/checkout` and `actions/setup-node` target Node.js 20; updating them needs a separately reviewed workflow change.
+- Note 36, narrowed: nested relative `jr:count` now has engine evidence in Enketo and JavaRosa, and I reproduced the JavaRosa half. The actual Collect Android UI remains untested, pending Bill's device or emulator decision.
+- Note 37: JavaRosa retains already-created instances when a repeat count drops, while Enketo removes a trailing answered row. Choose one publication or ingestion rule, test it in both engines, and make the compiler warning say the behaviour is client-specific, before C10.2 or C10.3.
+- Note 38: keep the optional probe dependencies out of the root and service lockfiles, ideally enforced by a test, and keep their networked installation an explicit, separately authorized step.
+
+Evidence limitation carried forward: I have not reproduced the Enketo browser probe, because it requires installing optional packages carrying five advisories, two of them high. That result remains the builder's alone until Bill authorizes the installation. The five advisories themselves remain disclosed and unremediated, and none of this tooling is cleared for production or customer XML.
+
+Also outstanding: whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013), a namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
+
+Phase 1 remains in progress. Publication, adapters, mapping execution, XLSForm round trips, print view and CLI publishing are still outstanding, and no C10 acceptance test is claimed by any unit so far.
