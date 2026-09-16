@@ -35,6 +35,12 @@ Locations identify input structure, such as `questions[2]`, never its supplied
 name, label or contents. Unexpected implementation errors are not swallowed.
 Warnings must be shown to the author and reviewed before future publication.
 
+ADR 0016 extracts the existing preparation into internal `prepareForm`, shared
+with the [reviewer-only print view](print-view.md). The public compiler contract,
+XML allowlist, limits and fixture bytes are unchanged. The prepared graph includes
+author annotations: it is internal data, not a collector-safe serialization.
+Print intentionally exposes those annotations in a separate reviewer-only block.
+
 From `C:\Kusanya\codex\kusanya`, with the repository's Node 24 setup, run these
 PowerShell commands. The single-quoted here-string avoids shell expansion and
 does not write source files:

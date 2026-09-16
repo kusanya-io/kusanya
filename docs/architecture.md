@@ -60,10 +60,20 @@ source of truth; this neutral input is not a replacement database.
 A successful result is marked `validation: structural-only`, not publish-ready.
 The optional offline ODK Validate probe covers synthetic definitions. Every real
 publication still needs JavaRosa validation, target/access checks and immutable
-storage. Dynamic counted repeats warn that reducing counts retains old instances;
-exact-cardinality behavior still needs a separately tested policy. Unsupported
+storage. Dynamic count reduction is client-specific: JavaRosa retains old
+instances, while the Enketo probe removes trailing answered rows. A consistent
+publication/ingestion policy still needs a decision and tests. Unsupported
 configured options fail explicitly rather than being silently removed. No Collect,
 Enketo or C10 compatibility claim is made from XML generation alone.
+
+The [reviewer-only print view](print-view.md) shares the compiler's prepared
+graph and expressions, and adds a strict supplied-mapping summary (ADR 0016).
+It emits static escaped HTML with fixed print CSS and no external resources.
+Author Notes and regex examples are intentionally visible to reviewers, unlike
+collector XML. The prepared graph and print document must never be used as
+collector responses. No endpoint, Salesforce access, authorization, mapping
+execution or publication approval is added. Future hosted reviewer delivery
+requires a separate access-control design; a document's CSP is not that boundary.
 
 Mapping definitions store a reference/main/repeat dependency graph and explicit
 question-or-constant field sources. They preserve once-only answers shared across
