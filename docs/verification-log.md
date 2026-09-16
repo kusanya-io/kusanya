@@ -1033,3 +1033,42 @@ Evidence limitation carried forward: I have not reproduced the Enketo browser pr
 Also outstanding: whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013), a namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
 
 Phase 1 remains in progress. Publication, adapters, mapping execution, XLSForm round trips, print view and CLI publishing are still outstanding, and no C10 acceptance test is claimed by any unit so far.
+
+## 2026-09-16: Source and security review of PR #16 head `21aa80b`, the reviewer-only print view
+
+Scope: the extraction of `prepareForm` from `compile.ts`, the new `service/src/print` renderer, mapping-summary decoding and styles, the note 38 isolation tripwire, the synthetic export script, ADR 0016 and the print runbook. The review was requested before Bill approves run 35078524828.
+
+Trust boundary:
+
+- No workflow, credentialed harness, Salesforce, permission, namespace or package change. All four manifests and lockfiles are untouched, and the pin 1d0edc1 appears twice. The head is one commit on current main bb292e6.
+
+Compiler equivalence, tested rather than assumed. I built both main and this head and compared their output directly:
+
+- Six shared fixtures, the four ODK fixtures and both repeat-runtime fixtures, produce byte-identical XML and identical warnings.
+- Seven verifier-built definitions, including trees, selects with hostile text, fixed and answer-driven repeats and three that must be rejected, produce identical result objects. The dependency-cycle, reference-scope and input-shape rejections keep the same codes and locations.
+
+Print view, probed with hostile content in the title, labels, hints, author notes, constraint message, choice labels and a mapping constant:
+
+- Tags in the output are limited to `a article aside body code dd div dl dt footer h1 h2 h3 h4 head header html li main meta nav ol p section span style title`. There is no `script`, `img`, `iframe`, `object`, `embed` or `form`.
+- Attributes are limited to `aria-label aria-labelledby charset class href http-equiv id lang name`. No event handlers, and no supplied text reaches an attribute.
+- Every `href` is a generated local anchor such as `#q-1` or `#m-1`. No `javascript:` and no external URL.
+- One inline `<style>` and no `<link>`. The CSP `sha256` matches the actual stylesheet, so an altered stylesheet stops applying.
+- The hostile payload appears only as escaped text.
+
+Mapping summaries: proxies, accessors, a `__proto__` key, unknown fields, traversal target names, unknown or non-answerable question references, a constant and question supplied together, case-insensitive duplicate targets, parent cycles, a matching field on a main mapping and a repeat question on a main mapping are each refused with a specific code and location. `Object.prototype` stays clean.
+
+Determinism and immutability: identical inputs give identical HTML; reversing questions, choice lists, mappings and field lists gives identical HTML; neither input is mutated; and a definition the compiler rejects is rejected identically by the print view, so there is no permissive preview.
+
+Note 38 is answered, and I verified the tripwire fires. Adding `playwright-core` to the root manifest in my own worktree made `scripts/runtime-isolation.test.mjs` fail 2 of its 85 cases; restoring the manifest returned all 85 to passing. The test is explicit that it is a source-level regression check, not a security boundary.
+
+Local, in a detached worktree: root tests 252 of 252, service 112 of 112, lint, typecheck, format check and scaffold. Public CI 35078524764 is green.
+
+Note 39, non-blocking, for whichever unit first delivers this HTML: the output intentionally contains author-only content, and `audience: 'reviewer-only'` should gate delivery rather than merely describe it. Require reviewer authorization at the boundary, never a collector or public route, send `Cache-Control: no-store` with no shared cache, keep the CSP as a real response header with `X-Content-Type-Options: nosniff`, and test that a collector-scoped principal cannot fetch it. Record this in ADR 0016's consequences.
+
+Notes 36 and 37 stay open, and the Enketo probe remains unreproduced by me pending Bill's decision.
+
+Capacity at 09:27 UTC: 5 of 6 daily and 3 of 3 active, with none in use.
+
+`SAFE TO APPROVE: run 35078524828 at head 21aa80b`
+
+`HOLD: PR #16, 0 findings`, pending hosted success with an exact-head marker and a Deleted org.
