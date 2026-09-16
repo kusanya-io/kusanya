@@ -1251,3 +1251,19 @@ Capacity at 12:34 UTC: 3 of 6 daily and 3 of 3 active, with none in use.
 `HOLD: run 35096046148 at head 4b275bf`. Approving it would spend a scratch slot on a head the fix will supersede. Cancel it once the fixed head is pushed.
 
 `HOLD: PR #20, 1 finding` (41)
+
+## 2026-09-16: PR #20 fix head `bb55c27`; finding 41 closed, run 35097677494 cleared
+
+Head and ancestry: bb55c27 is the original adapter commit 4b275bf plus one corrective commit, both on main e90b05e. The delta touches only `service/src/interchange/xlsx-workbook.ts`, its test and ADR 0018. The trust boundary is unchanged, including service dependencies, and the pin 1d0edc1 appears twice.
+
+Finding 41 closed: `escapeText` now emits `&#13;` for every carriage return. My probe placed CR, CRLF, LF, mixed and leading and trailing line endings in labels, hints, author notes, the title, a choice label and a mapping constant. The worksheets held 0 raw CR bytes and 16 `&#13;` references, the import returned every value byte-identical, the compiled XML was identical, and the workbook bytes were deterministic. The new regression test covers CR, CRLF and LF in a label and in author notes.
+
+Unchanged behaviour re-checked: formula-prefix values remain literal text with no formula or cached-value elements; a formula cell is still refused; a raw CR injected by hand still fails closed. The fixture checker's workbook SHA-256 is unchanged at `e8aa7ba5`, as expected for a fixture without carriage returns. ADR 0018's note 42 wording matches the measured behaviour.
+
+Local, in a detached worktree: root 252 of 252, service 158 of 158, lint, typecheck, production audit at zero, format check, scaffold, `git diff --check` and the fixture checker. Public CI 35097677475 is green. No new findings.
+
+Runs: 35096046148 on the stale head 4b275bf is still waiting and should be cancelled, not approved. 35097677494 is on the exact head and pending behind it. Capacity at 12:54 UTC: 3 of 6 daily, none active.
+
+`SAFE TO APPROVE: run 35097677494 at head bb55c27`, after run 35096046148 is cancelled.
+
+`HOLD: PR #20, 0 findings`, pending hosted success with an exact-head marker and a Deleted org. Notes 36, 37 and 39 stay open; 38, 40 and 41 are answered.
