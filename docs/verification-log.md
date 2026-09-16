@@ -916,3 +916,24 @@ The compiler evidence rests on the source review and probes recorded in the prev
 Note 36 stays open for the runtime unit: nested `jr:count` evaluation must be tested in ODK Collect and Enketo before any C10.2 or C10.3 claim. Notes 24, 25, 27 to 31, 34 and 35 carry forward; notes 27 and 28 are answered at the compiler layer only, and delivery and publication still owe their own tests. This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
 
 `PASS: PR #12 may be merged`
+
+## 2026-09-16: PR #12 merged
+
+Bill merged PR #12 as bff5791. Its tree, 329dfc7, is identical to the verified head 1eace21, so the hosted Apex evidence from run 35060206558, my source review, my compiler probes and my reproduced ODK Validate run all apply to main unchanged. Main CI 35062941552 passed.
+
+Carried forward to later reviewed units, none blocking:
+
+- Note 24: the ADR 0011 read policy and its effective-access tests, including Mapping and Field Mapping, before any Phase 2 definition reader.
+- Note 25: the untested insert path of the Current Version rule; the resolver handles only `__c`.
+- Note 27: Author Notes exclusion is answered in the compiler only. Delivery and publication still need their own regression that notes never reach collector output.
+- Note 28: a repeat counted from its own subtree and non-answerable skip sources are now rejected by the compiler. Storage still accepts them, so authoring and import paths must keep reporting the compiler's rejection.
+- Note 29: working-directory executable discovery in the Windows launcher.
+- Note 30: undelete restores a Form without its skip rules, and a lone child without its parent.
+- Note 31: a single dropped GitHub API response fails the confirm step, and logout fails when the CLI is absent.
+- Note 34: the target identifier rule is lexical and accepts names such as `Account__r`; the publisher must Describe-check targets.
+- Note 35: the pinned `actions/checkout` and `actions/setup-node` target Node.js 20; updating them needs a separately reviewed workflow change.
+- Note 36: nested repeats emit relative `jr:count` paths whose evaluation context the ODK specification does not define. Test nested counted repeats in ODK Collect and Enketo, and record the gap in `docs/compiler.md`, before any C10.2 or C10.3 claim.
+- Whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013).
+- A namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
+
+Phase 1 remains in progress. Publication, adapters, mapping execution, XLSForm round trips, print view and CLI publishing are still outstanding, and no C10 acceptance test is claimed by any unit so far.
