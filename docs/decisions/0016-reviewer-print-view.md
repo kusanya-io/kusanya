@@ -1,6 +1,6 @@
 # ADR 0016: Reviewer-only print view
 
-- Status: Accepted design decision; implementation awaiting independent verification
+- Status: Accepted; renderer verified in PR #16, delivery requirements remain open
 - Date: 2026-09-16
 - Brief sections: C2, C3.14/.19, C4 mapping annotations, C5 print view, C11 Phase 1, C13 tooling isolation
 - Decision owner: Cobitech Solutions
@@ -113,6 +113,14 @@ rather than interpreting a failure as proof of compromise. No manifest, lockfile
 workflow, harness, immutable pin or Salesforce metadata changes accompany it.
 
 ## Consequences and verification
+
+Claude note 39 is a requirement for the first delivery unit, not implemented by
+the renderer: `audience: 'reviewer-only'` must gate delivery. Require reviewer
+authorization, never a collector/public route; send `Cache-Control: no-store`
+with no shared cache, CSP as an actual response header, and
+`X-Content-Type-Options: nosniff`. Test that a collector-scoped principal cannot
+fetch the reviewer document. A label or meta CSP is not an authorization boundary.
+This follow-up does not close note 39 or add a route.
 
 The [print-view runbook](../print-view.md) defines API use, synthetic local export,
 test commands and the builder evidence record. Existing dependencies suffice.

@@ -75,6 +75,15 @@ collector responses. No endpoint, Salesforce access, authorization, mapping
 execution or publication approval is added. Future hosted reviewer delivery
 requires a separate access-control design; a document's CSP is not that boundary.
 
+The [authoring interchange unit](interchange.md) adds a versioned JSON envelope
+around the supported definition and mapping snapshots (ADR 0017). An XLSForm-style
+table profile projects that source into recognizable rows and retains the complete
+source in an extension table. Import regenerates all tables and refuses conflicting
+edits. These are in-memory, author-only snapshots, not an additional source of
+truth, a binary spreadsheet parser, a Salesforce import or a publication channel.
+Exact Kusanya XML round trips do not establish third-party XLSForm conversion
+equivalence or C10.10. Collector output continues through the compiler allowlist.
+
 Mapping definitions store a reference/main/repeat dependency graph and explicit
 question-or-constant field sources. They preserve once-only answers shared across
 repeat mappings and portable customer target identifiers. They do not execute
