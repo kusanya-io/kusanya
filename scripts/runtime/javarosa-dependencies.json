@@ -1,0 +1,33 @@
+{
+  "purpose": "Optional offline synthetic JavaRosa repeat probe only; not the service runtime or a complete JavaRosa dependency distribution",
+  "artifacts": [
+    {
+      "file": "javarosa-6.0.0.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/getodk/javarosa/6.0.0/javarosa-6.0.0.jar",
+      "sha256": "682944c76baef9d34eec951bc41dcc5523fe6a87a209e6a3addacec5e45a6e0f",
+      "license": "Apache-2.0",
+      "licenseSource": "https://repo.maven.apache.org/maven2/org/getodk/javarosa/6.0.0/javarosa-6.0.0.pom"
+    },
+    {
+      "file": "kxml2-2.3.0.jar",
+      "url": "https://repo.maven.apache.org/maven2/net/sf/kxml/kxml2/2.3.0/kxml2-2.3.0.jar",
+      "sha256": "f264dd9f79a1fde10ce5ecc53221eff24be4c9331c830b7d52f2f08a7b633de2",
+      "license": "BSD-style for kXML2; public domain for XmlPull API",
+      "licenseSource": "https://repo.maven.apache.org/maven2/net/sf/kxml/kxml2/2.3.0/kxml2-2.3.0.pom"
+    },
+    {
+      "file": "joda-time-2.10.13.jar",
+      "url": "https://repo.maven.apache.org/maven2/joda-time/joda-time/2.10.13/joda-time-2.10.13.jar",
+      "sha256": "669f73ff76cb50e11c9eaffb170f8a2d1665fe56c3ecaae8e32085b0470bd7f3",
+      "license": "Apache-2.0",
+      "licenseSource": "https://repo.maven.apache.org/maven2/joda-time/joda-time/2.10.13/joda-time-2.10.13.pom"
+    },
+    {
+      "file": "slf4j-api-1.7.33.jar",
+      "url": "https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/1.7.33/slf4j-api-1.7.33.jar",
+      "sha256": "336811855ee97fcd8413343dc42f4d26362502860e8a9193e4db305e3e8ef80a",
+      "license": "MIT",
+      "licenseSource": "https://repo.maven.apache.org/maven2/org/slf4j/slf4j-parent/1.7.33/slf4j-parent-1.7.33.pom"
+    }
+  ]
+}

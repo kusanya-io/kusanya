@@ -12,6 +12,13 @@ and ADR 0014. `ok: true` means structural compilation only, not publish-ready or
 verified Collect/Enketo behavior. Existing unit tests include synthetic compiler,
 XPath, output-allowlist and resource-boundary regressions.
 
+Optional [client runtime probes](../docs/runtime-validation.md) live in
+`scripts/runtime` at repository root, with a separate Node 22 tooling lockfile.
+They exercise synthetic forms in Enketo and Collect's pinned JavaRosa engine;
+they are not part of the service image or normal CI, and do not prove Collect
+app behavior or C10 acceptance. ADR 0015 records the metadata/reload fixes and
+the remaining cross-client count-reduction risk.
+
 ## Checks
 
 From this directory with Node.js 24 and npm:
