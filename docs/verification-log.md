@@ -888,3 +888,31 @@ Capacity at 05:58 UTC: 5 of 6 daily and 3 of 3 active, with none in use.
 `SAFE TO APPROVE: run 35060206558 at head 1eace21`
 
 `HOLD: PR #12, 0 findings`, pending hosted success with an exact-head marker and a Deleted org.
+
+## 2026-09-16: PR #12 hosted Apex evidence, run 35060206558 attempt 1 at `1eace21`; PASS
+
+Run and head:
+
+- Attempt 1 succeeded on the exact head. The `salesforce-ci` approval was by cobitechsolutions. The policy, Apex and gate jobs all succeeded.
+- The PR head is unchanged and up to date with main f5f4eb1. Merge state is CLEAN, and all five checks are green.
+
+Apex job 104678794852, full log of 531 lines:
+
+- The confirm step printed the exact head, and the stale-head check passed.
+- The in-job budget recheck returned `allowed: true, kind: initial`.
+- Result: `Apex for 1eace21: 81 passed; 473/475 executable lines (99.58%)`, matching the PR #10 baseline because no Salesforce source changed.
+- Exactly one marker: schema 1, role `ci`, run `35060206558-1`, full head 1eace21, started 06:08:05.265Z, outcome `passed`, retryable false.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted, tag `kusanya-ci-v1__35060206558-1__1eace21c9f62__1c4b56c183af`. Fallback cleanup skipped after success, logout succeeded.
+
+Dev Hub, checked independently:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00DEc00000liKHk, created 06:08:09 and last modified 06:09:06 UTC.
+- Setup Audit Trail has `deleteScratchOrg` for "00DEc00000liKHk" at 06:09:09 UTC. ActiveScratchOrg has 0 rows, and 4 of 6 daily slots remain.
+
+Credential hygiene: no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys or email addresses. All 10 masks are GitHub redactions. The only warning is note 35's Node.js 20 deprecation notice.
+
+The compiler evidence rests on the source review and probes recorded in the previous entry, together with the independently reproduced ODK Validate run.
+
+Note 36 stays open for the runtime unit: nested `jr:count` evaluation must be tested in ODK Collect and Enketo before any C10.2 or C10.3 claim. Notes 24, 25, 27 to 31, 34 and 35 carry forward; notes 27 and 28 are answered at the compiler layer only, and delivery and publication still owe their own tests. This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
+
+`PASS: PR #12 may be merged`
