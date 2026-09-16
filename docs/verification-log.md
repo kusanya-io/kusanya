@@ -1072,3 +1072,33 @@ Capacity at 09:27 UTC: 5 of 6 daily and 3 of 3 active, with none in use.
 `SAFE TO APPROVE: run 35078524828 at head 21aa80b`
 
 `HOLD: PR #16, 0 findings`, pending hosted success with an exact-head marker and a Deleted org.
+
+## 2026-09-16: PR #16 hosted Apex evidence, run 35078524828 attempt 1 at `21aa80b`; PASS
+
+Run and head:
+
+- Attempt 1 succeeded on the exact head, approved for `salesforce-ci` by cobitechsolutions. The policy, Apex and gate jobs all succeeded.
+- The PR head is unchanged and up to date with main bb292e6. Merge state is CLEAN, and all five checks are green.
+
+Apex job 104736726647, full log of 531 lines:
+
+- The confirm step printed the exact head, and the stale-head check passed.
+- The in-job budget recheck returned `allowed: true, kind: initial`.
+- Result: `81 passed; 473/475 executable lines (99.58%)`, matching the established baseline because no Salesforce source changed.
+- Exactly one marker: schema 1, role `ci`, run `35078524828-1`, full head 21aa80b, started 09:46:01.566Z, outcome `passed`, retryable false.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted, tag `kusanya-ci-v1__35078524828-1__21aa80bb30ec__8179e442252f`. Fallback cleanup skipped after success, logout succeeded.
+
+Dev Hub, checked independently:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00DRK00000avp7c, created 09:46:06 and last modified 09:47:14 UTC.
+- Setup Audit Trail has `deleteScratchOrg` for "00DRK00000avp7c" at 09:47:29 UTC. ActiveScratchOrg has 0 rows.
+
+Credential hygiene: no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys or email addresses in the full log. All 10 masks are GitHub redactions. The only warning is note 35's Node.js 20 deprecation notice.
+
+The print-view evidence rests on the previous entry: proven byte-identical compiler output across the `prepare.ts` refactor, the enumerated inert HTML output, refusal of hostile mapping shapes, deterministic rendering and the note 38 tripwire verified by mutation.
+
+Open items carried forward, none blocking this unit: note 39 on gating future delivery of the reviewer HTML, including an ADR 0016 consequences update; note 36 on the untested Collect Android UI; note 37 on client-specific count reduction; the Enketo probe still unreproduced by the verifier; and notes 24, 25, 27 to 31, 34 and 35. Note 38 is answered.
+
+This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
+
+`PASS: PR #16 may be merged`
