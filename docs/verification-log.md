@@ -1159,3 +1159,33 @@ Capacity at 11:12 UTC: 4 of 6 daily and 3 of 3 active, with none in use.
 `SAFE TO APPROVE: run 35087014934 at head b8989c5`
 
 `HOLD: PR #18, 0 findings`, pending hosted success with an exact-head marker and a Deleted org.
+
+## 2026-09-16: PR #18 hosted Apex evidence, run 35087014934 attempt 1 at `b8989c5`; PASS
+
+Run and head:
+
+- Attempt 1 succeeded on the exact head, approved for `salesforce-ci` by cobitechsolutions. The policy, Apex and gate jobs all succeeded.
+- The PR head is unchanged and up to date with main 0f1b209. Merge state is CLEAN, and all five checks are green.
+
+Apex job 104764209775, full log of 531 lines:
+
+- The confirm step printed the exact head, and the stale-head check passed.
+- The in-job budget recheck returned `allowed: true, kind: initial`.
+- Result: `81 passed; 473/475 executable lines (99.58%)`, matching the established baseline because no Salesforce source changed.
+- Exactly one marker: schema 1, role `ci`, run `35087014934-1`, full head b8989c5, started 11:24:01.462Z, outcome `passed`, retryable false.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted, tag `kusanya-ci-v1__35087014934-1__b8989c5271dc__ba1d9ce00c35`. Fallback cleanup skipped after success, logout succeeded.
+
+Dev Hub, checked independently:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00DRL00000WHzuH, created 11:24:06 and last modified 11:25:00 UTC.
+- Setup Audit Trail has `deleteScratchOrg` for "00DRL00000WHzuH" at 11:25:11 UTC. ActiveScratchOrg has 0 rows.
+
+Credential hygiene: no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys or email addresses in the full log. All 10 masks are GitHub redactions. The only warning is note 35's Node.js 20 deprecation notice.
+
+The interchange evidence rests on the previous entry: exact-decimal JSON handling, duplicate-key refusal, byte-identical round trips, refusal of every table tamper tried, correct astral chunking and refusal of hostile object shapes.
+
+Open items carried forward, none blocking this unit: note 40 on neutralizing spreadsheet formula prefixes in a future workbook or CSV writer, with an ADR 0017 consequences update; note 39 on gating reviewer HTML delivery; note 36 on the untested Collect Android UI; note 37 on client-specific count reduction; the Enketo probe still unreproduced by the verifier; and notes 24, 25, 27 to 31, 34 and 35. Note 38 is answered.
+
+This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
+
+`PASS: PR #18 may be merged`
