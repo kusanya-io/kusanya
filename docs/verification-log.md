@@ -1267,3 +1267,23 @@ Runs: 35096046148 on the stale head 4b275bf is still waiting and should be cance
 `SAFE TO APPROVE: run 35097677494 at head bb55c27`, after run 35096046148 is cancelled.
 
 `HOLD: PR #20, 0 findings`, pending hosted success with an exact-head marker and a Deleted org. Notes 36, 37 and 39 stay open; 38, 40 and 41 are answered.
+
+## 2026-09-16: Failure review of run 35097677494 attempt 1 and retry clearance, PR #20 head `bb55c27`
+
+Scope: read-only review of the failed hosted run, the Dev Hub and Salesforce Trust. No approval, cancellation, rerun, scratch org or credential change was made.
+
+Run evidence: the Apex job ran 13:00:50 to 13:01:16 UTC. The confirm step printed the exact head, the in-job budget recheck allowed an initial attempt, and the pinned CLI installed. The authentication step printed only `Dev Hub authentication failed: RefreshTokenAuthError/other` and exited 1 about 1.5 s after starting. Verification, stale-head and cleanup steps were skipped, and logout failed because nothing was authenticated. No scratch org was created. The sanitized 489-line log holds no credential material; the masks are GitHub's own.
+
+Dev Hub evidence: LoginHistory for the CI user shows four successful `Remote Access 2.0` logins today, the last at 11:24:00 for PR #18's run, and no row of any status at 13:01. The CLI's OAuth token row still exists, last used 11:24, use count 24, not revoked. The audit trail shows no security or connected-app change today. The refresh request therefore never registered at Salesforce as a login attempt.
+
+Cause: Salesforce Trust incident 20004433, active since 07:50 UTC across all regions and 1,262 instances, with the Dev Hub's instance USA876 in the affected list and in status `MAJOR_INCIDENT_CORE`. Salesforce's stated root cause is requests stalling on an internal login service; the 12:39 UTC update says most instances are recovering and some still need a manual restart. The three successful logins earlier today fit an intermittent fault.
+
+Retry budget: the pinned `apex-run-budget.mjs` and policy from 1d0edc1, run read-only against live history as attempt 2, returned `allowed: true, kind: infrastructure-retry`. Attempt 1 counts as `failed-infrastructure` because its verify step completed as skipped. The stale run 35096046148 on 4b275bf is filtered out by head.
+
+Advice: retry once USA876 is out of the incident, because the retry is the only one left for this head today. If recovery does not come before 00:00 UTC, wait: the budget is per UTC day, so the head then gets a fresh initial attempt plus a retry.
+
+Evidence to verify afterwards: attempt 2 success on bb55c27; one marker with run `35097677494-2`, the full head and outcome `passed`; `81 passed; 473/475`; one owned org deleted; the Dev Hub tag Deleted with its audit entry; no credential material; all five checks green; head unchanged.
+
+`SAFE TO RE-RUN: ONE same-head infrastructure retry of run 35097677494 at bb55c27`, via "Re-run all jobs" with one environment approval, once USA876 is out of incident 20004433. The stale run 35096046148 should be cancelled if still waiting.
+
+`HOLD: PR #20, 0 findings`, unmerged until exact-head Apex success, the trusted marker and the Deleted-org evidence are verified.
