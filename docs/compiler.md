@@ -1,10 +1,15 @@
 # Portable XForm compiler
 
-This is the first bounded Phase 1 compiler unit, not the Phase 1 gate. It turns
+This is the bounded Phase 1 compiler, not the Phase 1 gate. It turns
 an in-memory neutral definition into an XForm. It does not read Salesforce,
 publish a form, serve an endpoint, run XPath or execute mappings. No C10 test is
 claimed, including tests 10 and 12. Design decisions are in
 [ADR 0014](decisions/0014-bounded-xform-compiler.md).
+
+[ADR 0015](decisions/0015-client-runtime-regressions.md) adds optional real-engine
+regressions and corrects metadata for client initialization/draft reload. See the
+[runtime runbook](runtime-validation.md). Enketo/JavaRosa results are not an
+actual Collect app result; note 36 remains open.
 
 ## API and quick check
 
@@ -109,6 +114,13 @@ Hidden removes the control, not the instance node; it is not confidentiality or
 authorization. Required hidden/read-only/reference values need a nonempty default
 or a calculation. Defaults cannot coexist with a calculation.
 
+Generated record metadata uses `orx:meta/orx:instanceID` in the OpenRosa namespace,
+not the unnamespaced question tree. Its qualified bind calculates
+`once(concat('uuid:', uuid()))`: a client assigns a fresh ID to a new record and
+retains a nonempty ID when reopening a draft. Compilation itself remains
+deterministic. This does not define editing an already-submitted record, and does
+not add `once()` to the authored-expression grammar.
+
 Nonempty defaults are supported for text-like, numeric and select types. Numeric
 defaults must satisfy authored bounds; select values must exist (multi-select uses
 distinct space-separated tokens). Nonempty date/media/spatial defaults are not
@@ -148,6 +160,19 @@ Reducing the count does not delete prior instances in native ODK behavior. No
 automatic trimming, extra-instance hiding or server-side exact-count check is
 implemented here. Keep this warning visible; do not claim C10.2 or C10.3 from
 `jr:count` alone. See [ODK's count-reduction guidance](https://docs.getodk.org/form-logic/#hiding-extra-repeats-when-the-repeat-count-is-reduced).
+
+This warning describes ODK/JavaRosa, not equivalent behavior in every client:
+the Enketo 9.0.1 probe removes trailing **answered** instances when their count
+decreases. A future publication/ingestion policy must address this data-loss and
+cardinality difference; the compiler is not publish-ready.
+
+For Claude note 36, the optional engine probes exercise nested `../member_count`
+and `../_ksny_count_checks`, section-crossing `../../settings/member_limit`, and
+root-absolute counts. The existing paths are retained. Each repeat's labelled
+wrapper has `ref` equal to its `nodeset`; JavaRosa's relative count resolution
+depends on that context. Tests cover separate outer instances, zero counts,
+draft reload and intentionally incorrect paths. **Actual Collect app execution
+is still outstanding**, so these results do not close note 36 or claim C10.2/.3.
 
 ## Expression grammar
 
@@ -284,10 +309,11 @@ directory. No JAR or generated probe artifact belongs in the source tree.
 
 Validator success only establishes acceptance of those generated definitions by
 that pinned validator. It does not exercise Collect/Enketo UI, runtime edits,
-device features, authorization, submissions or C10. Later runtime work is planned
-against [Collect v2026.3.4](https://github.com/getodk/collect/releases/tag/v2026.3.4)
-and [Enketo Core 7.2.5](https://github.com/enketo/enketo-core/releases/tag/7.2.5);
-neither has been deployed or
-runtime-verified here. Enketo server selection and current-version/security
-review are still required before deployment. No container, CI, scratch-org or
-hosting change is part of this compiler unit.
+device features, authorization, submissions or C10. ADR 0015 supersedes the
+earlier planned Enketo Core 7.2.5 target with Core 9.0.1 and Transformer 4.2.0
+for an isolated browser-engine probe. A separate JavaRosa 6.0.0 probe uses the
+engine pinned by [Collect v2026.3.4](https://github.com/getodk/collect/releases/tag/v2026.3.4),
+without claiming Android app execution. Results and limitations are in the
+runtime runbook. Enketo server selection and a fresh security/dependency review
+remain required before deployment; the optional tooling has known upstream
+dependency advisories. No container, CI, scratch-org or hosting change is included.

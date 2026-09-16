@@ -1,0 +1,20 @@
+{
+  "name": "@kusanya/client-runtime-probes",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "Optional synthetic browser-engine probes; never installed in the service or CI",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "devDependencies": {
+    "enketo-core": "9.0.1",
+    "enketo-transformer": "4.2.0",
+    "esbuild": "0.28.2",
+    "playwright-core": "1.63.0"
+  },
+  "overrides": {
+    "leaflet-draw": "https://codeload.github.com/enketo/Leaflet.draw/tar.gz/ff730785db7fcccbf2485ffcf4dffe1238a7c617"
+  }
+}
