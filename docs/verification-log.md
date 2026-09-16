@@ -1217,3 +1217,37 @@ Evidence limitation carried forward: I have not reproduced the Enketo browser pr
 Also outstanding: whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013), the table profile is not proven through an external XLSForm converter, a namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
 
 Phase 1 remains in progress. Publication, adapters, mapping execution and CLI publishing are still outstanding, and no C10 acceptance test is claimed by any unit so far.
+
+## 2026-09-16: Source and security review of PR #20 head `4b275bf`, the strict XLSX adapter; one finding
+
+Scope: `service/src/interchange/xlsx-workbook.ts` and its tests, `scripts/check-xlsx-fixture.mjs`, ADR 0018, and the ADR 0017, interchange, roadmap, architecture and licence-inventory updates. Bill asked for a source and security review before deciding on run 35096046148.
+
+Base history and trust boundary:
+
+- PR #19 merged as e90b05e, and main CI 35093462960 passed before this branch began. The head is one commit on that main.
+- No workflow, credentialed harness, Salesforce, permission, namespace or root manifest change. The runtime probe package is untouched, and the pin 1d0edc1 appears twice.
+- The service adds `fflate` 0.8.3 (MIT) and `saxes` 6.0.0 (ISC) with `xmlchars` 2.2.0 (MIT), pinned with integrity hashes and recorded in the licence inventory. `npm audit --omit=dev` reports zero vulnerabilities. No Enketo or probe package entered the root or service tree.
+
+Local, in a detached worktree: root 252 of 252, service 157 of 157, lint, typecheck, format check, scaffold, `git diff --check` and the fixture checker. Public CI 35096046069 is green.
+
+Verifier probes and independent inspection:
+
+- The package holds exactly `survey`, `choices`, `settings` and `kusanya_source`, in that order. All 233 cells in my fixture are inline strings with the text number format, with no formula, cached value or other cell type.
+- Excel 16.0 opened the checker's workbook, whose SHA-256 matched the manifest: four sheets, 233 cells, 0 formulas, every cell text-formatted, and `=1+1`, `+cmd|calc`, `-2+3` and `@SUM(A1)` read back as strings with no formula. Note 40 is answered at the XLSX boundary. A CSV writer, if ever built, still needs its own treatment.
+- A clean import returns the same canonical bundle and byte-identical compiled XML. Editing one visible cell is refused.
+- Refused with structural codes: a formula cell, a typed numeric cell, a shared-string cell, a cached value, a missing or general style, comment, macro and external-link parts, missing styles or sheet parts, altered content types, sheet order or styles, a DTD, an undeclared entity, a processing instruction, an XML comment, CDATA, a namespace-prefixed cell, a non-sequential cell, a duplicate row number, malformed XML, invalid UTF-8, a traversal entry name, a truncated archive, garbage bytes and a 12 MB + 1 input. Stored entries are accepted by design.
+- A 64 MiB part is refused before inflation by its declared size. With the declared size forged to 1,000 bytes, fflate truncates to the declared allocation, the XML fails to parse, and the import fails in 151 ms with 9 MB of heap.
+- Two exports are byte-identical, inputs are not mutated, an `ArrayBuffer` works, and zeroing the caller's buffer after import does not affect the result. Leading zeros, padded whitespace, tabs, newlines and astral characters round-trip exactly.
+- Claims in ADR 0018, ADR 0017, the interchange runbook and the roadmap keep C10.10, C10.12, general edited-XLSForm import, converter equivalence, Salesforce persistence, delivery authorization and the Phase 1 gate open.
+
+Finding 41, low severity, correctness: `escapeText` in `xlsx-workbook.ts` does not escape `\r`. Conforming XML parsers normalize a raw `\r` or `\r\n` in character data to `\n`, and saxes does: `a\rb` parses as `a\nb`, while `a&#13;b` parses as `a\rb`. A definition with a carriage return in a label, hint or note therefore exports but fails re-import with `XLSFORM_PROJECTION_MISMATCH`. The table profile keeps `\r` and `validXmlText` allows it, so only the XLSX path loses it, contradicting ADR 0018's exact round-trip and whitespace-preservation claims. Fix: `.replaceAll('\r', '&#13;')` in `escapeText`, as `render.ts` already does, plus a test with `\r` and `\r\n`. The import side needs no change.
+
+Note 42, informational: the pre-expansion limits read attacker-controlled declared sizes. Memory stays bounded because fflate allocates at the declared size and truncates, and a mismatch fails closed; inflate work stays bounded by the 12 MB compressed cap. ADR 0018 could state that contract exactly.
+
+Notes 36, 37 and 39 stay open, note 38 stays answered, and the Enketo probe remains unreproduced by me pending Bill's decision.
+
+Capacity at 12:34 UTC: 3 of 6 daily and 3 of 3 active, with none in use.
+
+`HOLD: run 35096046148 at head 4b275bf`. Approving it would spend a scratch slot on a head the fix will supersede. Cancel it once the fixed head is pushed.
+
+`HOLD: PR #20, 1 finding` (41)
