@@ -5,6 +5,13 @@ and PostgreSQL 17. Tenant authentication, OpenRosa, submission storage, Salesfor
 mapping and the durable queue belong to later phases. No collector Salesforce
 account is created or required. See the architecture and ADRs in `../docs/`.
 
+Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.
+It has no HTTP route, Salesforce access or publishing authority. See
+[the input contract, unsupported features and offline ODK validation runbook](../docs/compiler.md)
+and ADR 0014. `ok: true` means structural compilation only, not publish-ready or
+verified Collect/Enketo behavior. Existing unit tests include synthetic compiler,
+XPath, output-allowlist and resource-boundary regressions.
+
 ## Checks
 
 From this directory with Node.js 24 and npm:

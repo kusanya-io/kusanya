@@ -9,8 +9,10 @@ Two things set it apart from the products it replaces:
 
 ## Status
 
-Pre-alpha, Phase 0 scaffold; independent verification is pending. The operational
-service and Salesforce smoke tests are foundations, not a working collection product.
+Pre-alpha, Phase 1 in progress. Phase 0 and the initial Salesforce model units have
+passed independent review; see the [verification log](docs/verification-log.md).
+The current [compiler unit](docs/compiler.md) is awaiting its own independent review.
+These foundations are not yet a working collection product.
 No C10 product acceptance tests are implemented yet. The build contract is
 [docs/brief.md](docs/brief.md), with the review protocol in
 [docs/verification.md](docs/verification.md). See [architecture](docs/architecture.md),
@@ -37,8 +39,9 @@ See [dependency licences](docs/licences.md).
 ## Installing
 
 No installable package or mobile release exists. The brief targets a versioned
-package install link and a source-deploy route. Package creation is deferred pending
-the C12 packaging decision; no package Id or registered namespace is claimed.
+package install link and a source-deploy route. No package Id exists. The `ksny`
+namespace is registered but its Dev Hub link is blocked; source stays unnamespaced
+under Bill's Option 2 (ADR 0008). No package creation is authorized by this unit.
 
 For the scaffold's source-deploy route, follow [salesforce/README.md](salesforce/README.md)
 for the builder-only development org and reviewed fresh CI verification. Reuse the
