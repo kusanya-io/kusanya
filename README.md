@@ -11,7 +11,9 @@ Two things set it apart from the products it replaces:
 
 Pre-alpha, Phase 1 in progress. Phase 0 and the initial Salesforce model units have
 passed independent review; see the [verification log](docs/verification-log.md).
-The current [compiler unit](docs/compiler.md) is awaiting its own independent review.
+The bounded [compiler unit](docs/compiler.md) passed PR #12. The follow-up
+[client runtime regressions](docs/runtime-validation.md) await independent review;
+actual Collect app testing remains outstanding.
 These foundations are not yet a working collection product.
 No C10 product acceptance tests are implemented yet. The build contract is
 [docs/brief.md](docs/brief.md), with the review protocol in

@@ -5,7 +5,8 @@ Bill relayed Claude's Phase 0 PASS in PR #3 review 5177252674 and the first Phas
 unit PASS in PR #8 review 5194796568 (merged as `e97882d`). The question-tree unit
 passed Claude verification and merged as `1ec8488`; its verification log merged
 through PR #7. Mapping definitions passed PR #10 and merged as `f435129`; the log
-merged through PR #11 as `f5f4eb1`. The bounded compiler unit is now in development. The builder does not
+merged through PR #11 as `f5f4eb1`. The bounded compiler passed PR #12 and merged
+as `bff5791`; its log merged through PR #13 as `f8bf523`. The builder does not
 issue its own gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
@@ -66,3 +67,9 @@ separate reviewed tooling/workflow work.
 Next units must complete compilation/runtime validation, immutable publication
 and draft deletion behavior, XLSForm round trips, print view and CLI publication.
 No model unit claims C10 tests 10/12. Do not mark Phase 1 complete from model tests.
+
+The runtime-regression unit (ADR 0015) corrects qualified OpenRosa metadata and
+draft ID generation, and adds optional Enketo 9.0.1/JavaRosa 6.0.0 engine probes.
+Nested count contexts, draft reload and count-reduction differences are tested
+with synthetic forms. Actual Collect app testing remains outstanding, so note
+36 stays open. No C10 or publish-ready claim follows from these engine results.
