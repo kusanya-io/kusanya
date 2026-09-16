@@ -19,6 +19,13 @@ not collector content, a publishing check or an HTTP endpoint. See the
 [print contract and synthetic export runbook](../docs/print-view.md) and ADR 0016.
 No print/browser dependency is added to the service.
 
+Pure [authoring interchange](../docs/interchange.md) lives in `src/interchange/`.
+It exports/imports a strict canonical JSON bundle and a consistency-checked
+XLSForm-style table profile, preserving the current compiler definition and
+supplied mappings. The source includes author-only annotations. There is no
+binary spreadsheet parser, general edited-workbook importer, Salesforce write,
+delivery route or new dependency. ADR 0017 records scope and limits.
+
 Optional [client runtime probes](../docs/runtime-validation.md) live in
 `scripts/runtime` at repository root, with a separate Node 22 tooling lockfile.
 They exercise synthetic forms in Enketo and Collect's pinned JavaRosa engine;

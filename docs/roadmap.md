@@ -8,6 +8,8 @@ through PR #7. Mapping definitions passed PR #10 and merged as `f435129`; the lo
 merged through PR #11 as `f5f4eb1`. The bounded compiler passed PR #12 and merged
 as `bff5791`; its log merged through PR #13 as `f8bf523`. Runtime regressions
 passed PR #14 and merged as `6356a87`; log PR #15 merged as `bb292e6`.
+The reviewer print unit passed PR #16 and merged as `fc64c38`; log PR #17
+merged as `0f1b209`.
 The builder does not issue its own gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
@@ -75,11 +77,20 @@ Nested count contexts, draft reload and count-reduction differences are tested
 with synthetic forms. Actual Collect app testing remains outstanding, so note
 36 stays open. No C10 or publish-ready claim follows from these engine results.
 
-The reviewer-print unit (ADR 0016), awaiting independent verification, adds a
+The verified reviewer-print unit (ADR 0016) adds a
 pure static HTML renderer using shared compiler preparation and supplied mapping
 summaries. Author-only annotations remain distinct from collector help and XML.
 Synthetic 144-node rendering is not the real C10 fixture or a phase gate.
-Note 38 gains a source tripwire for optional probe isolation; normal dependencies,
+Note 38 is answered by a verified source tripwire for optional probe isolation; normal dependencies,
 CI and the harness are unchanged. Notes 36/37 remain open, including Bill's
 device/emulator decision and the cross-client count-reduction policy. Claude's
 Enketo reproduction still requires Bill's optional-install authorization.
+
+The authoring-interchange unit (ADR 0017), awaiting independent verification,
+adds canonical JSON snapshots and an XLSForm-style table projection with full
+source/projection consistency checks. It preserves supported definitions and
+mapping configurations, not all C4 records. Binary workbook handling, general
+edited-XLSForm import and Salesforce persistence remain next steps before C10.10.
+This unit creates no org and changes no workflow, harness, namespace or dependency.
+Note 39's reviewer authorization, no-store/header protections and collector-denial
+test are recorded in ADR 0016 and remain due at the first delivery unit.

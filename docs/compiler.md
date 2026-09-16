@@ -41,6 +41,12 @@ XML allowlist, limits and fixture bytes are unchanged. The prepared graph includ
 author annotations: it is internal data, not a collector-safe serialization.
 Print intentionally exposes those annotations in a separate reviewer-only block.
 
+The [authoring interchange](interchange.md) APIs (ADR 0017) reuse the same validation
+for canonical JSON and an XLSForm-style table profile. Successful imports return
+authoring snapshots, not collector output. They preserve compiled XML but do not
+read binary workbooks, persist Salesforce records or prove external converter
+equivalence. Bundle warnings refer to canonical returned question indices.
+
 From `C:\Kusanya\codex\kusanya`, with the repository's Node 24 setup, run these
 PowerShell commands. The single-quoted here-string avoids shell expansion and
 does not write source files:

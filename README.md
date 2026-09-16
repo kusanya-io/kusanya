@@ -15,7 +15,10 @@ The bounded [compiler unit](docs/compiler.md) passed PR #12. The follow-up
 [client runtime regressions](docs/runtime-validation.md) passed PR #14 and its
 verification log merged through PR #15. Actual Collect app testing and independent
 Enketo reproduction remain outstanding. The
-[reviewer-only print view](docs/print-view.md) is awaiting independent review.
+[reviewer-only print view](docs/print-view.md) passed PR #16; its log merged
+through PR #17. The [authoring interchange unit](docs/interchange.md) adds JSON
+bundles and consistency-checked XLSForm-style tables, pending independent review.
+It does not yet handle binary `.xlsx` files or a Salesforce import.
 These foundations are not yet a working collection product.
 No C10 product acceptance tests are implemented yet. The build contract is
 [docs/brief.md](docs/brief.md), with the review protocol in
