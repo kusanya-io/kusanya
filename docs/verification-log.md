@@ -1625,3 +1625,23 @@ Process correction owned by the verifier: merging log PR #28 before the source p
 `HOLD: run 35277463109 at head 58aa6f7`
 
 `HOLD: PR #27, 0 source findings`, pending hosted success on the updated head with an exact-head marker and a Deleted org.
+
+## 2026-09-17: PR #27 final head `94eae1f` cleared for one hosted run
+
+The branch update landed exactly as predicted. Head `94eae1f8cdd36843aa12a7492eb5164c9c4d17ec` is a GitHub-generated merge with two parents in the expected order, reviewed identity `58aa6f7` then current main `b24d8a3`, and its tree is `23e9f9ea7564fecbb8d19148f138a43ba1fed013`, character for character the tree predicted from a throwaway merge before the update was performed.
+
+Byte identity against reviewed source head 99ede85: the `service` tree `06db88a` and `salesforce` tree `146da0f` are identical, and so are the `.github` tree `58fff68` and `scripts` tree `01418bb`, so neither the workflow nor the harness directory moved under cover of the merge. The update changed exactly one file, `docs/verification-log.md`, adding 121 lines and removing none, all of it the already reviewed verifier log that reached main through PR #28. The pull request's footprint against main is still exactly six files: three docs and three service files. No source byte changed, so no source re-review was required and the verdict carries forward: findings 46 and 48 closed, zero open source findings, notes 47, 49 and 50 informational, note 34 open.
+
+The stray org remains reconciled: `kusanya-ci-v1__35273720037-1__99ede856accc__bb0b89f88586` reads Status Deleted with `DeletedDate` 2026-09-17, `ActiveScratchOrg` returns zero rows, and capacity at 21:59 UTC is 3 of 3 active with 2 of 6 daily remaining. That record is the only one in the 3527 series, which independently confirms that no waiting or rejected run created an org. Run 35277463109 ended in failure with zero steps in its protected job, the signature of a rejected deployment, and created nothing.
+
+The branch is now up to date, so BEHIND is cleared and GitHub reports MERGEABLE with only the Salesforce gate outstanding. Scaffold and lint and Service and container tests passed, and public CI 35279180570 passed at this head.
+
+Attribution needs no rewrite. The merge commit is authored `cobitechsolutions <cobitechsolutions@gmail.com>` and committed by `GitHub <noreply@github.com>`, which is what the Update branch button produces, and it carries GitHub's web-flow signature, reported locally as unverifiable only because that public key is absent from the verifier's keyring. `required_signatures` is false, there are no rulesets, linear history is not required, and the trust boundary concerns content, which is byte-identical. Rewriting would invalidate the run and cost another org for no gain.
+
+Retry budget for the final head is one attempt, authorised by the pinned script itself: in the policy job at 21:54:07 the trusted checkout resolved pin 1d0edc1, the reviewed sha was 94eae1f at every step, and `apex-run-budget.mjs` printed `{"allowed":true,"kind":"initial","reason":"No prior attempt consumed this head and UTC day."}`. The pin appears twice in the final head's workflow file. One org remains spare today for a cleared infrastructure retry.
+
+Merge order for this unit: PR #27 squash merges first, then log PR #29, which will itself need a docs-only update from main and takes the documentation exemption at no scratch-org cost.
+
+`SAFE TO APPROVE: run 35279180481 at head 94eae1f`
+
+`HOLD: PR #27, 0 source findings`, pending that run's success with an exact-head marker, 85 percent coverage and a Deleted org with a matching deletion audit entry.
