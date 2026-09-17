@@ -1217,3 +1217,151 @@ Evidence limitation carried forward: I have not reproduced the Enketo browser pr
 Also outstanding: whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013), the table profile is not proven through an external XLSForm converter, a namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
 
 Phase 1 remains in progress. Publication, adapters, mapping execution and CLI publishing are still outstanding, and no C10 acceptance test is claimed by any unit so far.
+
+## 2026-09-17: Source and security review of PR #20 head `bb55c27`, strict XLSX authoring adapter
+
+Scope: the in-memory XLSX adapter and tests, the synthetic workbook checker, ADR
+0018, the interchange documentation, and the three pinned runtime dependencies.
+The final head is the original implementation `4b275bf` plus the carriage-return
+correction `bb55c27`, on main `e90b05e`.
+
+Trust boundary:
+
+- No workflow, credentialed harness, Salesforce metadata, permission, namespace
+  or runtime-probe change. The trusted harness remains pinned at `1d0edc1`.
+- The only production packages added are `fflate` 0.8.3, `saxes` 6.0.0 and its
+  transitive `xmlchars` 2.2.0. They are lockfile-pinned, MIT/ISC licensed and the
+  service production audit reports zero known vulnerabilities.
+- The adapter is pure and in-memory. It adds no hosted delivery route,
+  authorization claim, publication path or collector dependency.
+
+Independent workbook inspection and probes:
+
+- Excel 16.0 opened the synthetic checker workbook, SHA-256
+  `e8aa7ba59d675ce3dbad3aaa7c96a9c696ada1c92dcadb1157ed2339ae030931`.
+  It contains the four expected sheets (`survey`, `choices`, `settings` and
+  `kusanya_source`), 233 cells, no formulas, and text formatting throughout.
+- Excel read `=1+1`, `+cmd|calc`, `-2+3` and `@SUM(A1)` as literal strings. The
+  package contains no formula or cached-result elements, and an injected formula
+  cell is refused. Note 40 is answered at the XLSX boundary; a future CSV writer
+  still needs its own handling.
+- Every tested hostile package variation is refused. Forged declared sizes
+  truncate and fail closed; declared sizes cap allocation and the 12 MB compressed
+  input limit caps inflate work. ADR 0018 records this informational note 42.
+- Bytes are deterministic, input definitions are not mutated, and the importer
+  copies its caller-owned buffer.
+
+Finding 41 was a low-severity exact-round-trip defect in the first head: raw
+carriage returns in worksheet character data were normalized by the XML parser.
+The final head encodes carriage returns as `&#13;` after ordinary XML escaping.
+The verifier exercised CR, CRLF, LF, mixed, leading and trailing line endings in
+labels, hints, Author Notes, title, a choice label and a mapping constant. All
+round-tripped byte-exactly, compiled XML remained identical, worksheets contained
+16 `&#13;` references and zero raw CR bytes, and a hand-injected raw CR still
+failed closed. Finding 41 is closed.
+
+Local verification on the final head: root tests 252 of 252, service tests 158 of
+158, lint, typecheck, production audit, format check, scaffold check, diff check
+and the XLSX fixture checker. Public CI 35097677475 passed.
+
+Notes 38, 40 and 41 are answered. Note 42 is informational. Notes 36, 37 and 39
+remain open, and the Enketo browser probe remains unreproduced by the verifier.
+
+`SAFE TO APPROVE: run 35097677494 at head bb55c27`
+
+`HOLD: PR #20, 0 findings`, pending hosted success with an exact-head marker and
+a Deleted org.
+
+## 2026-09-17: PR #20 hosted Apex evidence, run 35097677494 attempt 2 at `bb55c27`; PASS
+
+Attempt 1 failed before Apex execution when Salesforce Trust incident 20004433
+disrupted the core login service, including Dev Hub instance USA876. Dev Hub
+LoginHistory showed no attempt from the failed job, the CI OAuth token remained
+intact, no scratch org was created and the sanitized log exposed no credential
+material. The pinned budget reader admitted one same-head infrastructure retry.
+Salesforce later declared the incident resolved.
+
+Attempt 2 ran on the next UTC day. The in-job budget correctly reported `initial`
+under the designed per-UTC-day policy. The policy, Apex and gate jobs all passed;
+the exact head was confirmed before authentication and after testing, and the
+trusted harness pin was `1d0edc1`.
+
+Apex job 105178947627, full log of 531 lines:
+
+- Result: `81 passed; 473/475 executable lines (99.58%)`.
+- Exactly one marker: schema 1, role `ci`, run `35097677494-2`, full head
+  `bb55c27a9dcb3c117b2901c48c02fe8fc1250f5b`, started
+  2026-09-17T11:13:31.967Z, outcome `passed`, retryable false.
+- Cleanup: 1 owned scratch org deleted and 0 already deleted, with tag
+  `kusanya-ci-v1__35097677494-2__bb55c27a9dcb__32b23991836b`. The fallback
+  cleanup correctly skipped after success and logout succeeded.
+
+Dev Hub, checked independently:
+
+- ScratchOrgInfo shows the tag as Deleted for org `00DcU00000H1IPM`.
+- Setup Audit Trail records `deleteScratchOrg` at 11:14:37 UTC, ActiveScratchOrg
+  has 0 matching rows, and the CI login at 11:13:30 UTC succeeded.
+
+Credential hygiene: no `force://` URLs, org session IDs, bearer, access or refresh
+tokens, JWTs, private keys or email addresses appear in the full log. The only
+warning is note 35's Node.js 20 deprecation notice. The PR head remained unchanged
+and up to date with main, its merge state was CLEAN, and all five checks were green.
+
+The source evidence rests on the preceding entry: strict deterministic package
+handling, literal formula-prefix values, exact CR/CRLF preservation, hostile input
+refusal and bounded allocation/inflate work.
+
+This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
+
+`PASS: PR #20 may be merged`
+
+## 2026-09-17: PR #20 merged
+
+Bill squash-merged PR #20 as `2a4a1f1`. Its tree, `3cfdbfc`, is identical to the
+verified head `bb55c27`, so the source review, workbook probes and hosted evidence
+above apply to main unchanged. Main CI 35215154102 passed.
+
+Carried forward to later reviewed units, none blocking this unit:
+
+- Note 24: complete the ADR 0011 read policy and effective-access tests, including
+  Mapping and Field Mapping, before any Phase 2 definition reader.
+- Note 25: test the insert path of the Current Version rule; the resolver handles
+  only `__c`.
+- Note 27: Author Notes exclusion is proven in the collector compiler. Authoring
+  workbooks intentionally contain them, so delivery and publication still need
+  their own authorization and leakage regressions.
+- Note 28: the compiler rejects a repeat counted from its own subtree and
+  non-answerable skip sources; storage still accepts them.
+- Note 29: address working-directory executable discovery in the Windows launcher.
+- Note 30: undelete restores a Form without its skip rules, and a lone child
+  without its parent.
+- Note 31: one dropped GitHub API response fails the confirm step, and logout can
+  fail when no authenticated alias exists.
+- Note 34: the target identifier rule is lexical and accepts names such as
+  `Account__r`; the publisher must Describe-check targets.
+- Note 35: the pinned `actions/checkout` and `actions/setup-node` target Node.js 20;
+  updating them requires a separately reviewed workflow change.
+- Note 36: the actual Collect Android UI remains untested. Bill's device or
+  emulator decision is outstanding.
+- Note 37: JavaRosa retains already-created instances when a repeat count drops,
+  while Enketo removes a trailing answered row. Choose and test a publication or
+  ingestion rule in both engines before C10.2 or C10.3.
+- Note 39: delivery of reviewer HTML and authoring bundles or workbooks must enforce
+  reviewer authorization, never use a collector or public route, send
+  `Cache-Control: no-store`, preserve the CSP and `X-Content-Type-Options: nosniff`
+  response headers where applicable, and prove a collector-scoped principal cannot
+  fetch the artifacts.
+
+Notes 38, 40 and 41 remain answered. Note 42 remains informational. The Enketo
+probe remains unreproduced by the verifier because Bill has not authorized the
+optional dependency installation, and the Collect device/emulator decision remains
+unapproved.
+
+Also outstanding: whitespace-sensitive constants need a lossless form or explicit
+rejection before any C3.12 round-trip claim (ADR 0013); general edited-XLSForm and
+external-converter equivalence remain unproven; a namespaced suite must run once
+`ksny` is linked; and C10 tests 10 and 12 remain before the Phase 1 gate.
+
+Phase 1 remains in progress. Hosted delivery, mapping execution, general XLSForm
+translation, publication and CLI publishing are still outstanding, and no C10
+acceptance test is claimed by any unit so far.
