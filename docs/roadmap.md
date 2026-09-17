@@ -12,8 +12,9 @@ The reviewer print unit passed PR #16 and merged as `fc64c38`; log PR #17
 merged as `0f1b209`.
 The authoring-interchange unit passed PR #18 and merged as `3caea7a`; log PR #19
 merged as `e90b05e`. The strict XLSX adapter passed PR #20 and merged as `2a4a1f1`;
-its log PR #21 merged as `209e380`. The current bounded publication unit validates
-portable mappings against a supplied target-schema snapshot (ADR 0019).
+its log PR #21 merged as `209e380`. Publication target validation passed PR #23 and
+merged as `b3db0c7`; its log PR #24 merged as `8467e95`. The current bounded unit
+adds field datatype and base picklist compatibility to that pure boundary (ADR 0020).
 The builder does not issue its own gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
@@ -105,6 +106,8 @@ The current target-schema validator (ADR 0019) is a pure bridge toward publicati
 It recomputes object, field, access, record-type, lookup, external-ID and stamp
 checks from a caller-supplied normalized snapshot and does not trust saved Match
 Status. A future Salesforce adapter must obtain fresh Describe data as the tenant
-integration user before note 34 can close. Datatype/picklist compatibility,
-JavaRosa validation, immutable storage and CLI/API publication remain open; this
+integration user before note 34 can close. ADR 0020 adds pure
+source/transform/target datatype checks and active-value checks for base restricted
+picklists. Length, precision, record-type-specific picklists, executable transforms,
+JavaRosa validation, immutable storage and CLI/API publication remain open. This
 unit claims no C10 acceptance test or Phase 1 gate.
