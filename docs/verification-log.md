@@ -1217,3 +1217,104 @@ Evidence limitation carried forward: I have not reproduced the Enketo browser pr
 Also outstanding: whitespace-sensitive constants need a lossless form or explicit rejection before any C3.12 round-trip claim (ADR 0013), the table profile is not proven through an external XLSForm converter, a namespaced suite run once `ksny` is linked, and C10 tests 10 and 12 before the Phase 1 gate.
 
 Phase 1 remains in progress. Publication, adapters, mapping execution and CLI publishing are still outstanding, and no C10 acceptance test is claimed by any unit so far.
+
+## 2026-09-16: Source and security review of PR #20 head `4b275bf`, the strict XLSX adapter; one finding
+
+Scope: `service/src/interchange/xlsx-workbook.ts` and its tests, `scripts/check-xlsx-fixture.mjs`, ADR 0018, and the ADR 0017, interchange, roadmap, architecture and licence-inventory updates. Bill asked for a source and security review before deciding on run 35096046148.
+
+Base history and trust boundary:
+
+- PR #19 merged as e90b05e, and main CI 35093462960 passed before this branch began. The head is one commit on that main.
+- No workflow, credentialed harness, Salesforce, permission, namespace or root manifest change. The runtime probe package is untouched, and the pin 1d0edc1 appears twice.
+- The service adds `fflate` 0.8.3 (MIT) and `saxes` 6.0.0 (ISC) with `xmlchars` 2.2.0 (MIT), pinned with integrity hashes and recorded in the licence inventory. `npm audit --omit=dev` reports zero vulnerabilities. No Enketo or probe package entered the root or service tree.
+
+Local, in a detached worktree: root 252 of 252, service 157 of 157, lint, typecheck, format check, scaffold, `git diff --check` and the fixture checker. Public CI 35096046069 is green.
+
+Verifier probes and independent inspection:
+
+- The package holds exactly `survey`, `choices`, `settings` and `kusanya_source`, in that order. All 233 cells in my fixture are inline strings with the text number format, with no formula, cached value or other cell type.
+- Excel 16.0 opened the checker's workbook, whose SHA-256 matched the manifest: four sheets, 233 cells, 0 formulas, every cell text-formatted, and `=1+1`, `+cmd|calc`, `-2+3` and `@SUM(A1)` read back as strings with no formula. Note 40 is answered at the XLSX boundary. A CSV writer, if ever built, still needs its own treatment.
+- A clean import returns the same canonical bundle and byte-identical compiled XML. Editing one visible cell is refused.
+- Refused with structural codes: a formula cell, a typed numeric cell, a shared-string cell, a cached value, a missing or general style, comment, macro and external-link parts, missing styles or sheet parts, altered content types, sheet order or styles, a DTD, an undeclared entity, a processing instruction, an XML comment, CDATA, a namespace-prefixed cell, a non-sequential cell, a duplicate row number, malformed XML, invalid UTF-8, a traversal entry name, a truncated archive, garbage bytes and a 12 MB + 1 input. Stored entries are accepted by design.
+- A 64 MiB part is refused before inflation by its declared size. With the declared size forged to 1,000 bytes, fflate truncates to the declared allocation, the XML fails to parse, and the import fails in 151 ms with 9 MB of heap.
+- Two exports are byte-identical, inputs are not mutated, an `ArrayBuffer` works, and zeroing the caller's buffer after import does not affect the result. Leading zeros, padded whitespace, tabs, newlines and astral characters round-trip exactly.
+- Claims in ADR 0018, ADR 0017, the interchange runbook and the roadmap keep C10.10, C10.12, general edited-XLSForm import, converter equivalence, Salesforce persistence, delivery authorization and the Phase 1 gate open.
+
+Finding 41, low severity, correctness: `escapeText` in `xlsx-workbook.ts` does not escape `\r`. Conforming XML parsers normalize a raw `\r` or `\r\n` in character data to `\n`, and saxes does: `a\rb` parses as `a\nb`, while `a&#13;b` parses as `a\rb`. A definition with a carriage return in a label, hint or note therefore exports but fails re-import with `XLSFORM_PROJECTION_MISMATCH`. The table profile keeps `\r` and `validXmlText` allows it, so only the XLSX path loses it, contradicting ADR 0018's exact round-trip and whitespace-preservation claims. Fix: `.replaceAll('\r', '&#13;')` in `escapeText`, as `render.ts` already does, plus a test with `\r` and `\r\n`. The import side needs no change.
+
+Note 42, informational: the pre-expansion limits read attacker-controlled declared sizes. Memory stays bounded because fflate allocates at the declared size and truncates, and a mismatch fails closed; inflate work stays bounded by the 12 MB compressed cap. ADR 0018 could state that contract exactly.
+
+Notes 36, 37 and 39 stay open, note 38 stays answered, and the Enketo probe remains unreproduced by me pending Bill's decision.
+
+Capacity at 12:34 UTC: 3 of 6 daily and 3 of 3 active, with none in use.
+
+`HOLD: run 35096046148 at head 4b275bf`. Approving it would spend a scratch slot on a head the fix will supersede. Cancel it once the fixed head is pushed.
+
+`HOLD: PR #20, 1 finding` (41)
+
+## 2026-09-16: PR #20 fix head `bb55c27`; finding 41 closed, run 35097677494 cleared
+
+Head and ancestry: bb55c27 is the original adapter commit 4b275bf plus one corrective commit, both on main e90b05e. The delta touches only `service/src/interchange/xlsx-workbook.ts`, its test and ADR 0018. The trust boundary is unchanged, including service dependencies, and the pin 1d0edc1 appears twice.
+
+Finding 41 closed: `escapeText` now emits `&#13;` for every carriage return. My probe placed CR, CRLF, LF, mixed and leading and trailing line endings in labels, hints, author notes, the title, a choice label and a mapping constant. The worksheets held 0 raw CR bytes and 16 `&#13;` references, the import returned every value byte-identical, the compiled XML was identical, and the workbook bytes were deterministic. The new regression test covers CR, CRLF and LF in a label and in author notes.
+
+Unchanged behaviour re-checked: formula-prefix values remain literal text with no formula or cached-value elements; a formula cell is still refused; a raw CR injected by hand still fails closed. The fixture checker's workbook SHA-256 is unchanged at `e8aa7ba5`, as expected for a fixture without carriage returns. ADR 0018's note 42 wording matches the measured behaviour.
+
+Local, in a detached worktree: root 252 of 252, service 158 of 158, lint, typecheck, production audit at zero, format check, scaffold, `git diff --check` and the fixture checker. Public CI 35097677475 is green. No new findings.
+
+Runs: 35096046148 on the stale head 4b275bf is still waiting and should be cancelled, not approved. 35097677494 is on the exact head and pending behind it. Capacity at 12:54 UTC: 3 of 6 daily, none active.
+
+`SAFE TO APPROVE: run 35097677494 at head bb55c27`, after run 35096046148 is cancelled.
+
+`HOLD: PR #20, 0 findings`, pending hosted success with an exact-head marker and a Deleted org. Notes 36, 37 and 39 stay open; 38, 40 and 41 are answered.
+
+## 2026-09-16: Failure review of run 35097677494 attempt 1 and retry clearance, PR #20 head `bb55c27`
+
+Scope: read-only review of the failed hosted run, the Dev Hub and Salesforce Trust. No approval, cancellation, rerun, scratch org or credential change was made.
+
+Run evidence: the Apex job ran 13:00:50 to 13:01:16 UTC. The confirm step printed the exact head, the in-job budget recheck allowed an initial attempt, and the pinned CLI installed. The authentication step printed only `Dev Hub authentication failed: RefreshTokenAuthError/other` and exited 1 about 1.5 s after starting. Verification, stale-head and cleanup steps were skipped, and logout failed because nothing was authenticated. No scratch org was created. The sanitized 489-line log holds no credential material; the masks are GitHub's own.
+
+Dev Hub evidence: LoginHistory for the CI user shows four successful `Remote Access 2.0` logins today, the last at 11:24:00 for PR #18's run, and no row of any status at 13:01. The CLI's OAuth token row still exists, last used 11:24, use count 24, not revoked. The audit trail shows no security or connected-app change today. The refresh request therefore never registered at Salesforce as a login attempt.
+
+Cause: Salesforce Trust incident 20004433, active since 07:50 UTC across all regions and 1,262 instances, with the Dev Hub's instance USA876 in the affected list and in status `MAJOR_INCIDENT_CORE`. Salesforce's stated root cause is requests stalling on an internal login service; the 12:39 UTC update says most instances are recovering and some still need a manual restart. The three successful logins earlier today fit an intermittent fault.
+
+Retry budget: the pinned `apex-run-budget.mjs` and policy from 1d0edc1, run read-only against live history as attempt 2, returned `allowed: true, kind: infrastructure-retry`. Attempt 1 counts as `failed-infrastructure` because its verify step completed as skipped. The stale run 35096046148 on 4b275bf is filtered out by head.
+
+Advice: retry once USA876 is out of the incident, because the retry is the only one left for this head today. If recovery does not come before 00:00 UTC, wait: the budget is per UTC day, so the head then gets a fresh initial attempt plus a retry.
+
+Evidence to verify afterwards: attempt 2 success on bb55c27; one marker with run `35097677494-2`, the full head and outcome `passed`; `81 passed; 473/475`; one owned org deleted; the Dev Hub tag Deleted with its audit entry; no credential material; all five checks green; head unchanged.
+
+`SAFE TO RE-RUN: ONE same-head infrastructure retry of run 35097677494 at bb55c27`, via "Re-run all jobs" with one environment approval, once USA876 is out of incident 20004433. The stale run 35096046148 should be cancelled if still waiting.
+
+`HOLD: PR #20, 0 findings`, unmerged until exact-head Apex success, the trusted marker and the Deleted-org evidence are verified.
+
+## 2026-09-17: PR #20 hosted Apex evidence, run 35097677494 attempt 2 at `bb55c27`; PASS
+
+Run and head:
+
+- Attempt 2, the single same-head re-run cleared after Salesforce incident 20004433, succeeded on the exact head. It started 11:10:02 UTC and was approved for `salesforce-ci` by cobitechsolutions. The policy, Apex and gate jobs all succeeded.
+- The PR head is unchanged and up to date with main e90b05e. Merge state is CLEAN, and all five checks are green.
+
+Apex job 105178947627, full log of 531 lines:
+
+- The confirm step printed the exact head, the harness checkout is the pinned 1d0edc1, and the stale-head check passed.
+- The in-job budget recheck returned `allowed: true, kind: initial`, because the retry ran on a new UTC day and the budget is per UTC day. That is the policy as designed.
+- Result: `81 passed; 473/475 executable lines (99.58%)`, matching the established baseline because no Salesforce source changed.
+- Exactly one marker: schema 1, role `ci`, run `35097677494-2`, full head bb55c27, started 11:13:31.967Z, outcome `passed`, retryable false.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted, tag `kusanya-ci-v1__35097677494-2__bb55c27a9dcb__32b23991836b`. Fallback cleanup skipped after success, logout succeeded.
+
+Dev Hub, checked independently:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00DcU00000H1IPM, created 11:13:36 and last modified 11:14:32 UTC.
+- Setup Audit Trail has `deleteScratchOrg` for "00DcU00000H1IPM" at 11:14:37 UTC. ActiveScratchOrg has 0 rows.
+- LoginHistory records the CI login at 11:13:30 as a success.
+
+Credential hygiene: no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys or email addresses in the full log. All 10 masks are GitHub redactions. The only warning is note 35's Node.js 20 deprecation notice.
+
+The adapter evidence rests on the two earlier entries: the enumerated package structure, Excel's independent confirmation of literal text cells with zero formulas, every hostile package variant refused, deterministic bytes, and the carriage-return round trip proven at the fix head.
+
+Open items carried forward, none blocking this unit: note 36 on the untested Collect Android UI; note 37 on client-specific count reduction; note 39 on gating delivery of reviewer HTML, which also covers authoring bundles and workbooks; the Enketo probe still unreproduced by the verifier; and notes 24, 25, 27 to 31, 34 and 35. Notes 38, 40 and 41 are answered, and note 42 is informational.
+
+This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
+
+`PASS: PR #20 may be merged`
