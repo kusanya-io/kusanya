@@ -1,9 +1,11 @@
 # Authoring interchange
 
-This unit provides a lossless **supported-authoring snapshot** and a
-consistency-checked XLSForm-style table profile. It does not read or write `.xlsx`
-files, import arbitrary edited workbooks, read/write Salesforce or publish forms.
-No C10 acceptance test is claimed. See [ADR 0017](decisions/0017-authoring-interchange.md).
+This unit provides a lossless **supported-authoring snapshot**, a
+consistency-checked XLSForm-style table profile and a strict binary `.xlsx` adapter.
+It does not import arbitrary edited workbooks, read/write Salesforce or publish
+forms. No C10 acceptance test is claimed. See
+[ADR 0017](decisions/0017-authoring-interchange.md) and
+[ADR 0018](decisions/0018-strict-xlsx-adapter.md).
 
 ## JSON bundle API
 
@@ -146,12 +148,41 @@ source question rather than a missing `_ksny_count_*` helper. This does not clos
 notes 36/37: Collect UI evidence and the client-specific count-reduction policy
 remain outstanding. Imported compilation carries the same warnings.
 
-No `.xlsx`, `.xls`, CSV, ZIP, XML-workbook parser or formula evaluator is included.
-A future binary adapter must explicitly store all projected cells as strings,
-including leading `=`, `+`, `-` and `@`, and must preserve leading zeros and literal
-whitespace. Formula cells, cached formula results, external links, macros and
-unsupported workbook features require explicit rejection rules; this profile is
-not a substitute for those file-boundary defenses.
+The table API itself performs no binary parsing or formula evaluation. Its strict
+`.xlsx` adapter stores every projected cell as an OOXML inline string with the text
+number format, including leading `=`, `+`, `-` and `@`, leading zeros and literal
+whitespace. No formula or cached formula result is emitted. The canonical source
+chunks are unchanged, so note 40 is answered without a lossy neutralization prefix.
+
+## Strict XLSX adapter
+
+Import `exportXlsFormWorkbook` and `importXlsFormWorkbook` from
+`service/dist/src/interchange/xlsx-workbook.js` after building:
+
+```js
+const exported = exportXlsFormWorkbook(formInput, mappingInput);
+if (exported.ok) {
+  await writeFile('form.xlsx', exported.workbook);
+  const restored = importXlsFormWorkbook(exported.workbook);
+}
+```
+
+Both APIs are in-memory. The caller owns file I/O and authorization. Import accepts
+`Uint8Array` or `ArrayBuffer`, copies caller-owned bytes and returns the same bundle
+contract as the table importer. The workbook is deterministic and contains exactly
+`survey`, `choices`, `settings` and `kusanya_source`.
+
+This is a deliberately narrow OOXML subset. Import rejects formulas, typed cells,
+comments, macros, external links, extra or missing ZIP parts, duplicate names,
+unsupported compression, changed package metadata, non-sequential cells and any
+projection that disagrees with the canonical source. A workbook re-saved by Excel,
+LibreOffice or another tool may add unsupported parts and fail closed. Generic
+workbook normalization and visible-cell editing remain outside this profile.
+
+Compressed input is limited to 12 MB, each expanded part to 10 MB and all expanded
+parts to 20 MB before decompression. The table limits below apply after XML decoding.
+`fflate` 0.8.3 and `saxes` 6.0.0 are pinned free runtime dependencies; their complete
+tree is recorded in `docs/dependency-licences.md`.
 
 ## Limits and audience
 
@@ -190,6 +221,8 @@ From the repository root with the existing Node 24 dependencies:
 npm.cmd --prefix service run build
 node --test service/dist/test/unit/authoring-bundle.test.js service/dist/test/unit/xlsform-tables.test.js
 node scripts/check-interchange-fixtures.mjs
+node --test service/dist/test/unit/xlsx-workbook.test.js
+node scripts/check-xlsx-fixture.mjs
 ```
 
 The checker uses the four existing ODK fixtures, the reviewer and 144-node
@@ -212,11 +245,11 @@ node scripts/check-scaffold.mjs
 git diff --check
 ```
 
-No new dependencies are required. The optional ODK Validate command remains in
-the [compiler runbook](compiler.md); validation of recompiled XML does not test a
-spreadsheet converter. No extra scratch org, CI change, namespace change, runtime
-probe install or device setup is authorized. C10.10 still needs actual XLSForm
-file exchange into a fresh Salesforce org, and C10.12 remains separate work.
+The optional ODK Validate command remains in the [compiler runbook](compiler.md);
+validation of recompiled XML does not test a spreadsheet converter. No extra
+scratch org, CI change, namespace change, runtime-probe install or device setup is
+authorized. C10.10 still needs actual XLSForm file exchange into a fresh Salesforce
+org, and C10.12 remains separate work.
 
 Builder checks on this unit passed: 252 root tests and 151 service tests in both
 PowerShell and Git Bash; service lint/typecheck, repository formatting, scaffold
