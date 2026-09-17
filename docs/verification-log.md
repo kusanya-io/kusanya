@@ -1287,3 +1287,34 @@ Evidence to verify afterwards: attempt 2 success on bb55c27; one marker with run
 `SAFE TO RE-RUN: ONE same-head infrastructure retry of run 35097677494 at bb55c27`, via "Re-run all jobs" with one environment approval, once USA876 is out of incident 20004433. The stale run 35096046148 should be cancelled if still waiting.
 
 `HOLD: PR #20, 0 findings`, unmerged until exact-head Apex success, the trusted marker and the Deleted-org evidence are verified.
+
+## 2026-09-17: PR #20 hosted Apex evidence, run 35097677494 attempt 2 at `bb55c27`; PASS
+
+Run and head:
+
+- Attempt 2, the single same-head re-run cleared after Salesforce incident 20004433, succeeded on the exact head. It started 11:10:02 UTC and was approved for `salesforce-ci` by cobitechsolutions. The policy, Apex and gate jobs all succeeded.
+- The PR head is unchanged and up to date with main e90b05e. Merge state is CLEAN, and all five checks are green.
+
+Apex job 105178947627, full log of 531 lines:
+
+- The confirm step printed the exact head, the harness checkout is the pinned 1d0edc1, and the stale-head check passed.
+- The in-job budget recheck returned `allowed: true, kind: initial`, because the retry ran on a new UTC day and the budget is per UTC day. That is the policy as designed.
+- Result: `81 passed; 473/475 executable lines (99.58%)`, matching the established baseline because no Salesforce source changed.
+- Exactly one marker: schema 1, role `ci`, run `35097677494-2`, full head bb55c27, started 11:13:31.967Z, outcome `passed`, retryable false.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted, tag `kusanya-ci-v1__35097677494-2__bb55c27a9dcb__32b23991836b`. Fallback cleanup skipped after success, logout succeeded.
+
+Dev Hub, checked independently:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00DcU00000H1IPM, created 11:13:36 and last modified 11:14:32 UTC.
+- Setup Audit Trail has `deleteScratchOrg` for "00DcU00000H1IPM" at 11:14:37 UTC. ActiveScratchOrg has 0 rows.
+- LoginHistory records the CI login at 11:13:30 as a success.
+
+Credential hygiene: no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys or email addresses in the full log. All 10 masks are GitHub redactions. The only warning is note 35's Node.js 20 deprecation notice.
+
+The adapter evidence rests on the two earlier entries: the enumerated package structure, Excel's independent confirmation of literal text cells with zero formulas, every hostile package variant refused, deterministic bytes, and the carriage-return round trip proven at the fix head.
+
+Open items carried forward, none blocking this unit: note 36 on the untested Collect Android UI; note 37 on client-specific count reduction; note 39 on gating delivery of reviewer HTML, which also covers authoring bundles and workbooks; the Enketo probe still unreproduced by the verifier; and notes 24, 25, 27 to 31, 34 and 35. Notes 38, 40 and 41 are answered, and note 42 is informational.
+
+This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
+
+`PASS: PR #20 may be merged`
