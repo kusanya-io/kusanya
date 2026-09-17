@@ -1645,3 +1645,19 @@ Merge order for this unit: PR #27 squash merges first, then log PR #29, which wi
 `SAFE TO APPROVE: run 35279180481 at head 94eae1f`
 
 `HOLD: PR #27, 0 source findings`, pending that run's success with an exact-head marker, 85 percent coverage and a Deleted org with a matching deletion audit entry.
+
+## 2026-09-17: PR #27 PASS at `94eae1f`; run 35279180481 verified end to end
+
+Run 35279180481 attempt 1, no reruns. The trusted marker reads `{"schemaVersion":1,"role":"ci","runId":"35279180481-1","headSha":"94eae1f8cdd36843aa12a7492eb5164c9c4d17ec","startedAt":"2026-09-17T22:04:52.640Z","outcome":"passed","retryable":false}`, and the post-test guard re-confirmed the live pull request head had not moved during testing.
+
+Apex: 81 passed, 473 of 475 executable lines at 99.58 percent, no C10 acceptance test claimed. That is the same count and coverage produced at 99ede85, which is what a byte-identical source tree should produce. Cleanup reported one owned scratch org deleted and none already deleted, no fallback step fired, and the Dev Hub logout succeeded.
+
+Dev Hub confirmation, read-only: exactly one row carries the run's tag, `ScratchOrgInfo` `2SRbm000004Y0o5GAC`, OrgName `kusanya-ci-v1__35279180481-1__94eae1f8cdd3__5825ec3e64c6`, ScratchOrg `00Dcf00000HvRbC`, Developer edition, Status Deleted, `DeletedDate` 2026-09-17, `ErrorCode` null. The audit trail records `deleteScratchOrg` for that org at 22:06:32 UTC, matching the job's completion second for second. `ActiveScratchOrg` returns zero rows and capacity is 3 of 3 active with 1 of 6 daily remaining. The org's real lifetime was 22:04:56 to 22:06:32, so the deploy and all 81 tests ran inside a 96-second window on a genuine org that the Dev Hub independently records as created and then removed.
+
+Credential hygiene: all 531 log lines scanned with no `force://` URLs, org session ids, access, refresh or bearer tokens, client secrets, private keys, JWTs or email addresses. The ten masks are GitHub's own redactions of `GH_TOKEN`, the checkout token, the git extraheader and `SF_DEV_HUB_AUTH_URL`. The only warning is note 35's Node.js 20 deprecation.
+
+All five required checks passed on this head, GitHub reports the pull request CLEAN and MERGEABLE, and the head is unchanged at `94eae1f8cdd36843aa12a7492eb5164c9c4d17ec`.
+
+Unit outcome: ADR 0021 and the Describe normalizer are accepted. Findings 46 and 48 are closed, both found against real Salesforce metadata read from the Dev Hub rather than fixtures, and this unit was the first to run the whole publication chain on genuine Describe output. Notes 47, 49 and 50 are informational; note 34 remains open; notes 36, 37 and 39 remain open; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered. Zero open findings.
+
+`PASS: PR #27 may be merged`
