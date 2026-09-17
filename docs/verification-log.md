@@ -1366,3 +1366,35 @@ Runs: 35221304075 on the stale head 6a670ae is still waiting and should be cance
 `SAFE TO APPROVE: run 35222254862 at head 4610d3f`, after run 35221304075 is cancelled.
 
 `HOLD: PR #23, 0 findings`, pending hosted success with an exact-head marker and a Deleted org. Notes 36, 37 and 39 stay open, and note 34 stays carried.
+
+## 2026-09-17: PR #23 hosted Apex evidence, run 35222254862 attempt 1 at `4610d3f`; PASS
+
+Run and head:
+
+- Attempt 1 succeeded on the exact head, started 12:38:22 UTC and approved for `salesforce-ci` by cobitechsolutions. The policy, Apex and gate jobs all succeeded.
+- The PR is OPEN at 4610d3f, up to date with main 209e380, MERGEABLE and CLEAN, with all five checks green. The only runs on this head are public CI 35222254900 and this one; the stale run 35221304075 completed as failure on 6a670ae and is out of scope by head.
+
+Apex job 105205108472, full log of 531 lines:
+
+- The confirm step printed the exact head, and the trusted harness pin 1d0edc1 appears 6 times.
+- The in-job budget recheck returned `allowed: true, kind: initial`, correct for a first attempt on a fresh head.
+- Result: `81 passed; 473/475 executable lines (99.58%)`, matching the established baseline because this PR changes no Salesforce source.
+- Exactly one marker, matching this attempt: schema 1, role `ci`, run `35222254862-1`, full head 4610d3f, started 12:54:41.065Z, outcome `passed`, retryable false.
+- The stale-head rejection passed and logout succeeded.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted, tag `kusanya-ci-v1__35222254862-1__4610d3f5f3b7__34dcd95d05f0`. The fallback cleanup was correctly skipped after the primary cleanup confirmed.
+
+Dev Hub, checked independently:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00Dcf00000HoHaF, created 12:54:45 and last modified 12:55:47 UTC.
+- Setup Audit Trail has `deleteScratchOrg` for "00Dcf00000HoHaF" at 12:55:50 UTC.
+- ActiveScratchOrg has 0 rows.
+
+Credential hygiene: no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys or email addresses in the full log. All 10 masks are GitHub redactions. The only warning is note 35's Node.js 20 deprecation notice.
+
+The validator evidence rests on the two earlier entries: hostile snapshots refused without running supplied code, diagnostics leaking no supplied names, case-insensitive resolution, deterministic results, unmutated inputs, `Account__r` refused, and the corrected access matrix where reference upserts require field update access while inserts do not.
+
+Open items carried forward, none blocking this unit: note 34 stays carried until a reviewed Salesforce adapter supplies a fresh integration-user Describe snapshot and the publisher refuses on these diagnostics; note 36 on the untested Collect Android UI; note 37 on client-specific count reduction; note 39 on gated, uncached delivery of reviewer and authoring output; the Enketo probe still unreproduced by the verifier; and notes 24, 25, 27 to 31 and 35. Notes 38, 40, 41 and 43 are answered, and note 42 is informational. Datatype and picklist compatibility, polymorphic lookup policy, record-type namespace ambiguity, JavaRosa validation, immutable storage and CLI publication remain open, as ADR 0019 states.
+
+This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
+
+`PASS: PR #23 may be merged`
