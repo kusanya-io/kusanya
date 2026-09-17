@@ -1485,3 +1485,37 @@ Open items carried forward, none blocking this unit: note 34 until a reviewed De
 This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
 
 `PASS: PR #25 may be merged`
+
+## 2026-09-17: Source and security review of PR #27 head `df9ba5d`, Salesforce Describe normalization; one finding
+
+Scope: the new `service/src/publication/salesforce-describe.ts` loader, its tests, a four-line `isTargetFieldType` export in `target-schema.ts`, ADR 0021, and architecture and roadmap updates. Requested before Bill decides on run 35266899643.
+
+Preconditions and trust boundary:
+
+- PR #25 merged as 96998ad, whose tree a5aeb9d is identical to the verified head cefc34a. PR #26 merged as 1e7c966, and main CI 35263338139 passed. This head is one commit on that main.
+- No dependency, lockfile, workflow, harness, `salesforce/`, Enketo or device change; the pin 1d0edc1 appears twice. No scratch org was needed or created.
+
+Local, in a detached worktree: root 252 of 252, service 180 of 180, lint, typecheck, format check, scaffold, service integration 1 passed and 1 skipped without a disposable PostgreSQL URL, production audit at the low threshold with zero results, and `git diff --check`. Public CI 35266899599 is green.
+
+Finding 46, medium severity: the adapter accepts a field type only if it already matches the canonical vocabulary exactly, performing no wire-to-canonical conversion, although ADR 0020 assigned that conversion to this adapter. Salesforce spells whole-number fields `int`, while the canonical list has `integer`, which never appears in a REST response. Read-only Describe calls against our own Dev Hub show `Account` returning 70 fields including one `int`, with `int` also on `User`, `Opportunity`, `Case`, `Attachment` and `ContentVersion`. One such field fails the whole object with `PUBLISH_DESCRIBE_TYPE`, so `Account`, the HWWS worked example's target, cannot be normalized. The documented camel-case spellings `anyType` and `dataCategoryGroupReference` are also rejected while their lower-case forms pass; I did not observe either in the 25 standard objects swept, so they are documented rather than demonstrated. Fix: either map wire spellings here, at minimum `int` to `integer`, case-folding before lookup, or change the canonical vocabulary to Salesforce's exact spellings and update `numericTargets` and ADR 0020. Add a test using real spellings and state the rule in ADR 0021.
+
+Everything else verified:
+
+- Wire shapes. Every property the adapter reads matches what the Dev Hub returns, and real extra properties such as `label`, `length`, `soapType`, `urls` and `custom` are ignored. `combobox`, `long`, `base64`, `address`, `encryptedstring` and `location` are accepted.
+- Deduplication, ordering and counts. Five names collapsing to two objects spend 2 requests in canonical order; an invalid name up front spends 0; a rejected request mid-way reports 2; a malformed response after an earlier success reports 2 with the failing path; repeated calls are fresh and byte-identical; an empty list spends 0 and succeeds; a non-array input fails with 0.
+- Identity. `Account__r` returned for a requested `Account` fails closed; a case-only difference matches by design.
+- Hostile structures. Proxies on the response or field array, accessors on object or field properties, a symbol key, an exotic prototype, a class instance, sparse and extended arrays, duplicate fields, record types, references and picklist values, misplaced picklist and reference metadata, a missing required property, and null, array or string responses are each refused with a structural code and path. `Object.prototype` stays clean and no supplied code runs.
+- Non-disclosure. A secret-looking object name, field name and provider error message do not appear in diagnostics.
+- Bounds. Exact and plus-one behave correctly at 100 objects, 5,000 fields in one object and across two, 2,000 picklist values per field, 10,000 in aggregate, 100 reference targets, 1,000 record types and the 500,000 text-unit budget.
+- No drift. A normalized snapshot feeds the ADR 0019 and 0020 validator and passes, and that validator still refuses an inactive picklist value from the same snapshot.
+- Immutability, determinism and canonical ordering all hold.
+- Only `isTargetFieldType` and `validatePublicationTargets` are exported, so the canonical array cannot be mutated by callers.
+- Note 34 is correctly still open, and ADR 0021 does not overstate freshness, authentication, transport security or publisher refusal.
+
+Note 47, informational: ADR 0021 states as fact that an integration-user REST Describe omits FLS-inaccessible fields, and the code hard-codes `readable: true` on that basis. I could not verify it: Salesforce's documentation pages are not publicly fetchable, and a real check needs a restricted-permission user in a scratch org, which this unit does not otherwise require and which is not authorized for a source review. If the claim is wrong, `readable` would be true for an unreadable field and ADR 0019's matching-field read check could never fire. Either soften the wording to an assumption pending a real-org check, or keep it and record the check as required work.
+
+Capacity at 19:55 UTC: 3 of 6 daily and 3 of 3 active, with none in use.
+
+`HOLD: run 35266899643 at head df9ba5d`. Finding 46 needs a code change, so approving now would spend a scratch slot on a superseded head. Cancel it once the fixed head is pushed.
+
+`HOLD: PR #27, 1 finding` (46), with note 47 informational. Notes 34, 36, 37 and 39 remain open; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered. Enketo installation and the Collect device decision remain unapproved and untouched.
