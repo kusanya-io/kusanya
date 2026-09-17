@@ -219,6 +219,7 @@ Includes runtime, development and optional platform packages. Preserve upstream 
 | service       | fastify                                         | 5.12.3  | MIT                       |
 | service       | fastq                                           | 1.20.3  | ISC                       |
 | service       | fdir                                            | 6.5.0   | MIT                       |
+| service       | fflate                                          | 0.8.3   | MIT                       |
 | service       | file-entry-cache                                | 11.1.5  | MIT                       |
 | service       | find-my-way                                     | 9.9.0   | MIT                       |
 | service       | find-up                                         | 5.0.0   | MIT                       |
@@ -284,6 +285,7 @@ Includes runtime, development and optional platform packages. Preserve upstream 
 | service       | rfdc                                            | 1.4.1   | MIT                       |
 | service       | safe-regex2                                     | 5.1.1   | MIT                       |
 | service       | safe-stable-stringify                           | 2.5.0   | MIT                       |
+| service       | saxes                                           | 6.0.0   | ISC                       |
 | service       | secure-json-parse                               | 4.1.0   | BSD-3-Clause              |
 | service       | semver                                          | 7.8.5   | ISC                       |
 | service       | set-cookie-parser                               | 2.7.2   | MIT                       |
@@ -302,6 +304,7 @@ Includes runtime, development and optional platform packages. Preserve upstream 
 | service       | uri-js                                          | 4.4.1   | BSD-2-Clause              |
 | service       | which                                           | 2.0.2   | ISC                       |
 | service       | word-wrap                                       | 1.2.5   | MIT                       |
+| service       | xmlchars                                        | 2.2.0   | MIT                       |
 | service       | xtend                                           | 4.0.2   | MIT                       |
 | service       | yocto-queue                                     | 0.1.0   | MIT                       |
 | tooling       | @hapi/address                                   | 5.1.1   | BSD-3-Clause              |

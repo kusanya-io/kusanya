@@ -1,6 +1,6 @@
 # ADR 0017: Portable authoring bundles and consistency-checked XLSForm tables
 
-- Status: Accepted design decision; implementation awaiting independent verification
+- Status: Accepted; table profile verified in PR #18, binary adapter follows in ADR 0018
 - Date: 2026-09-16
 - Brief sections: C2 service compiler boundary, C3.12/.19, C5 import/export, C11 Phase 1
 - Decision owner: Cobitech Solutions
@@ -101,13 +101,13 @@ these future interoperability tests.
 Bound JSON text, object depth/nodes/string data, tables, cells and total text before
 returning output; exact limits are in the runbook. Oversized inputs fail, rather
 than truncating cells or discarding fields. Table cells have a conservative 32,767
-UTF-16-unit ceiling. No ZIP/XML spreadsheet parser, formula evaluator, CSV writer,
-network call, filesystem input or dependency is introduced into the service.
+UTF-16-unit ceiling. This table-profile unit introduced no ZIP/XML spreadsheet
+parser, formula evaluator, CSV writer, network call, filesystem input or dependency.
 
-A future binary adapter must write string cells explicitly, never interpret leading
-`=`, `+`, `-` or `@` as formulas, and independently bound ZIP expansion/XML parsing.
-It must reject unsupported workbook features and cannot rely on cached formula values.
-That adapter will have its own dependency/security and real-workbook tests.
+ADR 0018's later binary adapter writes string cells explicitly, never interprets
+leading `=`, `+`, `-` or `@` as formulas, independently bounds ZIP expansion/XML
+parsing, rejects unsupported workbook features and never relies on cached formula
+values. It carries its own dependency/security and workbook tests.
 
 Authoring exports intentionally contain Author Notes/Regex Example. Like reviewer
 HTML, they are not collector payloads. Any delivery route requires authorization
@@ -122,9 +122,11 @@ mapping and annotation values, mutate projections and exercise malformed JSON,
 executable objects, namespace fixtures and resource limits. Source files and test
 fixtures are synthetic; production seed records are not exported into artifacts.
 
-This advances C3.12/C5 but does not complete them. Binary `.xlsx` handling, general
-XLSForm import, complete C4 bundle coverage, Salesforce persistence and C10.10's
-fresh-org round trip remain open. C10.12, publication, CLI publish, the actual
+This advances C3.12/C5 but does not complete them. ADR 0018 adds a strict binary
+`.xlsx` adapter and answers note 40 by storing every cell as explicit inline text
+without changing the byte-exact source chunks. General XLSForm import, complete C4
+bundle coverage, Salesforce persistence and C10.10's fresh-org round trip remain
+open. C10.12, publication, CLI publish, the actual
 Collect UI and notes 36/37's client-count policy also remain open. No C10 acceptance
 test or phase gate is claimed. No additional optional runtime-tool installation is
 authorized by this decision.

@@ -79,8 +79,9 @@ The [authoring interchange unit](interchange.md) adds a versioned JSON envelope
 around the supported definition and mapping snapshots (ADR 0017). An XLSForm-style
 table profile projects that source into recognizable rows and retains the complete
 source in an extension table. Import regenerates all tables and refuses conflicting
-edits. These are in-memory, author-only snapshots, not an additional source of
-truth, a binary spreadsheet parser, a Salesforce import or a publication channel.
+edits. ADR 0018 adds a strict XLSX wrapper with literal text cells and bounded ZIP/XML
+decoding. These are author-only snapshots, not an additional source of truth, a
+general edited-XLSForm importer, a Salesforce import or a publication channel.
 Exact Kusanya XML round trips do not establish third-party XLSForm conversion
 equivalence or C10.10. Collector output continues through the compiler allowlist.
 
