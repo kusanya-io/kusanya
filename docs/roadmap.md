@@ -11,7 +11,9 @@ passed PR #14 and merged as `6356a87`; log PR #15 merged as `bb292e6`.
 The reviewer print unit passed PR #16 and merged as `fc64c38`; log PR #17
 merged as `0f1b209`.
 The authoring-interchange unit passed PR #18 and merged as `3caea7a`; log PR #19
-merged as `e90b05e`. The strict XLSX adapter (ADR 0018) awaits independent review.
+merged as `e90b05e`. The strict XLSX adapter passed PR #20 and merged as `2a4a1f1`;
+its log PR #21 merged as `209e380`. The current bounded publication unit validates
+portable mappings against a supplied target-schema snapshot (ADR 0019).
 The builder does not issue its own gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
@@ -98,3 +100,11 @@ General edited-XLSForm import and Salesforce persistence remain before C10.10.
 This unit creates no org and changes no workflow, harness, namespace or dependency.
 Note 39's reviewer authorization, no-store/header protections and collector-denial
 test are recorded in ADR 0016 and remain due at the first delivery unit.
+
+The current target-schema validator (ADR 0019) is a pure bridge toward publication.
+It recomputes object, field, access, record-type, lookup, external-ID and stamp
+checks from a caller-supplied normalized snapshot and does not trust saved Match
+Status. A future Salesforce adapter must obtain fresh Describe data as the tenant
+integration user before note 34 can close. Datatype/picklist compatibility,
+JavaRosa validation, immutable storage and CLI/API publication remain open; this
+unit claims no C10 acceptance test or Phase 1 gate.
