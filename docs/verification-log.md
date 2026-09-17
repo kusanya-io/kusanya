@@ -1348,3 +1348,21 @@ Capacity at 12:33 UTC: 5 of 6 daily and 3 of 3 active, with none in use.
 `HOLD: run 35221304075 at head 6a670ae`. The fix changes the head, so approving now would spend a scratch slot on a superseded head. Cancel it once the fixed head is pushed.
 
 `HOLD: PR #23, 1 finding` (43)
+
+## 2026-09-17: PR #23 fix head `4610d3f`; finding 43 closed, run 35222254862 cleared
+
+Head and ancestry: 4610d3f is the original commit 6a670ae plus one corrective commit, both on main 209e380. The delta touches only `service/src/publication/target-schema.ts`, its test and ADR 0019. The trust boundary is unchanged, the pin 1d0edc1 appears twice, and no verifier scratch org was needed.
+
+Finding 43 closed. The fix adds a `canWrite` helper requiring create access and, when a reference may upsert, update access as well, applied to assignments, both stamps and the parent lookup. My probes:
+
+- Reference upserts: a create-only assignment, collector stamp, submission stamp and parent lookup each return `PUBLISH_TARGET_FIELD_WRITE` at their own location. An update-only field is refused, a reference that writes assignments without an upsert field follows the same rule, and fully writable fields and lookups pass.
+- Inserts: main and repeat mappings still accept a create-only assignment, stamp and parent lookup, and still refuse update-only and read-only fields.
+- Unchanged: a query-only reference, a missing field, a parent lookup to the wrong object and an upsert on a non-external-ID field behave as before, and a create-only field beside a missing field reports both. The original probe set is otherwise identical.
+
+ADR 0019 now states the insert versus reference-upsert field rule. Local, in a detached worktree: root 252 of 252, service 168 of 168, lint, typecheck, format check, scaffold, production audit at zero and `git diff --check`. Public CI 35222254900 is green. No new findings.
+
+Runs: 35221304075 on the stale head 6a670ae is still waiting and should be cancelled. 35222254862 is on the exact head and pending behind it. Capacity: 5 of 6 daily, none active.
+
+`SAFE TO APPROVE: run 35222254862 at head 4610d3f`, after run 35221304075 is cancelled.
+
+`HOLD: PR #23, 0 findings`, pending hosted success with an exact-head marker and a Deleted org. Notes 36, 37 and 39 stay open, and note 34 stays carried.
