@@ -1453,3 +1453,35 @@ Runs: the stale run 35257489966 on 572a3cd already completed as failure, so noth
 `SAFE TO APPROVE: run 35259416907 at head cefc34a`
 
 `HOLD: PR #25, 0 findings`, pending hosted success with an exact-head marker and a Deleted org. Notes 34, 36, 37 and 39 stay open; 45 is documented and informational; 38, 40, 41, 43 and 44 are answered; 42 is informational.
+
+## 2026-09-17: PR #25 hosted Apex evidence, run 35259416907 attempt 1 at `cefc34a`; PASS
+
+Run and head:
+
+- Attempt 1 succeeded on the exact head, started 18:32:09 UTC and approved for `salesforce-ci` by cobitechsolutions. The policy, Apex and gate jobs all succeeded.
+- The PR is OPEN at cefc34a, up to date with main 8467e95, MERGEABLE and CLEAN, with all five checks green. The only runs on this head are public CI 35259416938 and this one, and no push followed the re-verification.
+
+Apex job 105331210682, full log of 531 lines:
+
+- The confirm step printed the exact head, and the trusted harness pin 1d0edc1 appears 6 times.
+- The in-job budget recheck returned `allowed: true, kind: initial`.
+- Result: `81 passed; 473/475 executable lines (99.58%)`, matching the established baseline because this PR changes no Salesforce source.
+- Exactly one marker, matching this attempt: schema 1, role `ci`, run `35259416907-1`, full head cefc34a, started 18:40:02.905Z, outcome `passed`, retryable false.
+- The stale-head rejection passed and logout succeeded.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted, tag `kusanya-ci-v1__35259416907-1__cefc34a110ad__41ec4ed6650b`, with the fallback cleanup correctly skipped.
+
+Dev Hub, checked independently:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00DQL00000bw6nh, created 18:40:07 and last modified 18:41:25 UTC.
+- Setup Audit Trail has `deleteScratchOrg` for "00DQL00000bw6nh" at 18:41:30 UTC.
+- ActiveScratchOrg has 0 rows.
+
+Credential hygiene: no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys or email addresses in the full log. All 10 masks are GitHub redactions. The only warning is note 35's Node.js 20 deprecation notice.
+
+The compatibility evidence rests on the two earlier entries: the full 16-question by 12-target `none` grid, all twelve transforms in matching and mismatched pairs, exact case-sensitive picklist and combobox membership, the strict decoder refusing every hostile snapshot shape, ten blank-constant spellings behaving identically against nillable and non-nillable targets, determinism, immutability and non-disclosing diagnostics.
+
+Open items carried forward, none blocking this unit: note 34 until a reviewed Describe adapter and refusing publisher exist; note 36 on the untested Collect Android UI; note 37 on client-specific count reduction; note 39 on gated, uncached delivery; note 45 on stamp datatype checks arriving with the ingestion stamp contract; the Enketo probe still unreproduced by the verifier; and notes 24, 25, 27 to 31 and 35. Notes 38, 40, 41, 43 and 44 are answered, and 42 is informational. Length, precision and scale, lexical URL, email and phone rules, reference external-ID selection, compound fields, record-type-specific picklists, executable transforms, JavaRosa validation, immutable storage and CLI publication remain open, as ADR 0020 states.
+
+This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
+
+`PASS: PR #25 may be merged`
