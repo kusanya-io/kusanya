@@ -90,6 +90,15 @@ question-or-constant field sources. They preserve once-only answers shared acros
 repeat mappings and portable customer target identifiers. They do not execute
 transforms, validate target permissions or write/stamp customer records (ADR 0013).
 
+The first publication-boundary unit validates those mappings against a strict,
+normalized target-schema snapshot (ADR 0019). It checks object and field existence,
+integration-user query/create/update access, record-type availability, parent
+lookup targets, unique external IDs and trusted-stamp collisions, while warning on
+non-unique reference matching. The caller remains responsible for obtaining a
+fresh Describe snapshot as the integration user. This pure function performs no
+Salesforce I/O, authorization, artifact storage or publication and is labelled
+`target-schema-only`; saved Match Status is never evidence.
+
 Private definition ownership still blocks cross-owner integration/supervisor reads.
 ADR 0011 records a future object-scoped read-all policy, not a current permission
 grant. A reviewed implementation with effective-access tests must precede any
