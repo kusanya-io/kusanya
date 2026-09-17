@@ -1605,3 +1605,59 @@ Note 50, informational: the marker has no machine-readable way to record that a 
 `DO NOT RE-RUN: run 35273720037 at head 99ede85`
 
 `HOLD: PR #27, 0 source findings, hosted gate failed`. The source review at 99ede85 stands and only the hosted evidence is missing. Findings 46 and 48 are closed; notes 47, 49 and 50 are informational; notes 34, 36, 37 and 39 remain open; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered.
+
+## 2026-09-17: PR #27 head `58aa6f7` is tree-identical; merge sequencing decided
+
+Fresh head `58aa6f7a89702a5eede4d8b99945619f5b7c64df` carries tree `1ee83a8199bcac021029fe053005df1d059c2ac8`, exactly the tree of reviewed head 99ede85, with a single parent 99ede85, an empty diff in both directions and no files changed. The branch remains four commits on base 1e7c966 with unchanged attribution. The `salesforce` tree `146da0f` and `service` tree `06db88a` are identical to 99ede85, so no source re-review is required and the verdict at 99ede85 carries forward: findings 46 and 48 closed, zero open source findings, notes 47 and 49 informational, note 34 open.
+
+Reconciliation of the previous failed-cleanup org is complete and verified: `ScratchOrgInfo` `2SRbm000004XxJxGAK` reads Status Deleted with `DeletedDate` 2026-09-17, the audit trail records `deleteScratchOrg` for `00DRK00000b6ouT` at 21:32:52 UTC, `ActiveScratchOrg` returns zero rows, and capacity is 3 of 3 active with 2 of 6 daily remaining before the reset near 07:00 UTC. No owned org from run 35273720037 remains.
+
+Retry budget for the fresh head is allowed as an initial attempt, on the workflow's own evidence rather than a simulation: in the policy job of run 35277463109 the classifier returned `full-apex`, the headSha equality check passed, and the budget step ran the pinned `apex-run-budget.mjs` and reached `allowed=true` at 21:35:02, with the trusted pin 1d0edc1 present in that log. The `failed-cleanup` record against 99ede85 does not follow a new sha.
+
+Sequencing decision: run 35277463109 must not be approved. Branch protection on main sets `strict: true` and `enforce_admins: true`, with required contexts Salesforce verification gate, Scaffold and lint, and Service and container tests, so PR #27 must be up to date before it can merge and there is no admin override. GitHub reports it BEHIND and MERGEABLE. Approving 58aa6f7 would still leave the branch needing an update, which creates another head on which all required checks must pass again, costing both remaining daily orgs instead of one. The protected job independently re-checks that the live PR head equals the reviewed sha, so a stale approval after an update refuses before creating an org, but that is a safety net rather than a plan.
+
+The update was rehearsed locally in a throwaway worktree and then discarded: merging b24d8a3 into 58aa6f7 is clean, touches only `docs/verification-log.md` by adding the 120 lines that reached main through PR #28, and yields predicted tree `23e9f9ea7564fecbb8d19148f138a43ba1fed013` with the `salesforce` and `service` trees byte-identical and the pull request's diff against main still exactly the same six files. Merge is preferred over rebase, which would drop the empty commit and rewrite the reviewed shas out of the ancestry. Two cautions: the protected job uses a single concurrency group with `cancel-in-progress: false`, so the stale run should be cancelled before the update to avoid queuing behind an unresolved approval; and a merge queue must not be used, because this workflow has no `merge_group` trigger and the required gate would never report.
+
+Agreed order: cancel 35277463109, update PR #27 from main by merge, verify the resulting head against the predicted tree and clear its run, approve exactly one hosted run, squash merge PR #27 while it is up to date, and merge this log branch only afterwards.
+
+Process correction owned by the verifier: merging log PR #28 before the source pull request is what put main ahead and caused this sequencing problem. The established order, used for every earlier unit, is source pull request first and log second, and it will be held to.
+
+`HOLD: run 35277463109 at head 58aa6f7`
+
+`HOLD: PR #27, 0 source findings`, pending hosted success on the updated head with an exact-head marker and a Deleted org.
+
+## 2026-09-17: PR #27 final head `94eae1f` cleared for one hosted run
+
+The branch update landed exactly as predicted. Head `94eae1f8cdd36843aa12a7492eb5164c9c4d17ec` is a GitHub-generated merge with two parents in the expected order, reviewed identity `58aa6f7` then current main `b24d8a3`, and its tree is `23e9f9ea7564fecbb8d19148f138a43ba1fed013`, character for character the tree predicted from a throwaway merge before the update was performed.
+
+Byte identity against reviewed source head 99ede85: the `service` tree `06db88a` and `salesforce` tree `146da0f` are identical, and so are the `.github` tree `58fff68` and `scripts` tree `01418bb`, so neither the workflow nor the harness directory moved under cover of the merge. The update changed exactly one file, `docs/verification-log.md`, adding 121 lines and removing none, all of it the already reviewed verifier log that reached main through PR #28. The pull request's footprint against main is still exactly six files: three docs and three service files. No source byte changed, so no source re-review was required and the verdict carries forward: findings 46 and 48 closed, zero open source findings, notes 47, 49 and 50 informational, note 34 open.
+
+The stray org remains reconciled: `kusanya-ci-v1__35273720037-1__99ede856accc__bb0b89f88586` reads Status Deleted with `DeletedDate` 2026-09-17, `ActiveScratchOrg` returns zero rows, and capacity at 21:59 UTC is 3 of 3 active with 2 of 6 daily remaining. That record is the only one in the 3527 series, which independently confirms that no waiting or rejected run created an org. Run 35277463109 ended in failure with zero steps in its protected job, the signature of a rejected deployment, and created nothing.
+
+The branch is now up to date, so BEHIND is cleared and GitHub reports MERGEABLE with only the Salesforce gate outstanding. Scaffold and lint and Service and container tests passed, and public CI 35279180570 passed at this head.
+
+Attribution needs no rewrite. The merge commit is authored `cobitechsolutions <cobitechsolutions@gmail.com>` and committed by `GitHub <noreply@github.com>`, which is what the Update branch button produces, and it carries GitHub's web-flow signature, reported locally as unverifiable only because that public key is absent from the verifier's keyring. `required_signatures` is false, there are no rulesets, linear history is not required, and the trust boundary concerns content, which is byte-identical. Rewriting would invalidate the run and cost another org for no gain.
+
+Retry budget for the final head is one attempt, authorised by the pinned script itself: in the policy job at 21:54:07 the trusted checkout resolved pin 1d0edc1, the reviewed sha was 94eae1f at every step, and `apex-run-budget.mjs` printed `{"allowed":true,"kind":"initial","reason":"No prior attempt consumed this head and UTC day."}`. The pin appears twice in the final head's workflow file. One org remains spare today for a cleared infrastructure retry.
+
+Merge order for this unit: PR #27 squash merges first, then log PR #29, which will itself need a docs-only update from main and takes the documentation exemption at no scratch-org cost.
+
+`SAFE TO APPROVE: run 35279180481 at head 94eae1f`
+
+`HOLD: PR #27, 0 source findings`, pending that run's success with an exact-head marker, 85 percent coverage and a Deleted org with a matching deletion audit entry.
+
+## 2026-09-17: PR #27 PASS at `94eae1f`; run 35279180481 verified end to end
+
+Run 35279180481 attempt 1, no reruns. The trusted marker reads `{"schemaVersion":1,"role":"ci","runId":"35279180481-1","headSha":"94eae1f8cdd36843aa12a7492eb5164c9c4d17ec","startedAt":"2026-09-17T22:04:52.640Z","outcome":"passed","retryable":false}`, and the post-test guard re-confirmed the live pull request head had not moved during testing.
+
+Apex: 81 passed, 473 of 475 executable lines at 99.58 percent, no C10 acceptance test claimed. That is the same count and coverage produced at 99ede85, which is what a byte-identical source tree should produce. Cleanup reported one owned scratch org deleted and none already deleted, no fallback step fired, and the Dev Hub logout succeeded.
+
+Dev Hub confirmation, read-only: exactly one row carries the run's tag, `ScratchOrgInfo` `2SRbm000004Y0o5GAC`, OrgName `kusanya-ci-v1__35279180481-1__94eae1f8cdd3__5825ec3e64c6`, ScratchOrg `00Dcf00000HvRbC`, Developer edition, Status Deleted, `DeletedDate` 2026-09-17, `ErrorCode` null. The audit trail records `deleteScratchOrg` for that org at 22:06:32 UTC, matching the job's completion second for second. `ActiveScratchOrg` returns zero rows and capacity is 3 of 3 active with 1 of 6 daily remaining. The org's real lifetime was 22:04:56 to 22:06:32, so the deploy and all 81 tests ran inside a 96-second window on a genuine org that the Dev Hub independently records as created and then removed.
+
+Credential hygiene: all 531 log lines scanned with no `force://` URLs, org session ids, access, refresh or bearer tokens, client secrets, private keys, JWTs or email addresses. The ten masks are GitHub's own redactions of `GH_TOKEN`, the checkout token, the git extraheader and `SF_DEV_HUB_AUTH_URL`. The only warning is note 35's Node.js 20 deprecation.
+
+All five required checks passed on this head, GitHub reports the pull request CLEAN and MERGEABLE, and the head is unchanged at `94eae1f8cdd36843aa12a7492eb5164c9c4d17ec`.
+
+Unit outcome: ADR 0021 and the Describe normalizer are accepted. Findings 46 and 48 are closed, both found against real Salesforce metadata read from the Dev Hub rather than fixtures, and this unit was the first to run the whole publication chain on genuine Describe output. Notes 47, 49 and 50 are informational; note 34 remains open; notes 36, 37 and 39 remain open; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered. Zero open findings.
+
+`PASS: PR #27 may be merged`
