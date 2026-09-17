@@ -99,6 +99,14 @@ fresh Describe snapshot as the integration user. This pure function performs no
 Salesforce I/O, authorization, artifact storage or publication and is labelled
 `target-schema-only`; saved Match Status is never evidence.
 
+The next bounded publication unit extends that normalized snapshot and pure result
+with field datatype, nullability and base picklist compatibility (ADR 0020). It
+checks all stored transform names against their source and target categories and
+requires every possible authored value for a restricted picklist to be active.
+It still performs no transform, Salesforce call or publication. Value-size and
+record-type-specific picklist rules remain with the future Describe adapter and
+executable publisher.
+
 Private definition ownership still blocks cross-owner integration/supervisor reads.
 ADR 0011 records a future object-scoped read-all policy, not a current permission
 grant. A reviewed implementation with effective-access tests must precede any
