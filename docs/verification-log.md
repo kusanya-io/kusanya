@@ -1554,3 +1554,32 @@ Runs: the stale run 35266899643 is still waiting on the superseded head df9ba5d 
 `HOLD: run 35268762285 at head fafd444`
 
 `HOLD: PR #27, 1 finding` (48). Finding 46 is closed. Notes 47 and 49 are informational; notes 34, 36, 37 and 39 remain open; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered.
+
+## 2026-09-17: PR #27 fix head `99ede85`; finding 48 closed, run 35273720037 cleared
+
+Head and ancestry: 99ede85 is df9ba5d, then the finding 46 fix fafd444, then this finding 48 fix, all on main 1e7c966. The latest delta touches only `salesforce-describe.ts`, its test and ADR 0021. Across the whole PR six files change, none of them a dependency, lockfile, workflow, harness or `salesforce/` file, and the pin 1d0edc1 appears twice.
+
+Local, in a detached worktree: root 252 of 252, service 182 of 182, lint, typecheck, format check, scaffold, integration 1 passed and 1 skipped without a disposable PostgreSQL URL, production audit at the low threshold with zero results, and `git diff --check`. Public CI 35273720026 is green.
+
+Finding 48 closed, verified against real metadata:
+
+- The unmodified Account, Contact and Lead describes captured read-only from the Dev Hub all normalize in one request each. `Account.BillingStateCode`, `Contact.MailingStateCode` and `Lead.StateCode` each collapse 384 wire entries into 277 values, all active. A real-shape fixture with `AC`, `AG` twice and `AL` twice collapses to three values.
+- Active is a true OR and order-independent: false then true gives active, true then false gives active, all-false stays inactive, three mixed entries give active, and reversing entry order produces byte-identical output.
+- Case-distinct values stay distinct: `AG`, `Ag` and `ag` survive separately with their own flags, deterministically sorted.
+- Every duplicate entry is still validated rather than skipped. A later duplicate with a non-boolean or missing `active`, a non-string value, a control character, an over-long value, a null or array entry, an accessor entry, a proxy entry, or a sparse array all fail at their own index, and no supplied value leaks. Ordinary extra keys such as `label`, `validFor` and `defaultValue` are ignored.
+- Bounds behave as documented: the per-field wire limit is still 2,000 with 2,001 refused; the aggregate picklist budget counts collapsed values, so six fields of 2,000 repeats collapse to six values and pass, five fields of 2,000 distinct values reach exactly 10,000 and pass, and six are refused; the text budget still trips on collapsed values.
+- No performance amplification: 200 fields each carrying 2,000 duplicate 300-character values normalized in 796 ms with 9 MB of heap, because only collapsed values are retained. Work scales linearly with wire entries and stays bounded by the 2,000-per-field and 5,000-field caps.
+
+Finding 46 remains closed: `INT` and `String` still canonicalize to `integer` and `string`, and an unknown type is refused. No regressions: duplicate object, field, reference target and record-type names are still refused, and caller responses are unmutated.
+
+Validator hand-off on real metadata: Account's real normalized snapshot passes the ADR 0019 and 0020 validator for integer, text and restricted-picklist assignments, and an unknown state code is refused with `PUBLISH_PICKLIST_VALUE`. This is the first time the whole chain has run on genuine Salesforce metadata.
+
+Note 47 remains accurate: the FLS omission is still an unconfirmed assumption requiring a restricted-user scratch-org check before publisher integration. Note 49 is accurately recorded: ADR 0021 now states that dependent picklists may repeat values across `validFor` entries, describes exact-value collapse and active-any behaviour, no longer claims duplicate picklist values fail closed, and lists dependent-picklist applicability in both the intentional gaps and the revisit section. Note 34 remains open.
+
+No new findings.
+
+Runs: the finding 46 head run 35268762285 is already cancelled. The original head run 35266899643 is still waiting and should be cancelled. The replacement 35273720037 is on the exact head with its policy job passed. Capacity at 21:00 UTC: 3 of 6 daily, none active.
+
+`SAFE TO APPROVE: run 35273720037 at head 99ede85`, after run 35266899643 is cancelled.
+
+`HOLD: PR #27, 0 findings`, pending hosted success with an exact-head marker and a Deleted org. Findings 46 and 48 are closed; notes 47 and 49 are informational; notes 34, 36, 37 and 39 remain open; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered.
