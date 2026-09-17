@@ -45,6 +45,10 @@ const targetFieldTypes = [
 ] as const;
 export type TargetFieldType = (typeof targetFieldTypes)[number];
 
+export function isTargetFieldType(value: string): value is TargetFieldType {
+  return (targetFieldTypes as readonly string[]).includes(value);
+}
+
 export interface TargetPicklistValueSchema {
   value: string;
   active: boolean;
