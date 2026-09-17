@@ -1429,3 +1429,27 @@ Capacity at 18:25 UTC: 4 of 6 daily and 3 of 3 active, with none in use.
 `HOLD: run 35257489966 at head 572a3cd`. The fix changes the head, so approving now would spend a scratch slot on a superseded head. Cancel it once the fixed head is pushed.
 
 `HOLD: PR #25, 1 finding` (44)
+
+## 2026-09-17: PR #25 fix head `cefc34a`; finding 44 closed, note 45 recorded, run 35259416907 cleared
+
+Head and ancestry: cefc34a is the original commit 572a3cd plus one corrective commit, both on main 8467e95. The delta touches only `service/src/publication/target-schema.ts`, its test and ADR 0020. The trust boundary is unchanged, the pin 1d0edc1 appears twice, and no verifier scratch org was needed.
+
+Finding 44 closed. `blankConstant` now covers null and any `trim()`-blank string, and `none` accepts a nonblank constant for a combobox. My probes:
+
+- Ten blank spellings, `null`, `''`, one space, several spaces, a tab, a newline, CRLF, mixed whitespace, a no-break space and an em space, all pass against a nillable target and all give `PUBLISH_TARGET_FIELD_REQUIRED` against a non-nillable one. `String.trim()` covers Unicode spaces, which is the conservative direction.
+- Each blank spelling with `text_truncate`, `number` or `picklist_match` gives `PUBLISH_TARGET_FIELD_TYPE`.
+- A blank against a required restricted picklist or combobox gives `PUBLISH_TARGET_FIELD_REQUIRED`; against an optional one it passes. Required numeric and textarea targets behave the same.
+- Nonblank constants still require membership: active values pass for restricted picklists and comboboxes, while inactive, missing, case-mismatched and space-padded values give `PUBLISH_PICKLIST_VALUE`. Unrestricted picklists and comboboxes accept any value.
+- Combobox rules match the ADR: a nonblank constant with `none`, a select-one question directly and through `picklist_match` all reach a combobox, and a text question reaches an unrestricted combobox but fails closed against a restricted one.
+
+Note 45 is accurately recorded: ADR 0020 now states that stamp fields are checked for existence and write access only, with datatype and restricted-picklist compatibility deferred to the future ingestion stamp contract, which matches the behaviour I still observe. The ADR also now states the combobox rule.
+
+Nothing else moved: re-running the whole earlier matrix on this head gives identical results for the direct `none` grid, all twelve transforms, picklist membership, the strict decoder, determinism, immutability and non-disclosure.
+
+Local, in a detached worktree: root 252 of 252, service 173 of 173, lint, typecheck, format check, scaffold, production audit at zero and `git diff --check`. Public CI 35259416938 is green. No new findings.
+
+Runs: the stale run 35257489966 on 572a3cd already completed as failure, so nothing remains to cancel. 35259416907 is on the exact head and waiting, with its policy job passed. Capacity at 18:36 UTC: 4 of 6 daily, none active.
+
+`SAFE TO APPROVE: run 35259416907 at head cefc34a`
+
+`HOLD: PR #25, 0 findings`, pending hosted success with an exact-head marker and a Deleted org. Notes 34, 36, 37 and 39 stay open; 45 is documented and informational; 38, 40, 41, 43 and 44 are answered; 42 is informational.
