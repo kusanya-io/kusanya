@@ -1398,3 +1398,90 @@ Open items carried forward, none blocking this unit: note 34 stays carried until
 This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
 
 `PASS: PR #23 may be merged`
+
+## 2026-09-17: Source and security review of PR #25 head `572a3cd`, publication field compatibility; one finding
+
+Scope: the datatype, nullability and restricted-picklist checks added to `service/src/publication/target-schema.ts`, its tests, ADR 0020, and architecture and roadmap updates. Requested before Bill decides on run 35257489966.
+
+Preconditions and trust boundary:
+
+- PR #23 merged as b3db0c7, whose tree cb78493 is identical to the verified head 4610d3f. PR #24 merged as 8467e95, and main CI 35227196105 passed at that base. This PR is one commit on that main.
+- No workflow, credentialed harness, Salesforce metadata, permission, namespace, manifest, lockfile or script change; the pin 1d0edc1 appears twice. Nothing under `salesforce/` changed, so no verifier scratch org was created.
+
+Local, in a detached worktree: root 252 of 252, service 172 of 172, lint, typecheck, format check, scaffold, a production audit at the low threshold with zero results, and `git diff --check`. Public CI 35257489965 is green.
+
+Verifier probes, synthetic input only:
+
+- Direct `none`: all 16 question types against 12 target categories match ADR 0020. Text-like answers reach text, picklist and combobox fields; integer and decimal reach numeric fields; date, time and datetime reach only their own types; geographic answers reach text; media and calculate are refused without an explicit transform.
+- All twelve transforms: each matching pair passes and each mismatched pair is refused, covering `picklist_match`, `multi_select_join`, `lookup_by_external_id`, `date_only`, `boolean_yes_no`, `number`, `text_truncate`, the three geopoint components and `file_url`.
+- Restricted picklists: active values pass; missing, inactive and case-mismatched values give `PUBLISH_PICKLIST_VALUE`; multipicklist membership is per choice; unrestricted picklists do not require membership; and a text question to a restricted picklist fails closed.
+- Strict decoder: unknown, numeric, capitalised and missing types; missing `nillable` or `picklistValues`; an extra field key; picklist metadata or `restrictedPicklist` on a non-picklist; `referenceTo` on a non-reference; duplicate values; accessor, extra-key, non-string, control-character and over-length values; proxy and sparse value arrays; 2,001 values on a field; and over 10,000 in a snapshot are each refused with a specific code and location. `Object.prototype` stays clean.
+- Determinism, immutability and non-disclosure all hold, and success still returns `validation: 'target-schema-only'`.
+
+Finding 44, low severity, correctness: `blankConstant` covers only `constantValue === null`, so an empty or whitespace-only constant skips the `nillable` check. Against a non-nillable string target, `null` correctly gives `PUBLISH_TARGET_FIELD_REQUIRED`, while `''`, `'   '` and `''` with `text_truncate` all return `ok`. Salesforce stores an empty string as null and trims boundary whitespace, which I proved in the PR #18 review, so each of those writes null into a required field and the insert is rejected at ingestion. It also contradicts ADR 0013 and ADR 0017, which define null or empty as an explicit blank, and which ADR 0020 line 55 cites. Fix: treat null, empty and whitespace-only constants as blank so they take the existing transform and `nillable` branches, with tests for each.
+
+Note 45, informational: collector and submission stamp fields are checked for existence, write access and collisions but never datatype, so a stamp on a date, boolean or restricted picklist field passes. That is defensible while the ingestion stamp contract is undecided, but ADR 0020's future-work list should say so explicitly, and the check should land with that contract. A smaller observation: a nonblank constant with `none` is accepted for a picklist target and refused for a combobox one, while `picklist_match` accepts both; one ADR clause would settle whether that asymmetry is deliberate.
+
+Notes 36, 37 and 39 stay open; note 34 stays open until a reviewed Describe adapter and refusing publisher exist, as ADR 0020 says; notes 24, 25, 27 to 31 and 35 carry forward; 38, 40, 41 and 43 are answered; 42 is informational. No Enketo install and no Collect device decision were made.
+
+Capacity at 18:25 UTC: 4 of 6 daily and 3 of 3 active, with none in use.
+
+`HOLD: run 35257489966 at head 572a3cd`. The fix changes the head, so approving now would spend a scratch slot on a superseded head. Cancel it once the fixed head is pushed.
+
+`HOLD: PR #25, 1 finding` (44)
+
+## 2026-09-17: PR #25 fix head `cefc34a`; finding 44 closed, note 45 recorded, run 35259416907 cleared
+
+Head and ancestry: cefc34a is the original commit 572a3cd plus one corrective commit, both on main 8467e95. The delta touches only `service/src/publication/target-schema.ts`, its test and ADR 0020. The trust boundary is unchanged, the pin 1d0edc1 appears twice, and no verifier scratch org was needed.
+
+Finding 44 closed. `blankConstant` now covers null and any `trim()`-blank string, and `none` accepts a nonblank constant for a combobox. My probes:
+
+- Ten blank spellings, `null`, `''`, one space, several spaces, a tab, a newline, CRLF, mixed whitespace, a no-break space and an em space, all pass against a nillable target and all give `PUBLISH_TARGET_FIELD_REQUIRED` against a non-nillable one. `String.trim()` covers Unicode spaces, which is the conservative direction.
+- Each blank spelling with `text_truncate`, `number` or `picklist_match` gives `PUBLISH_TARGET_FIELD_TYPE`.
+- A blank against a required restricted picklist or combobox gives `PUBLISH_TARGET_FIELD_REQUIRED`; against an optional one it passes. Required numeric and textarea targets behave the same.
+- Nonblank constants still require membership: active values pass for restricted picklists and comboboxes, while inactive, missing, case-mismatched and space-padded values give `PUBLISH_PICKLIST_VALUE`. Unrestricted picklists and comboboxes accept any value.
+- Combobox rules match the ADR: a nonblank constant with `none`, a select-one question directly and through `picklist_match` all reach a combobox, and a text question reaches an unrestricted combobox but fails closed against a restricted one.
+
+Note 45 is accurately recorded: ADR 0020 now states that stamp fields are checked for existence and write access only, with datatype and restricted-picklist compatibility deferred to the future ingestion stamp contract, which matches the behaviour I still observe. The ADR also now states the combobox rule.
+
+Nothing else moved: re-running the whole earlier matrix on this head gives identical results for the direct `none` grid, all twelve transforms, picklist membership, the strict decoder, determinism, immutability and non-disclosure.
+
+Local, in a detached worktree: root 252 of 252, service 173 of 173, lint, typecheck, format check, scaffold, production audit at zero and `git diff --check`. Public CI 35259416938 is green. No new findings.
+
+Runs: the stale run 35257489966 on 572a3cd already completed as failure, so nothing remains to cancel. 35259416907 is on the exact head and waiting, with its policy job passed. Capacity at 18:36 UTC: 4 of 6 daily, none active.
+
+`SAFE TO APPROVE: run 35259416907 at head cefc34a`
+
+`HOLD: PR #25, 0 findings`, pending hosted success with an exact-head marker and a Deleted org. Notes 34, 36, 37 and 39 stay open; 45 is documented and informational; 38, 40, 41, 43 and 44 are answered; 42 is informational.
+
+## 2026-09-17: PR #25 hosted Apex evidence, run 35259416907 attempt 1 at `cefc34a`; PASS
+
+Run and head:
+
+- Attempt 1 succeeded on the exact head, started 18:32:09 UTC and approved for `salesforce-ci` by cobitechsolutions. The policy, Apex and gate jobs all succeeded.
+- The PR is OPEN at cefc34a, up to date with main 8467e95, MERGEABLE and CLEAN, with all five checks green. The only runs on this head are public CI 35259416938 and this one, and no push followed the re-verification.
+
+Apex job 105331210682, full log of 531 lines:
+
+- The confirm step printed the exact head, and the trusted harness pin 1d0edc1 appears 6 times.
+- The in-job budget recheck returned `allowed: true, kind: initial`.
+- Result: `81 passed; 473/475 executable lines (99.58%)`, matching the established baseline because this PR changes no Salesforce source.
+- Exactly one marker, matching this attempt: schema 1, role `ci`, run `35259416907-1`, full head cefc34a, started 18:40:02.905Z, outcome `passed`, retryable false.
+- The stale-head rejection passed and logout succeeded.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted, tag `kusanya-ci-v1__35259416907-1__cefc34a110ad__41ec4ed6650b`, with the fallback cleanup correctly skipped.
+
+Dev Hub, checked independently:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00DQL00000bw6nh, created 18:40:07 and last modified 18:41:25 UTC.
+- Setup Audit Trail has `deleteScratchOrg` for "00DQL00000bw6nh" at 18:41:30 UTC.
+- ActiveScratchOrg has 0 rows.
+
+Credential hygiene: no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys or email addresses in the full log. All 10 masks are GitHub redactions. The only warning is note 35's Node.js 20 deprecation notice.
+
+The compatibility evidence rests on the two earlier entries: the full 16-question by 12-target `none` grid, all twelve transforms in matching and mismatched pairs, exact case-sensitive picklist and combobox membership, the strict decoder refusing every hostile snapshot shape, ten blank-constant spellings behaving identically against nillable and non-nillable targets, determinism, immutability and non-disclosing diagnostics.
+
+Open items carried forward, none blocking this unit: note 34 until a reviewed Describe adapter and refusing publisher exist; note 36 on the untested Collect Android UI; note 37 on client-specific count reduction; note 39 on gated, uncached delivery; note 45 on stamp datatype checks arriving with the ingestion stamp contract; the Enketo probe still unreproduced by the verifier; and notes 24, 25, 27 to 31 and 35. Notes 38, 40, 41, 43 and 44 are answered, and 42 is informational. Length, precision and scale, lexical URL, email and phone rules, reference external-ID selection, compound fields, record-type-specific picklists, executable transforms, JavaRosa validation, immutable storage and CLI publication remain open, as ADR 0020 states.
+
+This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
+
+`PASS: PR #25 may be merged`
