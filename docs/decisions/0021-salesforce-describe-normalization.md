@@ -42,12 +42,19 @@ under the FLS-omission assumption above. An omitted mapped field therefore fails
 downstream as missing. If a real-org probe disproves that assumption, this boundary
 must gain an authoritative readability signal before publisher integration.
 
+Dependent picklists may repeat the same value for different controlling-field
+`validFor` entries. The adapter validates every entry, collapses entries by exact
+value, and marks the normalized value active when any source entry is active. Only
+the collapsed values consume the normalized picklist and text budgets. Controlling-
+field applicability itself is not represented by the Phase 1 target snapshot.
+
 Salesforce adds unrelated properties to Describe responses across API versions, so
 ordinary extra data properties are ignored. Proxies, accessors, symbols, exotic
-records, sparse or extended arrays, unknown field types, duplicate names or values,
-misplaced picklist/reference metadata, identity mismatches and configured size
-bounds fail closed. The adapter never exposes object names, provider errors or
-response values in diagnostics. Caller-owned names and responses are not mutated.
+records, sparse or extended arrays, unknown field types, duplicate object, field,
+reference or record-type names, misplaced picklist/reference metadata, identity
+mismatches and configured size bounds fail closed. The adapter never exposes object
+names, provider errors or response values in diagnostics. Caller-owned names and
+responses are not mutated.
 
 The adapter uses the same bounds as the normalized validator: 100 objects, 5,000
 fields in aggregate, 2,000 picklist values per field and 10,000 in aggregate, 100
@@ -66,13 +73,14 @@ is committed and no Salesforce call is made by the tests.
 
 This unit does not derive target names from a validated mapping bundle, authenticate
 to Salesforce, select an API version, store or refresh tokens, cache metadata,
-validate record-type-specific picklists, run JavaRosa, create immutable artifacts
-or expose CLI/API publication. The future publisher must own those steps and call
-this adapter immediately before ADR 0019/0020 validation. Note 34 advances but
-stays open until that refusing publisher and a real integration-user adapter are
-reviewed together. A real scratch-org check with a restricted integration user must
-also establish whether Describe omits FLS-inaccessible fields before relying on the
-current `readable: true` normalization.
+validate record-type-specific picklists or dependent-picklist `validFor` semantics,
+run JavaRosa, create immutable artifacts or expose CLI/API publication. The future
+publisher must own those steps and call this adapter immediately before ADR
+0019/0020 validation. Note 34 advances but stays open until that refusing publisher
+and a real integration-user adapter are reviewed together. A real scratch-org check
+with a restricted integration user must also establish whether Describe omits
+FLS-inaccessible fields before relying on the current `readable: true`
+normalization.
 
 No dependency, Salesforce metadata, permission, workflow, route or persistence
 change is included. Notes 36, 37 and 39 remain open; notes 42 and 45 remain
@@ -82,5 +90,5 @@ decision is made. No C10 acceptance test or Phase 1 gate is claimed.
 ## Revisit when
 
 Adding tenant OAuth, the concrete REST transport and API version, publication
-orchestration, record-type-specific picklists, immutable artifact storage or CLI
-publication.
+orchestration, record-type-specific or dependent-picklist applicability, immutable
+artifact storage or CLI publication.

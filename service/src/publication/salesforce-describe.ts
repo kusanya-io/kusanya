@@ -145,14 +145,10 @@ function name(
   return countText(value, location, budget);
 }
 
-function text(
-  value: unknown,
-  location: string,
-  budget: DescribeBudget,
-): string {
+function text(value: unknown, location: string): string {
   if (typeof value !== 'string' || value.length > 32768 || !validXmlText(value))
     fail('PUBLISH_DESCRIBE_SHAPE', location);
-  return countText(value, location, budget);
+  return value;
 }
 
 function bool(value: unknown, location: string): boolean {
@@ -179,25 +175,32 @@ function normalizePicklistValues(
   budget: DescribeBudget,
 ): TargetPicklistValueSchema[] {
   const entries = array(value, location, 2000);
-  budget.picklistValues += entries.length;
-  if (budget.picklistValues > 10_000) fail('PUBLISH_DESCRIBE_LIMIT', location);
-  const seen = new Set<string>();
-  const normalized = entries.map((entry, index) => {
+  const collapsed = new Map<
+    string,
+    TargetPicklistValueSchema & { location: string }
+  >();
+  for (const [index, entry] of entries.entries()) {
     const path = `${location}[${index}]`;
     const raw = record(entry, path, 32);
-    const picklistValue = text(
-      required(raw, 'value', path),
-      `${path}.value`,
-      budget,
-    );
-    if (seen.has(picklistValue))
-      fail('PUBLISH_DESCRIBE_SHAPE', `${path}.value`);
-    seen.add(picklistValue);
-    return {
-      value: picklistValue,
-      active: bool(required(raw, 'active', path), `${path}.active`),
-    };
-  });
+    const picklistValue = text(required(raw, 'value', path), `${path}.value`);
+    const active = bool(required(raw, 'active', path), `${path}.active`);
+    const existing = collapsed.get(picklistValue);
+    if (existing) existing.active ||= active;
+    else
+      collapsed.set(picklistValue, {
+        value: picklistValue,
+        active,
+        location: `${path}.value`,
+      });
+  }
+  budget.picklistValues += collapsed.size;
+  if (budget.picklistValues > 10_000) fail('PUBLISH_DESCRIBE_LIMIT', location);
+  const normalized = [...collapsed.values()].map(
+    ({ value: picklistValue, active, location: valueLocation }) => ({
+      value: countText(picklistValue, valueLocation, budget),
+      active,
+    }),
+  );
   return normalized.sort((a, b) => compareText(a.value, b.value));
 }
 

@@ -156,6 +156,32 @@ void test('converts Salesforce wire type spellings to the canonical vocabulary',
   );
 });
 
+void test('collapses dependent-picklist entries by value and preserves active membership', async () => {
+  const response = rawObject('Visit__c', [
+    rawField('StateCode__c', {
+      type: 'picklist',
+      restrictedPicklist: true,
+      picklistValues: [
+        { value: 'AG', active: false, validFor: ['Italy'] },
+        { value: 'ZZ', active: false, validFor: ['Example'] },
+        { value: 'AG', active: true, validFor: ['Mexico'] },
+      ],
+    }),
+  ]);
+  const before = structuredClone(response);
+  const result = await loadSalesforceTargetSchema(
+    ['Visit__c'],
+    async () => response,
+  );
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.snapshot.objects[0]?.fields[0]?.picklistValues, [
+    { value: 'AG', active: true },
+    { value: 'ZZ', active: false },
+  ]);
+  assert.deepEqual(response, before);
+});
+
 void test('deduplicates object names case-insensitively and requests fresh data every time', async () => {
   const calls: string[] = [];
   const describe: DescribeObject = async (name) => {
@@ -248,15 +274,6 @@ void test('rejects unknown types, duplicate metadata and misplaced metadata', as
       }),
     ]),
     rawObject('Visit__c', [rawField('Bad__c', { referenceTo: ['Account'] })]),
-    rawObject('Visit__c', [
-      rawField('Status__c', {
-        type: 'picklist',
-        picklistValues: [
-          { value: 'x', active: true },
-          { value: 'x', active: false },
-        ],
-      }),
-    ]),
   ];
   for (const response of cases) {
     const result = await loadSalesforceTargetSchema(
@@ -346,6 +363,32 @@ void test('enforces request and response bounds before further calls', async () 
     ],
     requestCount: 1,
   });
+
+  const collapsedPicklists = await loadSalesforceTargetSchema(
+    ['Visit__c'],
+    async () =>
+      rawObject(
+        'Visit__c',
+        Array.from({ length: 6 }, (_, fieldIndex) =>
+          rawField(`Dependent_${fieldIndex}__c`, {
+            type: 'picklist',
+            picklistValues: Array.from({ length: 2000 }, () => ({
+              value: `${'x'.repeat(100)}_${fieldIndex}`,
+              active: true,
+              validFor: ['controlling-value'],
+            })),
+          }),
+        ),
+      ),
+  );
+  assert.equal(collapsedPicklists.ok, true);
+  if (collapsedPicklists.ok)
+    assert.deepEqual(
+      collapsedPicklists.snapshot.objects[0]?.fields.map(
+        (field) => field.picklistValues.length,
+      ),
+      [1, 1, 1, 1, 1, 1],
+    );
 });
 
 void test('fields omitted from Describe remain absent and downstream validation refuses them', async () => {
