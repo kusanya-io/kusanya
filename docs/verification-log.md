@@ -1318,3 +1318,83 @@ Open items carried forward, none blocking this unit: note 36 on the untested Col
 This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
 
 `PASS: PR #20 may be merged`
+
+## 2026-09-17: Source and security review of PR #23 head `6a670ae`, publication target-schema validation; one finding
+
+Scope: the new pure module `service/src/publication/target-schema.ts`, its test, ADR 0019, and architecture and roadmap updates. Bill asked for a review before deciding on run 35221304075.
+
+Preconditions and trust boundary:
+
+- PR #20 merged as 2a4a1f1, whose tree 3cfdbfc is identical to the verified head bb55c27. PR #21 merged as 209e380, and main CI 35216027159 passed. This PR is one commit on that main.
+- No workflow, credentialed harness, Salesforce metadata, permission, namespace, manifest, lockfile or runtime-probe change. The pin 1d0edc1 appears twice.
+- Because nothing under `salesforce/` changed, no verifier scratch org was created.
+- PR #22 is a closed duplicate log PR on a `docs/pr-20-verification-log` branch that I did not open; the PR #20 log went through PR #21.
+
+Local, in a detached worktree: root 252 of 252, service 167 of 167, lint, typecheck, format check, scaffold, a production audit at the low threshold with zero results, and `git diff --check`. Public CI 35221304063 is green.
+
+Verifier probes, synthetic input only:
+
+- Hostile snapshots. A proxy, an accessor, a `__proto__` key, an extra key, a missing key, sparse and extended arrays, a non-boolean flag, a dotted name, case-variant duplicate objects, fields and lookup targets, 101 extra objects, a 256-character name, a wrong schema version and an array root are each refused with a specific code and structural location. `Object.prototype` stays clean.
+- Leakage. With distinctive names in the snapshot and mappings, diagnostics contain codes and paths only.
+- Resolution. `Account__r` as a target object fails with `PUBLISH_TARGET_OBJECT`, note 34's case at this boundary. Case variants of object, field, lookup and record-type names resolve. Reordering inputs gives an identical result, and no input is mutated.
+- Access matrix. A main mapping on a non-createable object is refused; a query-only reference on a lookup-only object passes with the non-unique match warning; a reference with an upsert there is refused; a reference on a non-queryable object is refused; a main mapping may assign a create-only field but not a read-only one. Inactive and unknown record types, an upsert on a non-external-ID field, a parent lookup to the wrong object, stamp collisions in any case, an unreadable matching field and a missing field are refused. A polymorphic lookup passes only when it includes the parent's object.
+
+Finding 43, low severity, correctness of the access matrix: on the reference-upsert path, where the object check correctly demands create and update access, the field-level checks for assignments, the collector and submission stamps and the parent lookup demand only `createable`. My probes show a reference mapping with an upsert external ID passes while assigning a field, or stamping a field, that is createable but not updateable. The first upsert that matches an existing record would then be rejected by Salesforce. It fails loudly rather than writing wrong data, but the validator exists to prevent that class of publication. Fix: when the reference writes, require `createable && updateable` on those fields, add tests for a create-only field and stamp under a reference upsert, and state the field-level rule in ADR 0019.
+
+Notes 36, 37 and 39 stay open; note 34 stays carried until a reviewed Salesforce adapter supplies a fresh Describe snapshot, as ADR 0019 says; the Enketo probe remains unreproduced by me.
+
+Capacity at 12:33 UTC: 5 of 6 daily and 3 of 3 active, with none in use.
+
+`HOLD: run 35221304075 at head 6a670ae`. The fix changes the head, so approving now would spend a scratch slot on a superseded head. Cancel it once the fixed head is pushed.
+
+`HOLD: PR #23, 1 finding` (43)
+
+## 2026-09-17: PR #23 fix head `4610d3f`; finding 43 closed, run 35222254862 cleared
+
+Head and ancestry: 4610d3f is the original commit 6a670ae plus one corrective commit, both on main 209e380. The delta touches only `service/src/publication/target-schema.ts`, its test and ADR 0019. The trust boundary is unchanged, the pin 1d0edc1 appears twice, and no verifier scratch org was needed.
+
+Finding 43 closed. The fix adds a `canWrite` helper requiring create access and, when a reference may upsert, update access as well, applied to assignments, both stamps and the parent lookup. My probes:
+
+- Reference upserts: a create-only assignment, collector stamp, submission stamp and parent lookup each return `PUBLISH_TARGET_FIELD_WRITE` at their own location. An update-only field is refused, a reference that writes assignments without an upsert field follows the same rule, and fully writable fields and lookups pass.
+- Inserts: main and repeat mappings still accept a create-only assignment, stamp and parent lookup, and still refuse update-only and read-only fields.
+- Unchanged: a query-only reference, a missing field, a parent lookup to the wrong object and an upsert on a non-external-ID field behave as before, and a create-only field beside a missing field reports both. The original probe set is otherwise identical.
+
+ADR 0019 now states the insert versus reference-upsert field rule. Local, in a detached worktree: root 252 of 252, service 168 of 168, lint, typecheck, format check, scaffold, production audit at zero and `git diff --check`. Public CI 35222254900 is green. No new findings.
+
+Runs: 35221304075 on the stale head 6a670ae is still waiting and should be cancelled. 35222254862 is on the exact head and pending behind it. Capacity: 5 of 6 daily, none active.
+
+`SAFE TO APPROVE: run 35222254862 at head 4610d3f`, after run 35221304075 is cancelled.
+
+`HOLD: PR #23, 0 findings`, pending hosted success with an exact-head marker and a Deleted org. Notes 36, 37 and 39 stay open, and note 34 stays carried.
+
+## 2026-09-17: PR #23 hosted Apex evidence, run 35222254862 attempt 1 at `4610d3f`; PASS
+
+Run and head:
+
+- Attempt 1 succeeded on the exact head, started 12:38:22 UTC and approved for `salesforce-ci` by cobitechsolutions. The policy, Apex and gate jobs all succeeded.
+- The PR is OPEN at 4610d3f, up to date with main 209e380, MERGEABLE and CLEAN, with all five checks green. The only runs on this head are public CI 35222254900 and this one; the stale run 35221304075 completed as failure on 6a670ae and is out of scope by head.
+
+Apex job 105205108472, full log of 531 lines:
+
+- The confirm step printed the exact head, and the trusted harness pin 1d0edc1 appears 6 times.
+- The in-job budget recheck returned `allowed: true, kind: initial`, correct for a first attempt on a fresh head.
+- Result: `81 passed; 473/475 executable lines (99.58%)`, matching the established baseline because this PR changes no Salesforce source.
+- Exactly one marker, matching this attempt: schema 1, role `ci`, run `35222254862-1`, full head 4610d3f, started 12:54:41.065Z, outcome `passed`, retryable false.
+- The stale-head rejection passed and logout succeeded.
+- Cleanup: 1 owned scratch org deleted, 0 already deleted, tag `kusanya-ci-v1__35222254862-1__4610d3f5f3b7__34dcd95d05f0`. The fallback cleanup was correctly skipped after the primary cleanup confirmed.
+
+Dev Hub, checked independently:
+
+- ScratchOrgInfo shows the tag as Deleted, for org 00Dcf00000HoHaF, created 12:54:45 and last modified 12:55:47 UTC.
+- Setup Audit Trail has `deleteScratchOrg` for "00Dcf00000HoHaF" at 12:55:50 UTC.
+- ActiveScratchOrg has 0 rows.
+
+Credential hygiene: no `force://` URLs, org session IDs, bearer, access or refresh tokens, JWTs, private keys or email addresses in the full log. All 10 masks are GitHub redactions. The only warning is note 35's Node.js 20 deprecation notice.
+
+The validator evidence rests on the two earlier entries: hostile snapshots refused without running supplied code, diagnostics leaking no supplied names, case-insensitive resolution, deterministic results, unmutated inputs, `Account__r` refused, and the corrected access matrix where reference upserts require field update access while inserts do not.
+
+Open items carried forward, none blocking this unit: note 34 stays carried until a reviewed Salesforce adapter supplies a fresh integration-user Describe snapshot and the publisher refuses on these diagnostics; note 36 on the untested Collect Android UI; note 37 on client-specific count reduction; note 39 on gated, uncached delivery of reviewer and authoring output; the Enketo probe still unreproduced by the verifier; and notes 24, 25, 27 to 31 and 35. Notes 38, 40, 41 and 43 are answered, and note 42 is informational. Datatype and picklist compatibility, polymorphic lookup policy, record-type namespace ambiguity, JavaRosa validation, immutable storage and CLI publication remain open, as ADR 0019 states.
+
+This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
+
+`PASS: PR #23 may be merged`
