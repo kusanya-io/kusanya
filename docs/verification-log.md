@@ -1583,3 +1583,25 @@ Runs: the finding 46 head run 35268762285 is already cancelled. The original hea
 `SAFE TO APPROVE: run 35273720037 at head 99ede85`, after run 35266899643 is cancelled.
 
 `HOLD: PR #27, 0 findings`, pending hosted success with an exact-head marker and a Deleted org. Findings 46 and 48 are closed; notes 47 and 49 are informational; notes 34, 36, 37 and 39 remain open; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered.
+
+## 2026-09-17: PR #27 run 35273720037 failed cleanup; one owned org needs reconciliation
+
+Run 35273720037 attempt 1 at head `99ede85`: exact-head and trusted-workflow checks passed, the budget recheck returned `initial`, authentication succeeded, the org was created at 21:03:59 UTC, and Apex passed with 81 tests and 473 of 475 executable lines. The harness then reported that owned scratch cleanup failed, wrote `outcome: failed-cleanup, retryable: false` in its exact-head marker, and exited 1. The unconditional fallback step also declined to confirm cleanup. Logout succeeded and the gate failed correctly.
+
+The cause is not determinable from the public log, by design. The strings that look like error classes, including `ENOTFOUND`, `ECONNRESET`, `socket hang up` and `INVALID_SFDX_AUTH_URL`, appear only inside the echoed workflow source of the authentication step's transient-error classifier, never as runtime output. Authentication, org creation and Apex all worked in the preceding seconds, so credentials and API access were healthy immediately before the delete. Salesforce Trust shows USA876 as OK with no incident at 21:04 UTC; incident 20004433 ended at 15:26 UTC on 16 September. No `deleteScratchOrg` audit entry exists for the org, so the deletion never took effect at Salesforce.
+
+Dev Hub evidence, read-only, re-queried at 21:21 UTC: `ScratchOrgInfo` `2SRbm000004XxJxGAK`, OrgName `kusanya-ci-v1__35273720037-1__99ede856accc__bb0b89f88586`, Status Active, ScratchOrg `00DRK00000b6ouT`, created 21:03:59, last modified 21:04:09, expires 2026-09-18, `ErrorCode` null. Exactly one row carries that tag, with no duplicate and no Error row. `ActiveScratchOrg` has one row, `2ASbm0000016rx7GAA`, for the same org. The audit trail's most recent deletions are all earlier CI orgs, ending with `00DQL00000bw6nh` at 18:41:30. Capacity reads 2 of 3 active and 2 of 6 daily remaining.
+
+Credential hygiene: all 529 log lines scanned with no `force://` URLs, session ids, bearer, access or refresh tokens, JWTs, private keys or email addresses. The nine masks are GitHub's own redactions. The only warning is note 35's Node.js 20 deprecation.
+
+Manual reconciliation is required and is not yet confirmed. The narrowest action is to delete `ActiveScratchOrg` record `2ASbm0000016rx7GAA` in the Dev Hub, which deletes exactly this org; `sf org delete scratch` does not apply because the CI org was never authenticated locally. Confirmation requires Status Deleted, no `ActiveScratchOrg` row for `00DRK00000b6ouT`, a matching `deleteScratchOrg` audit entry, and capacity back to 3 of 3 active.
+
+Retry budget, simulated read-only with the pinned scripts at 1d0edc1 against live history: a same-head attempt 2 returns `{"allowed":false,"kind":null,"reason":"Cleanup failure requires human recovery before another attempt."}`, the same denial applies on a later UTC day because `failed-cleanup` is not day-scoped, and a different head returns `{"allowed":true,"kind":"initial"}`. So head 99ede85 is permanently blocked and only a new head regains eligibility. The passing Apex does not satisfy the gate, because the trusted marker records `failed-cleanup`.
+
+Run 35266899643 on the superseded head df9ba5d ended by itself at 21:03:04 with its protected job executing zero steps, the signature of a rejected deployment. It created no org, and the single Active row confirms there is no second stray org. Run 35268762285 on fafd444 remains cancelled.
+
+Note 50, informational: the marker has no machine-readable way to record that a maintainer reconciled a cleanup failure, so any cleanup failure permanently blocks that head even after the org is removed and verified gone. That is safe but forces a new commit purely to regain eligibility. A future reviewed harness change could let a recorded, verified reconciliation clear one blocked head.
+
+`DO NOT RE-RUN: run 35273720037 at head 99ede85`
+
+`HOLD: PR #27, 0 source findings, hosted gate failed`. The source review at 99ede85 stands and only the hosted evidence is missing. Findings 46 and 48 are closed; notes 47, 49 and 50 are informational; notes 34, 36, 37 and 39 remain open; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered.
