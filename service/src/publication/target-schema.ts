@@ -287,6 +287,8 @@ export function validatePublicationTargets(
         if (!field) issue('PUBLISH_TARGET_FIELD', path);
         return field;
       };
+      const canWrite = (field: TargetFieldSchema): boolean =>
+        field.createable && (!writesReference || field.updateable);
       if (mapping.recordType !== undefined) {
         const recordType = object.recordTypes.find(
           (entry) => lower(entry.developerName) === lower(mapping.recordType!),
@@ -297,14 +299,14 @@ export function validatePublicationTargets(
       for (const [fieldIndex, assignment] of mapping.fields.entries()) {
         const path = `${base}.fields[${fieldIndex}].targetField`;
         const field = resolveField(assignment.targetField, path);
-        if (field && !field.createable)
+        if (field && !canWrite(field))
           issue('PUBLISH_TARGET_FIELD_WRITE', path);
       }
       for (const property of ['collectorField', 'submissionField'] as const) {
         const value = mapping[property];
         const path = `${base}.${property}`;
         const field = resolveField(value, path);
-        if (field && !field.createable)
+        if (field && !canWrite(field))
           issue('PUBLISH_TARGET_FIELD_WRITE', path);
         if (
           value !== undefined &&
@@ -349,7 +351,7 @@ export function validatePublicationTargets(
         `${base}.parentLookupField`,
       );
       if (parentLookup) {
-        if (!parentLookup.createable)
+        if (!canWrite(parentLookup))
           issue('PUBLISH_TARGET_FIELD_WRITE', `${base}.parentLookupField`);
         const parent = mappings.get(mapping.parentMapping!);
         if (

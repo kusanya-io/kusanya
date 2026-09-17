@@ -37,7 +37,9 @@ Validation resolves API names case-insensitively without rewriting the authored
 spelling. Main and repeat mappings require object create access. A read-only
 reference mapping requires query access; a reference that supplies writes or an
 upsert external ID additionally requires object create and update access. Manual
-assignments and trusted collector/submission stamps require field create access.
+assignments, trusted collector/submission stamps and parent lookups require field
+create access for main/repeat inserts and both create and update access when a
+reference mapping may upsert an existing record.
 Reference matching fields require read access; non-unique matching produces a
 warning because ingestion must still fail clearly on zero or multiple matches.
 

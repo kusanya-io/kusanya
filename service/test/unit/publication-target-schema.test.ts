@@ -226,6 +226,38 @@ void test('requires readable matching and a writable unique external ID', () => 
   });
 });
 
+void test('requires update access for assignment and stamp fields on reference upsert', () => {
+  const mappings = bundle([
+    mapping({
+      kind: 'reference',
+      matchingField: 'Name',
+      upsertExternalIdField: 'Source_Id__c',
+      collectorField: 'Collector__c',
+    }),
+  ]);
+  const schema = snapshot([
+    object('Visit__c', [
+      field('Name', { unique: true }),
+      field('Source_Id__c', { externalId: true, unique: true }),
+      field('Answer__c', { updateable: false }),
+      field('Collector__c', { updateable: false }),
+    ]),
+  ]);
+  assert.deepEqual(validatePublicationTargets(simpleForm(), mappings, schema), {
+    ok: false,
+    diagnostics: [
+      {
+        code: 'PUBLISH_TARGET_FIELD_WRITE',
+        location: 'mappings[0].fields[0].targetField',
+      },
+      {
+        code: 'PUBLISH_TARGET_FIELD_WRITE',
+        location: 'mappings[0].collectorField',
+      },
+    ],
+  });
+});
+
 void test('warns for readable non-unique reference matching', () => {
   const result = validatePublicationTargets(
     simpleForm(),
