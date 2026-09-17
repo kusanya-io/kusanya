@@ -1519,3 +1519,38 @@ Capacity at 19:55 UTC: 3 of 6 daily and 3 of 3 active, with none in use.
 `HOLD: run 35266899643 at head df9ba5d`. Finding 46 needs a code change, so approving now would spend a scratch slot on a superseded head. Cancel it once the fixed head is pushed.
 
 `HOLD: PR #27, 1 finding` (46), with note 47 informational. Notes 34, 36, 37 and 39 remain open; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered. Enketo installation and the Collect device decision remain unapproved and untouched.
+
+## 2026-09-17: PR #27 fix head `fafd444`; finding 46 closed, new finding 48 on dependent picklists
+
+Head and ancestry: fafd444 is the original df9ba5d plus one corrective commit, both on main 1e7c966. The delta touches only `salesforce-describe.ts`, its test and ADR 0021. No dependency, lockfile, workflow, harness or `salesforce/` change; the pin 1d0edc1 appears twice; nothing outside those three files moved.
+
+Local, in a detached worktree: root 252 of 252, service 181 of 181, lint, typecheck, format check, scaffold, integration 1 passed and 1 skipped without a disposable PostgreSQL URL, production audit at the low threshold with zero results, and `git diff --check`. Public CI 35268762178 is green.
+
+Finding 46 closed. Case-folding plus the explicit `int` to `integer` mapping behaves correctly:
+
+- `int`, `INT`, `Int`, `integer`, `INTEGER` and `Integer` all normalize to `integer`.
+- All 27 documented Salesforce enum spellings normalize, including camel-case `encryptedString`, `dataCategoryGroupReference`, `anyType` and `complexValue`, and an upper-case `JSON`.
+- Unknown, padded, tab- and newline-suffixed, empty, numeric, null, object, array, over-long and Unicode-lookalike types still fail closed with `PUBLISH_DESCRIBE_TYPE`, with no value leakage.
+- Placement checks work on the canonical type: `PICKLIST`, `MultiPicklist`, `REFERENCE` and `ComboBox` behave, while `STRING` with picklist values, `INT` marked restricted and `String` with `referenceTo` are refused.
+- Inputs are unmutated with original casing intact, output is deterministic and canonically ordered, and the text budget counts the canonical value.
+- A snapshot containing an `int` field feeds the ADR 0019 and 0020 validator, which accepts an integer question into that target and refuses a text question.
+
+Finding 48, medium severity, new: the duplicate picklist value check refuses real dependent picklists. Salesforce lists one entry per controlling value, distinguished by `validFor`, so a code repeats legitimately. Three real describes captured read-only from the Dev Hub:
+
+- `Account.BillingStateCode` and `ShippingStateCode`: 384 entries, 277 distinct values; `AG` is Agrigento in Italy and Aguascalientes in Mexico. Account fails with `PUBLISH_DESCRIBE_SHAPE` at `objects[0].fields[11].picklistValues[2].value`.
+- `Contact.MailingStateCode` and `OtherStateCode`, and `Lead.StateCode`: same shape, same failure. Country Code picklists have 235 distinct values and no duplicates, so this is specific to dependent picklists.
+- With duplicates collapsed and nothing else changed, all three normalize cleanly and Account's real snapshot passes the ADR 0019 and 0020 validator for integer, text and restricted-picklist assignments. Deduplication is the only remaining blocker.
+
+Fix: collapse by `value`, treating a value as active when any entry for it is active, keep the entry-shape checks, count collapsed values against the budget, add a test with two entries sharing a value under different `validFor`, and correct ADR 0021 line 47, which still says duplicate values fail closed. The validator's own decoder may keep rejecting duplicates, because a hand-authored snapshot has no `validFor` to justify them.
+
+Note 47 is now accurately recorded: ADR 0021 presents the FLS omission as an unconfirmed assumption, states that fields are marked readable under it, and requires a restricted-user scratch-org check before publisher integration, with the consequence if disproved. The omitted-field test no longer claims FLS as the proven cause.
+
+Note 49, informational: dependent-picklist `validFor` is modelled nowhere and is dropped from the snapshot. After finding 48 is fixed, a value valid only under one controlling value passes regardless of the controlling field; I confirmed a constant `AG` for `BillingStateCode` is accepted against Account's real metadata. List it in ADR 0021's intentional gaps beside record-type-specific picklists.
+
+Note 34 remains open, and ADR 0021 still confines itself to normalization.
+
+Runs: the stale run 35266899643 is still waiting on the superseded head df9ba5d and should be cancelled. The replacement 35268762285 stays unapproved, because finding 48 needs another code change. Capacity at 20:50 UTC: 3 of 6 daily, none active.
+
+`HOLD: run 35268762285 at head fafd444`
+
+`HOLD: PR #27, 1 finding` (48). Finding 46 is closed. Notes 47 and 49 are informational; notes 34, 36, 37 and 39 remain open; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered.
