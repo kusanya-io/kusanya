@@ -15,9 +15,11 @@ using current integration-user metadata, and saved Match Status is untrusted.
 Salesforce's REST
 [sObject Describe](https://developer.salesforce.com/docs/platform/api-rest/guide/resources-sobject-describe.html)
 resource supplies object, field, picklist, reference and record-type metadata.
-Fields hidden from the authenticated user by field-level security are absent from
-the accessible field set. OAuth, tenant token encryption and publication storage
-are separate security boundaries and are not ready to combine with normalization.
+This design assumes fields hidden from the authenticated user by field-level
+security are absent from the returned field set. That assumption has not yet been
+confirmed with a restricted integration user in a scratch org. OAuth, tenant token
+encryption and publication storage are separate security boundaries and are not
+ready to combine with normalization.
 
 ## Decision
 
@@ -33,10 +35,12 @@ case-insensitively. It copies only the normalized properties needed by ADRs 0019
 and 0020: object query/create/update access; field name, canonical type,
 create/update access, nullability, external-ID and uniqueness flags, restricted
 picklist values and reference targets; and record-type DeveloperName,
-active and available flags. A returned field is marked readable because an
-integration-user REST Describe omits fields inaccessible through FLS. An omitted
-mapped field therefore fails downstream as missing instead of being treated as
-readable.
+active and available flags. Salesforce wire type spellings are case-folded and
+mapped to the canonical vocabulary; in particular, `int` becomes `integer`, while
+unknown types still fail closed. Every returned field is currently marked readable
+under the FLS-omission assumption above. An omitted mapped field therefore fails
+downstream as missing. If a real-org probe disproves that assumption, this boundary
+must gain an authoritative readability signal before publisher integration.
 
 Salesforce adds unrelated properties to Describe responses across API versions, so
 ordinary extra data properties are ignored. Proxies, accessors, symbols, exotic
@@ -66,7 +70,9 @@ validate record-type-specific picklists, run JavaRosa, create immutable artifact
 or expose CLI/API publication. The future publisher must own those steps and call
 this adapter immediately before ADR 0019/0020 validation. Note 34 advances but
 stays open until that refusing publisher and a real integration-user adapter are
-reviewed together.
+reviewed together. A real scratch-org check with a restricted integration user must
+also establish whether Describe omits FLS-inaccessible fields before relying on the
+current `readable: true` normalization.
 
 No dependency, Salesforce metadata, permission, workflow, route or persistence
 change is included. Notes 36, 37 and 39 remain open; notes 42 and 45 remain

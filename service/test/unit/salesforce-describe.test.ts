@@ -129,6 +129,33 @@ void test('normalizes integration-user Describe metadata without mutating it', a
   assert.deepEqual(response, before);
 });
 
+void test('converts Salesforce wire type spellings to the canonical vocabulary', async () => {
+  const result = await loadSalesforceTargetSchema(['Visit__c'], async () =>
+    rawObject('Visit__c', [
+      rawField('Count__c', { type: 'int' }),
+      rawField('CountUpper__c', { type: 'INT' }),
+      rawField('Opaque__c', { type: 'anyType' }),
+      rawField('Category__c', { type: 'dataCategoryGroupReference' }),
+      rawField('Encrypted__c', { type: 'encryptedString' }),
+    ]),
+  );
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(
+    result.snapshot.objects[0]?.fields.map(({ apiName, type }) => ({
+      apiName,
+      type,
+    })),
+    [
+      { apiName: 'Category__c', type: 'datacategorygroupreference' },
+      { apiName: 'Count__c', type: 'integer' },
+      { apiName: 'CountUpper__c', type: 'integer' },
+      { apiName: 'Encrypted__c', type: 'encryptedstring' },
+      { apiName: 'Opaque__c', type: 'anytype' },
+    ],
+  );
+});
+
 void test('deduplicates object names case-insensitively and requests fresh data every time', async () => {
   const calls: string[] = [];
   const describe: DescribeObject = async (name) => {
@@ -213,7 +240,7 @@ void test('fails closed for hostile records and arrays without invoking supplied
 
 void test('rejects unknown types, duplicate metadata and misplaced metadata', async () => {
   const cases = [
-    rawObject('Visit__c', [rawField('Bad__c', { type: 'String' })]),
+    rawObject('Visit__c', [rawField('Bad__c', { type: 'notARealType' })]),
     rawObject('Visit__c', [rawField('A__c'), rawField('a__c')]),
     rawObject('Visit__c', [
       rawField('Bad__c', {
@@ -321,7 +348,7 @@ void test('enforces request and response bounds before further calls', async () 
   });
 });
 
-void test('omitted FLS-inaccessible fields remain absent and downstream validation refuses them', async () => {
+void test('fields omitted from Describe remain absent and downstream validation refuses them', async () => {
   const loaded = await loadSalesforceTargetSchema(['Visit__c'], async () =>
     rawObject('Visit__c', []),
   );

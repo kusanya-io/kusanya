@@ -165,9 +165,12 @@ function fieldType(
   location: string,
   budget: DescribeBudget,
 ): TargetFieldType {
-  if (typeof value !== 'string' || !isTargetFieldType(value))
-    fail('PUBLISH_DESCRIBE_TYPE', location);
-  return countText(value, location, budget) as TargetFieldType;
+  if (typeof value !== 'string') fail('PUBLISH_DESCRIBE_TYPE', location);
+  const folded = lower(value);
+  const canonical = folded === 'int' ? 'integer' : folded;
+  if (!isTargetFieldType(canonical)) fail('PUBLISH_DESCRIBE_TYPE', location);
+  countText(canonical, location, budget);
+  return canonical;
 }
 
 function normalizePicklistValues(
