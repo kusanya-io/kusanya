@@ -1485,3 +1485,123 @@ Open items carried forward, none blocking this unit: note 34 until a reviewed De
 This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
 
 `PASS: PR #25 may be merged`
+
+## 2026-09-17: Source and security review of PR #27 head `df9ba5d`, Salesforce Describe normalization; one finding
+
+Scope: the new `service/src/publication/salesforce-describe.ts` loader, its tests, a four-line `isTargetFieldType` export in `target-schema.ts`, ADR 0021, and architecture and roadmap updates. Requested before Bill decides on run 35266899643.
+
+Preconditions and trust boundary:
+
+- PR #25 merged as 96998ad, whose tree a5aeb9d is identical to the verified head cefc34a. PR #26 merged as 1e7c966, and main CI 35263338139 passed. This head is one commit on that main.
+- No dependency, lockfile, workflow, harness, `salesforce/`, Enketo or device change; the pin 1d0edc1 appears twice. No scratch org was needed or created.
+
+Local, in a detached worktree: root 252 of 252, service 180 of 180, lint, typecheck, format check, scaffold, service integration 1 passed and 1 skipped without a disposable PostgreSQL URL, production audit at the low threshold with zero results, and `git diff --check`. Public CI 35266899599 is green.
+
+Finding 46, medium severity: the adapter accepts a field type only if it already matches the canonical vocabulary exactly, performing no wire-to-canonical conversion, although ADR 0020 assigned that conversion to this adapter. Salesforce spells whole-number fields `int`, while the canonical list has `integer`, which never appears in a REST response. Read-only Describe calls against our own Dev Hub show `Account` returning 70 fields including one `int`, with `int` also on `User`, `Opportunity`, `Case`, `Attachment` and `ContentVersion`. One such field fails the whole object with `PUBLISH_DESCRIBE_TYPE`, so `Account`, the HWWS worked example's target, cannot be normalized. The documented camel-case spellings `anyType` and `dataCategoryGroupReference` are also rejected while their lower-case forms pass; I did not observe either in the 25 standard objects swept, so they are documented rather than demonstrated. Fix: either map wire spellings here, at minimum `int` to `integer`, case-folding before lookup, or change the canonical vocabulary to Salesforce's exact spellings and update `numericTargets` and ADR 0020. Add a test using real spellings and state the rule in ADR 0021.
+
+Everything else verified:
+
+- Wire shapes. Every property the adapter reads matches what the Dev Hub returns, and real extra properties such as `label`, `length`, `soapType`, `urls` and `custom` are ignored. `combobox`, `long`, `base64`, `address`, `encryptedstring` and `location` are accepted.
+- Deduplication, ordering and counts. Five names collapsing to two objects spend 2 requests in canonical order; an invalid name up front spends 0; a rejected request mid-way reports 2; a malformed response after an earlier success reports 2 with the failing path; repeated calls are fresh and byte-identical; an empty list spends 0 and succeeds; a non-array input fails with 0.
+- Identity. `Account__r` returned for a requested `Account` fails closed; a case-only difference matches by design.
+- Hostile structures. Proxies on the response or field array, accessors on object or field properties, a symbol key, an exotic prototype, a class instance, sparse and extended arrays, duplicate fields, record types, references and picklist values, misplaced picklist and reference metadata, a missing required property, and null, array or string responses are each refused with a structural code and path. `Object.prototype` stays clean and no supplied code runs.
+- Non-disclosure. A secret-looking object name, field name and provider error message do not appear in diagnostics.
+- Bounds. Exact and plus-one behave correctly at 100 objects, 5,000 fields in one object and across two, 2,000 picklist values per field, 10,000 in aggregate, 100 reference targets, 1,000 record types and the 500,000 text-unit budget.
+- No drift. A normalized snapshot feeds the ADR 0019 and 0020 validator and passes, and that validator still refuses an inactive picklist value from the same snapshot.
+- Immutability, determinism and canonical ordering all hold.
+- Only `isTargetFieldType` and `validatePublicationTargets` are exported, so the canonical array cannot be mutated by callers.
+- Note 34 is correctly still open, and ADR 0021 does not overstate freshness, authentication, transport security or publisher refusal.
+
+Note 47, informational: ADR 0021 states as fact that an integration-user REST Describe omits FLS-inaccessible fields, and the code hard-codes `readable: true` on that basis. I could not verify it: Salesforce's documentation pages are not publicly fetchable, and a real check needs a restricted-permission user in a scratch org, which this unit does not otherwise require and which is not authorized for a source review. If the claim is wrong, `readable` would be true for an unreadable field and ADR 0019's matching-field read check could never fire. Either soften the wording to an assumption pending a real-org check, or keep it and record the check as required work.
+
+Capacity at 19:55 UTC: 3 of 6 daily and 3 of 3 active, with none in use.
+
+`HOLD: run 35266899643 at head df9ba5d`. Finding 46 needs a code change, so approving now would spend a scratch slot on a superseded head. Cancel it once the fixed head is pushed.
+
+`HOLD: PR #27, 1 finding` (46), with note 47 informational. Notes 34, 36, 37 and 39 remain open; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered. Enketo installation and the Collect device decision remain unapproved and untouched.
+
+## 2026-09-17: PR #27 fix head `fafd444`; finding 46 closed, new finding 48 on dependent picklists
+
+Head and ancestry: fafd444 is the original df9ba5d plus one corrective commit, both on main 1e7c966. The delta touches only `salesforce-describe.ts`, its test and ADR 0021. No dependency, lockfile, workflow, harness or `salesforce/` change; the pin 1d0edc1 appears twice; nothing outside those three files moved.
+
+Local, in a detached worktree: root 252 of 252, service 181 of 181, lint, typecheck, format check, scaffold, integration 1 passed and 1 skipped without a disposable PostgreSQL URL, production audit at the low threshold with zero results, and `git diff --check`. Public CI 35268762178 is green.
+
+Finding 46 closed. Case-folding plus the explicit `int` to `integer` mapping behaves correctly:
+
+- `int`, `INT`, `Int`, `integer`, `INTEGER` and `Integer` all normalize to `integer`.
+- All 27 documented Salesforce enum spellings normalize, including camel-case `encryptedString`, `dataCategoryGroupReference`, `anyType` and `complexValue`, and an upper-case `JSON`.
+- Unknown, padded, tab- and newline-suffixed, empty, numeric, null, object, array, over-long and Unicode-lookalike types still fail closed with `PUBLISH_DESCRIBE_TYPE`, with no value leakage.
+- Placement checks work on the canonical type: `PICKLIST`, `MultiPicklist`, `REFERENCE` and `ComboBox` behave, while `STRING` with picklist values, `INT` marked restricted and `String` with `referenceTo` are refused.
+- Inputs are unmutated with original casing intact, output is deterministic and canonically ordered, and the text budget counts the canonical value.
+- A snapshot containing an `int` field feeds the ADR 0019 and 0020 validator, which accepts an integer question into that target and refuses a text question.
+
+Finding 48, medium severity, new: the duplicate picklist value check refuses real dependent picklists. Salesforce lists one entry per controlling value, distinguished by `validFor`, so a code repeats legitimately. Three real describes captured read-only from the Dev Hub:
+
+- `Account.BillingStateCode` and `ShippingStateCode`: 384 entries, 277 distinct values; `AG` is Agrigento in Italy and Aguascalientes in Mexico. Account fails with `PUBLISH_DESCRIBE_SHAPE` at `objects[0].fields[11].picklistValues[2].value`.
+- `Contact.MailingStateCode` and `OtherStateCode`, and `Lead.StateCode`: same shape, same failure. Country Code picklists have 235 distinct values and no duplicates, so this is specific to dependent picklists.
+- With duplicates collapsed and nothing else changed, all three normalize cleanly and Account's real snapshot passes the ADR 0019 and 0020 validator for integer, text and restricted-picklist assignments. Deduplication is the only remaining blocker.
+
+Fix: collapse by `value`, treating a value as active when any entry for it is active, keep the entry-shape checks, count collapsed values against the budget, add a test with two entries sharing a value under different `validFor`, and correct ADR 0021 line 47, which still says duplicate values fail closed. The validator's own decoder may keep rejecting duplicates, because a hand-authored snapshot has no `validFor` to justify them.
+
+Note 47 is now accurately recorded: ADR 0021 presents the FLS omission as an unconfirmed assumption, states that fields are marked readable under it, and requires a restricted-user scratch-org check before publisher integration, with the consequence if disproved. The omitted-field test no longer claims FLS as the proven cause.
+
+Note 49, informational: dependent-picklist `validFor` is modelled nowhere and is dropped from the snapshot. After finding 48 is fixed, a value valid only under one controlling value passes regardless of the controlling field; I confirmed a constant `AG` for `BillingStateCode` is accepted against Account's real metadata. List it in ADR 0021's intentional gaps beside record-type-specific picklists.
+
+Note 34 remains open, and ADR 0021 still confines itself to normalization.
+
+Runs: the stale run 35266899643 is still waiting on the superseded head df9ba5d and should be cancelled. The replacement 35268762285 stays unapproved, because finding 48 needs another code change. Capacity at 20:50 UTC: 3 of 6 daily, none active.
+
+`HOLD: run 35268762285 at head fafd444`
+
+`HOLD: PR #27, 1 finding` (48). Finding 46 is closed. Notes 47 and 49 are informational; notes 34, 36, 37 and 39 remain open; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered.
+
+## 2026-09-17: PR #27 fix head `99ede85`; finding 48 closed, run 35273720037 cleared
+
+Head and ancestry: 99ede85 is df9ba5d, then the finding 46 fix fafd444, then this finding 48 fix, all on main 1e7c966. The latest delta touches only `salesforce-describe.ts`, its test and ADR 0021. Across the whole PR six files change, none of them a dependency, lockfile, workflow, harness or `salesforce/` file, and the pin 1d0edc1 appears twice.
+
+Local, in a detached worktree: root 252 of 252, service 182 of 182, lint, typecheck, format check, scaffold, integration 1 passed and 1 skipped without a disposable PostgreSQL URL, production audit at the low threshold with zero results, and `git diff --check`. Public CI 35273720026 is green.
+
+Finding 48 closed, verified against real metadata:
+
+- The unmodified Account, Contact and Lead describes captured read-only from the Dev Hub all normalize in one request each. `Account.BillingStateCode`, `Contact.MailingStateCode` and `Lead.StateCode` each collapse 384 wire entries into 277 values, all active. A real-shape fixture with `AC`, `AG` twice and `AL` twice collapses to three values.
+- Active is a true OR and order-independent: false then true gives active, true then false gives active, all-false stays inactive, three mixed entries give active, and reversing entry order produces byte-identical output.
+- Case-distinct values stay distinct: `AG`, `Ag` and `ag` survive separately with their own flags, deterministically sorted.
+- Every duplicate entry is still validated rather than skipped. A later duplicate with a non-boolean or missing `active`, a non-string value, a control character, an over-long value, a null or array entry, an accessor entry, a proxy entry, or a sparse array all fail at their own index, and no supplied value leaks. Ordinary extra keys such as `label`, `validFor` and `defaultValue` are ignored.
+- Bounds behave as documented: the per-field wire limit is still 2,000 with 2,001 refused; the aggregate picklist budget counts collapsed values, so six fields of 2,000 repeats collapse to six values and pass, five fields of 2,000 distinct values reach exactly 10,000 and pass, and six are refused; the text budget still trips on collapsed values.
+- No performance amplification: 200 fields each carrying 2,000 duplicate 300-character values normalized in 796 ms with 9 MB of heap, because only collapsed values are retained. Work scales linearly with wire entries and stays bounded by the 2,000-per-field and 5,000-field caps.
+
+Finding 46 remains closed: `INT` and `String` still canonicalize to `integer` and `string`, and an unknown type is refused. No regressions: duplicate object, field, reference target and record-type names are still refused, and caller responses are unmutated.
+
+Validator hand-off on real metadata: Account's real normalized snapshot passes the ADR 0019 and 0020 validator for integer, text and restricted-picklist assignments, and an unknown state code is refused with `PUBLISH_PICKLIST_VALUE`. This is the first time the whole chain has run on genuine Salesforce metadata.
+
+Note 47 remains accurate: the FLS omission is still an unconfirmed assumption requiring a restricted-user scratch-org check before publisher integration. Note 49 is accurately recorded: ADR 0021 now states that dependent picklists may repeat values across `validFor` entries, describes exact-value collapse and active-any behaviour, no longer claims duplicate picklist values fail closed, and lists dependent-picklist applicability in both the intentional gaps and the revisit section. Note 34 remains open.
+
+No new findings.
+
+Runs: the finding 46 head run 35268762285 is already cancelled. The original head run 35266899643 is still waiting and should be cancelled. The replacement 35273720037 is on the exact head with its policy job passed. Capacity at 21:00 UTC: 3 of 6 daily, none active.
+
+`SAFE TO APPROVE: run 35273720037 at head 99ede85`, after run 35266899643 is cancelled.
+
+`HOLD: PR #27, 0 findings`, pending hosted success with an exact-head marker and a Deleted org. Findings 46 and 48 are closed; notes 47 and 49 are informational; notes 34, 36, 37 and 39 remain open; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered.
+
+## 2026-09-17: PR #27 run 35273720037 failed cleanup; one owned org needs reconciliation
+
+Run 35273720037 attempt 1 at head `99ede85`: exact-head and trusted-workflow checks passed, the budget recheck returned `initial`, authentication succeeded, the org was created at 21:03:59 UTC, and Apex passed with 81 tests and 473 of 475 executable lines. The harness then reported that owned scratch cleanup failed, wrote `outcome: failed-cleanup, retryable: false` in its exact-head marker, and exited 1. The unconditional fallback step also declined to confirm cleanup. Logout succeeded and the gate failed correctly.
+
+The cause is not determinable from the public log, by design. The strings that look like error classes, including `ENOTFOUND`, `ECONNRESET`, `socket hang up` and `INVALID_SFDX_AUTH_URL`, appear only inside the echoed workflow source of the authentication step's transient-error classifier, never as runtime output. Authentication, org creation and Apex all worked in the preceding seconds, so credentials and API access were healthy immediately before the delete. Salesforce Trust shows USA876 as OK with no incident at 21:04 UTC; incident 20004433 ended at 15:26 UTC on 16 September. No `deleteScratchOrg` audit entry exists for the org, so the deletion never took effect at Salesforce.
+
+Dev Hub evidence, read-only, re-queried at 21:21 UTC: `ScratchOrgInfo` `2SRbm000004XxJxGAK`, OrgName `kusanya-ci-v1__35273720037-1__99ede856accc__bb0b89f88586`, Status Active, ScratchOrg `00DRK00000b6ouT`, created 21:03:59, last modified 21:04:09, expires 2026-09-18, `ErrorCode` null. Exactly one row carries that tag, with no duplicate and no Error row. `ActiveScratchOrg` has one row, `2ASbm0000016rx7GAA`, for the same org. The audit trail's most recent deletions are all earlier CI orgs, ending with `00DQL00000bw6nh` at 18:41:30. Capacity reads 2 of 3 active and 2 of 6 daily remaining.
+
+Credential hygiene: all 529 log lines scanned with no `force://` URLs, session ids, bearer, access or refresh tokens, JWTs, private keys or email addresses. The nine masks are GitHub's own redactions. The only warning is note 35's Node.js 20 deprecation.
+
+Manual reconciliation is required and is not yet confirmed. The narrowest action is to delete `ActiveScratchOrg` record `2ASbm0000016rx7GAA` in the Dev Hub, which deletes exactly this org; `sf org delete scratch` does not apply because the CI org was never authenticated locally. Confirmation requires Status Deleted, no `ActiveScratchOrg` row for `00DRK00000b6ouT`, a matching `deleteScratchOrg` audit entry, and capacity back to 3 of 3 active.
+
+Retry budget, simulated read-only with the pinned scripts at 1d0edc1 against live history: a same-head attempt 2 returns `{"allowed":false,"kind":null,"reason":"Cleanup failure requires human recovery before another attempt."}`, the same denial applies on a later UTC day because `failed-cleanup` is not day-scoped, and a different head returns `{"allowed":true,"kind":"initial"}`. So head 99ede85 is permanently blocked and only a new head regains eligibility. The passing Apex does not satisfy the gate, because the trusted marker records `failed-cleanup`.
+
+Run 35266899643 on the superseded head df9ba5d ended by itself at 21:03:04 with its protected job executing zero steps, the signature of a rejected deployment. It created no org, and the single Active row confirms there is no second stray org. Run 35268762285 on fafd444 remains cancelled.
+
+Note 50, informational: the marker has no machine-readable way to record that a maintainer reconciled a cleanup failure, so any cleanup failure permanently blocks that head even after the org is removed and verified gone. That is safe but forces a new commit purely to regain eligibility. A future reviewed harness change could let a recorded, verified reconciliation clear one blocked head.
+
+`DO NOT RE-RUN: run 35273720037 at head 99ede85`
+
+`HOLD: PR #27, 0 source findings, hosted gate failed`. The source review at 99ede85 stands and only the hosted evidence is missing. Findings 46 and 48 are closed; notes 47, 49 and 50 are informational; notes 34, 36, 37 and 39 remain open; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered.
