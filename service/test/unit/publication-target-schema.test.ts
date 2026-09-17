@@ -10,7 +10,7 @@ import {
   type TargetObjectSchema,
   type TargetSchemaSnapshot,
 } from '../../src/publication/target-schema.js';
-import { simpleForm } from '../fixtures/compiler.js';
+import { question, simpleForm } from '../fixtures/compiler.js';
 
 function field(
   apiName: string,
@@ -18,11 +18,15 @@ function field(
 ): TargetFieldSchema {
   return {
     apiName,
+    type: extra.referenceTo?.length ? 'reference' : 'string',
     readable: true,
     createable: true,
     updateable: true,
+    nillable: true,
     externalId: false,
     unique: false,
+    restrictedPicklist: false,
+    picklistValues: [],
     referenceTo: [],
     ...extra,
   };
@@ -258,6 +262,307 @@ void test('requires update access for assignment and stamp fields on reference u
   });
 });
 
+void test('accepts explicit source, transform and Salesforce field type combinations', () => {
+  const form = simpleForm([
+    question('text_value'),
+    question('whole_value', { type: 'integer', order: 2 }),
+    question('decimal_value', { type: 'decimal', order: 3 }),
+    question('choice_value', {
+      type: 'select_one',
+      choiceList: 'status',
+      order: 4,
+    }),
+    question('many_values', {
+      type: 'select_multiple',
+      choiceList: 'status',
+      order: 5,
+    }),
+    question('date_value', { type: 'datetime', order: 6 }),
+    question('point_value', { type: 'geopoint', order: 7 }),
+    question('photo_value', { type: 'photo', order: 8 }),
+  ]);
+  form.choiceLists = [
+    {
+      name: 'status',
+      choices: [
+        { value: 'open', label: 'Open', order: 1 },
+        { value: 'closed', label: 'Closed', order: 2 },
+      ],
+    },
+  ];
+  const fields: PrintMapping['fields'] = [
+    { targetField: 'Text__c', sourceKind: 'question', question: 'text_value' },
+    {
+      targetField: 'Whole__c',
+      sourceKind: 'question',
+      question: 'whole_value',
+    },
+    {
+      targetField: 'Amount__c',
+      sourceKind: 'question',
+      question: 'decimal_value',
+    },
+    {
+      targetField: 'Status__c',
+      sourceKind: 'question',
+      question: 'choice_value',
+      transform: 'picklist_match',
+    },
+    {
+      targetField: 'Statuses__c',
+      sourceKind: 'question',
+      question: 'many_values',
+      transform: 'multi_select_join',
+    },
+    {
+      targetField: 'Day__c',
+      sourceKind: 'question',
+      question: 'date_value',
+      transform: 'date_only',
+    },
+    {
+      targetField: 'Account__c',
+      sourceKind: 'question',
+      question: 'text_value',
+      transform: 'lookup_by_external_id',
+    },
+    {
+      targetField: 'Confirmed__c',
+      sourceKind: 'question',
+      question: 'choice_value',
+      transform: 'boolean_yes_no',
+    },
+    {
+      targetField: 'Parsed_Number__c',
+      sourceKind: 'question',
+      question: 'text_value',
+      transform: 'number',
+    },
+    {
+      targetField: 'Short_Text__c',
+      sourceKind: 'question',
+      question: 'text_value',
+      transform: 'text_truncate',
+    },
+    {
+      targetField: 'Latitude__c',
+      sourceKind: 'question',
+      question: 'point_value',
+      transform: 'geopoint_lat',
+    },
+    {
+      targetField: 'Longitude__c',
+      sourceKind: 'question',
+      question: 'point_value',
+      transform: 'geopoint_lng',
+    },
+    {
+      targetField: 'Accuracy__c',
+      sourceKind: 'question',
+      question: 'point_value',
+      transform: 'geopoint_accuracy',
+    },
+    {
+      targetField: 'Photo_Url__c',
+      sourceKind: 'question',
+      question: 'photo_value',
+      transform: 'file_url',
+    },
+  ];
+  const picklist = {
+    restrictedPicklist: true,
+    picklistValues: [
+      { value: 'open', active: true },
+      { value: 'closed', active: true },
+    ],
+  };
+  const schema = snapshot([
+    object('Visit__c', [
+      field('Text__c'),
+      field('Whole__c', { type: 'integer' }),
+      field('Amount__c', { type: 'currency' }),
+      field('Status__c', { type: 'picklist', ...picklist }),
+      field('Statuses__c', { type: 'multipicklist', ...picklist }),
+      field('Day__c', { type: 'date' }),
+      field('Account__c', { type: 'reference', referenceTo: ['Account'] }),
+      field('Confirmed__c', { type: 'boolean' }),
+      field('Parsed_Number__c', { type: 'double' }),
+      field('Short_Text__c'),
+      field('Latitude__c', { type: 'double' }),
+      field('Longitude__c', { type: 'double' }),
+      field('Accuracy__c', { type: 'double' }),
+      field('Photo_Url__c', { type: 'url' }),
+    ]),
+  ]);
+  assert.deepEqual(
+    validatePublicationTargets(form, bundle([mapping({ fields })]), schema),
+    {
+      ok: true,
+      validation: 'target-schema-only',
+      warnings: [],
+    },
+  );
+});
+
+void test('fails closed for incompatible transforms, sources and target types', () => {
+  const form = simpleForm([
+    question('text_value'),
+    question('whole_value', { type: 'integer', order: 2 }),
+    question('many_values', {
+      type: 'select_multiple',
+      choiceList: 'status',
+      order: 3,
+    }),
+  ]);
+  form.choiceLists = [
+    {
+      name: 'status',
+      choices: [{ value: 'open', label: 'Open', order: 1 }],
+    },
+  ];
+  const fields: PrintMapping['fields'] = [
+    { targetField: 'Flag__c', sourceKind: 'question', question: 'text_value' },
+    {
+      targetField: 'Text__c',
+      sourceKind: 'question',
+      question: 'whole_value',
+    },
+    {
+      targetField: 'Many__c',
+      sourceKind: 'question',
+      question: 'many_values',
+    },
+    {
+      targetField: 'Latitude__c',
+      sourceKind: 'question',
+      question: 'text_value',
+      transform: 'geopoint_lat',
+    },
+  ];
+  const result = validatePublicationTargets(
+    form,
+    bundle([mapping({ fields })]),
+    snapshot([
+      object('Visit__c', [
+        field('Flag__c', { type: 'boolean' }),
+        field('Text__c'),
+        field('Many__c', { type: 'multipicklist' }),
+        field('Latitude__c', { type: 'double' }),
+      ]),
+    ]),
+  );
+  assert.deepEqual(result, {
+    ok: false,
+    diagnostics: fields.map((_, index) => ({
+      code: 'PUBLISH_TARGET_FIELD_TYPE',
+      location: `mappings[0].fields[${index}].targetField`,
+    })),
+  });
+});
+
+void test('rejects missing or inactive values for restricted picklists', () => {
+  const form = simpleForm([
+    question('status', { type: 'select_one', choiceList: 'status' }),
+  ]);
+  form.choiceLists = [
+    {
+      name: 'status',
+      choices: [
+        { value: 'open', label: 'Open', order: 1 },
+        { value: 'PRIVATE_SENTINEL', label: 'Closed', order: 2 },
+      ],
+    },
+  ];
+  const result = validatePublicationTargets(
+    form,
+    bundle([
+      mapping({
+        fields: [
+          {
+            targetField: 'Status__c',
+            sourceKind: 'question',
+            question: 'status',
+            transform: 'picklist_match',
+          },
+        ],
+      }),
+    ]),
+    snapshot([
+      object('Visit__c', [
+        field('Status__c', {
+          type: 'picklist',
+          restrictedPicklist: true,
+          picklistValues: [
+            { value: 'open', active: true },
+            { value: 'PRIVATE_SENTINEL', active: false },
+          ],
+        }),
+      ]),
+    ]),
+  );
+  assert.deepEqual(result, {
+    ok: false,
+    diagnostics: [
+      {
+        code: 'PUBLISH_PICKLIST_VALUE',
+        location: 'mappings[0].fields[0].targetField',
+      },
+    ],
+  });
+  assert.doesNotMatch(JSON.stringify(result), /PRIVATE_SENTINEL/);
+});
+
+void test('allows blank constants only for nillable fields and without a transform', () => {
+  const mappings = bundle([
+    mapping({
+      fields: [
+        {
+          targetField: 'Optional_Number__c',
+          sourceKind: 'constant',
+          constantValue: null,
+        },
+        {
+          targetField: 'Required_Number__c',
+          sourceKind: 'constant',
+          constantValue: null,
+        },
+        {
+          targetField: 'Transformed__c',
+          sourceKind: 'constant',
+          constantValue: null,
+          transform: 'number',
+        },
+      ],
+    }),
+  ]);
+  assert.deepEqual(
+    validatePublicationTargets(
+      simpleForm(),
+      mappings,
+      snapshot([
+        object('Visit__c', [
+          field('Optional_Number__c', { type: 'double' }),
+          field('Required_Number__c', { type: 'double', nillable: false }),
+          field('Transformed__c', { type: 'double' }),
+        ]),
+      ]),
+    ),
+    {
+      ok: false,
+      diagnostics: [
+        {
+          code: 'PUBLISH_TARGET_FIELD_REQUIRED',
+          location: 'mappings[0].fields[1].targetField',
+        },
+        {
+          code: 'PUBLISH_TARGET_FIELD_TYPE',
+          location: 'mappings[0].fields[2].targetField',
+        },
+      ],
+    },
+  );
+});
+
 void test('warns for readable non-unique reference matching', () => {
   const result = validatePublicationTargets(
     simpleForm(),
@@ -353,6 +658,11 @@ void test('strictly rejects duplicate names, accessors, proxies, sparse arrays a
   );
   reject({ ...valid, privateSentinel: true }, 'PUBLISH_SCHEMA_SHAPE');
   reject({ schemaVersion: 2, objects: [] }, 'PUBLISH_SCHEMA_VERSION');
+  const unsupportedType = structuredClone(valid) as unknown as {
+    objects: { fields: { type: string }[] }[];
+  };
+  unsupportedType.objects[0]!.fields[0]!.type = 'PRIVATE_SENTINEL';
+  reject(unsupportedType, 'PUBLISH_SCHEMA_SHAPE');
   reject(
     snapshot(
       Array.from({ length: 101 }, (_, index) => object(`O${index}__c`, [])),
