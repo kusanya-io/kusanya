@@ -99,13 +99,21 @@ fresh Describe snapshot as the integration user. This pure function performs no
 Salesforce I/O, authorization, artifact storage or publication and is labelled
 `target-schema-only`; saved Match Status is never evidence.
 
-The next bounded publication unit extends that normalized snapshot and pure result
+The field-compatibility unit extends that normalized snapshot and pure result
 with field datatype, nullability and base picklist compatibility (ADR 0020). It
 checks all stored transform names against their source and target categories and
 requires every possible authored value for a restricted picklist to be active.
 It still performs no transform, Salesforce call or publication. Value-size and
 record-type-specific picklist rules remain with the future Describe adapter and
 executable publisher.
+
+The Describe normalization boundary (ADR 0021) converts fresh, dependency-injected
+integration-user REST Describe responses into that strict snapshot. It performs one
+uncached request per distinct target object, copies only required metadata, treats
+FLS-hidden fields as absent and fails closed on hostile, mismatched or oversized
+responses without leaking provider data. The concrete authenticated REST transport,
+target derivation from validated mappings and refusing publisher remain future
+units, so note 34 is not closed.
 
 Private definition ownership still blocks cross-owner integration/supervisor reads.
 ADR 0011 records a future object-scoped read-all policy, not a current permission

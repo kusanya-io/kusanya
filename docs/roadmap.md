@@ -14,7 +14,8 @@ The authoring-interchange unit passed PR #18 and merged as `3caea7a`; log PR #19
 merged as `e90b05e`. The strict XLSX adapter passed PR #20 and merged as `2a4a1f1`;
 its log PR #21 merged as `209e380`. Publication target validation passed PR #23 and
 merged as `b3db0c7`; its log PR #24 merged as `8467e95`. The current bounded unit
-adds field datatype and base picklist compatibility to that pure boundary (ADR 0020).
+normalizes fresh Salesforce Describe responses for that pure boundary (ADR 0021),
+following the verified field datatype and base picklist compatibility in ADR 0020.
 The builder does not issue its own gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
@@ -111,3 +112,10 @@ source/transform/target datatype checks and active-value checks for base restric
 picklists. Length, precision, record-type-specific picklists, executable transforms,
 JavaRosa validation, immutable storage and CLI/API publication remain open. This
 unit claims no C10 acceptance test or Phase 1 gate.
+
+The current bounded publication unit (ADR 0021) normalizes uncached integration-user
+REST Describe responses with exactly one injected request per distinct target
+object and bounded, non-disclosing failures. It does not own OAuth, tenant tokens,
+API-version selection, mapping-derived target acquisition, immutable artifacts or
+CLI publication. Note 34 remains open until the concrete authenticated adapter and
+refusing publisher are reviewed together.
