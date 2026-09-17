@@ -512,7 +512,7 @@ void test('rejects missing or inactive values for restricted picklists', () => {
   assert.doesNotMatch(JSON.stringify(result), /PRIVATE_SENTINEL/);
 });
 
-void test('allows blank constants only for nillable fields and without a transform', () => {
+void test('allows null, empty and whitespace constants only for nillable fields without a transform', () => {
   const mappings = bundle([
     mapping({
       fields: [
@@ -532,6 +532,28 @@ void test('allows blank constants only for nillable fields and without a transfo
           constantValue: null,
           transform: 'number',
         },
+        {
+          targetField: 'Required_Empty__c',
+          sourceKind: 'constant',
+          constantValue: '',
+        },
+        {
+          targetField: 'Required_Whitespace__c',
+          sourceKind: 'constant',
+          constantValue: ' \t ',
+        },
+        {
+          targetField: 'Transformed_Empty__c',
+          sourceKind: 'constant',
+          constantValue: '',
+          transform: 'text_truncate',
+        },
+        {
+          targetField: 'Transformed_Whitespace__c',
+          sourceKind: 'constant',
+          constantValue: '   ',
+          transform: 'text_truncate',
+        },
       ],
     }),
   ]);
@@ -544,6 +566,10 @@ void test('allows blank constants only for nillable fields and without a transfo
           field('Optional_Number__c', { type: 'double' }),
           field('Required_Number__c', { type: 'double', nillable: false }),
           field('Transformed__c', { type: 'double' }),
+          field('Required_Empty__c', { nillable: false }),
+          field('Required_Whitespace__c', { nillable: false }),
+          field('Transformed_Empty__c'),
+          field('Transformed_Whitespace__c'),
         ]),
       ]),
     ),
@@ -558,8 +584,53 @@ void test('allows blank constants only for nillable fields and without a transfo
           code: 'PUBLISH_TARGET_FIELD_TYPE',
           location: 'mappings[0].fields[2].targetField',
         },
+        {
+          code: 'PUBLISH_TARGET_FIELD_REQUIRED',
+          location: 'mappings[0].fields[3].targetField',
+        },
+        {
+          code: 'PUBLISH_TARGET_FIELD_REQUIRED',
+          location: 'mappings[0].fields[4].targetField',
+        },
+        {
+          code: 'PUBLISH_TARGET_FIELD_TYPE',
+          location: 'mappings[0].fields[5].targetField',
+        },
+        {
+          code: 'PUBLISH_TARGET_FIELD_TYPE',
+          location: 'mappings[0].fields[6].targetField',
+        },
       ],
     },
+  );
+});
+
+void test('accepts a nonblank constant without a transform for a combobox', () => {
+  assert.deepEqual(
+    validatePublicationTargets(
+      simpleForm(),
+      bundle([
+        mapping({
+          fields: [
+            {
+              targetField: 'Status__c',
+              sourceKind: 'constant',
+              constantValue: 'open',
+            },
+          ],
+        }),
+      ]),
+      snapshot([
+        object('Visit__c', [
+          field('Status__c', {
+            type: 'combobox',
+            restrictedPicklist: true,
+            picklistValues: [{ value: 'open', active: true }],
+          }),
+        ]),
+      ]),
+    ),
+    { ok: true, validation: 'target-schema-only', warnings: [] },
   );
 });
 

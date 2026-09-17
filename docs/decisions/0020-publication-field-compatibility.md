@@ -49,10 +49,13 @@ pair and the transform/target pair:
 
 For a restricted picklist or multipicklist, every possible authored choice value
 must match an active target value exactly and case-sensitively. A nonblank constant
-must also match. An unrestricted picklist does not require membership. A null
-constant retains ADR 0013/0017's meaning of an explicit blank: it is accepted only
-without a transform and only when the target is nillable. Diagnostics expose only
-stable codes and structural locations, never question, constant or picklist text.
+must also match. An unrestricted picklist does not require membership. With `none`,
+a nonblank constant may target a text-like, picklist or combobox field; the same
+restricted-value rule applies to picklists and comboboxes. A null, empty or
+whitespace-only constant retains ADR 0013/0017's meaning of an explicit blank: it
+is accepted only without a transform and only when the target is nillable.
+Diagnostics expose only stable codes and structural locations, never question,
+constant or picklist text.
 
 The existing success label remains `validation: target-schema-only`. It means the
 supplied normalized snapshot and portable mapping are compatible at this pure
@@ -71,6 +74,10 @@ including text length, numeric precision/scale, URL/email/phone lexical rules,
 reference external-ID selection, compound fields and record-type-specific picklist
 restrictions. Those checks belong with the reviewed Describe adapter and executable
 publisher rather than being inferred from incomplete metadata here.
+
+Collector and submission stamp fields are checked for existence and write access,
+but not datatype or restricted-picklist compatibility. Their value and datatype
+contract remains future work and must be recorded before those fields are written.
 
 No Salesforce call, metadata, permission, workflow, dependency, route, persistence,
 delivery authorization or transform execution is added. Note 34 remains open until

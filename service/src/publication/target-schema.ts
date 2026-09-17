@@ -437,7 +437,10 @@ function targetSupportsTransform(
     case 'file_url':
       return textTargets.has(type);
     case 'none':
-      if (constant) return textTargets.has(type) || type === 'picklist';
+      if (constant)
+        return (
+          textTargets.has(type) || type === 'picklist' || type === 'combobox'
+        );
       if (questionType === undefined) return false;
       if (plainTextQuestions.has(questionType))
         return (
@@ -565,7 +568,8 @@ export function validatePublicationTargets(
               : undefined;
           const blankConstant =
             assignment.sourceKind === 'constant' &&
-            assignment.constantValue === null;
+            (assignment.constantValue === null ||
+              assignment.constantValue.trim().length === 0);
           if (
             (blankConstant && transform !== 'none') ||
             (!blankConstant &&
