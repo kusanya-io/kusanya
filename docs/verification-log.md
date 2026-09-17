@@ -1398,3 +1398,34 @@ Open items carried forward, none blocking this unit: note 34 stays carried until
 This is a Phase 1 unit, not the phase gate, and no C10 acceptance test is claimed.
 
 `PASS: PR #23 may be merged`
+
+## 2026-09-17: Source and security review of PR #25 head `572a3cd`, publication field compatibility; one finding
+
+Scope: the datatype, nullability and restricted-picklist checks added to `service/src/publication/target-schema.ts`, its tests, ADR 0020, and architecture and roadmap updates. Requested before Bill decides on run 35257489966.
+
+Preconditions and trust boundary:
+
+- PR #23 merged as b3db0c7, whose tree cb78493 is identical to the verified head 4610d3f. PR #24 merged as 8467e95, and main CI 35227196105 passed at that base. This PR is one commit on that main.
+- No workflow, credentialed harness, Salesforce metadata, permission, namespace, manifest, lockfile or script change; the pin 1d0edc1 appears twice. Nothing under `salesforce/` changed, so no verifier scratch org was created.
+
+Local, in a detached worktree: root 252 of 252, service 172 of 172, lint, typecheck, format check, scaffold, a production audit at the low threshold with zero results, and `git diff --check`. Public CI 35257489965 is green.
+
+Verifier probes, synthetic input only:
+
+- Direct `none`: all 16 question types against 12 target categories match ADR 0020. Text-like answers reach text, picklist and combobox fields; integer and decimal reach numeric fields; date, time and datetime reach only their own types; geographic answers reach text; media and calculate are refused without an explicit transform.
+- All twelve transforms: each matching pair passes and each mismatched pair is refused, covering `picklist_match`, `multi_select_join`, `lookup_by_external_id`, `date_only`, `boolean_yes_no`, `number`, `text_truncate`, the three geopoint components and `file_url`.
+- Restricted picklists: active values pass; missing, inactive and case-mismatched values give `PUBLISH_PICKLIST_VALUE`; multipicklist membership is per choice; unrestricted picklists do not require membership; and a text question to a restricted picklist fails closed.
+- Strict decoder: unknown, numeric, capitalised and missing types; missing `nillable` or `picklistValues`; an extra field key; picklist metadata or `restrictedPicklist` on a non-picklist; `referenceTo` on a non-reference; duplicate values; accessor, extra-key, non-string, control-character and over-length values; proxy and sparse value arrays; 2,001 values on a field; and over 10,000 in a snapshot are each refused with a specific code and location. `Object.prototype` stays clean.
+- Determinism, immutability and non-disclosure all hold, and success still returns `validation: 'target-schema-only'`.
+
+Finding 44, low severity, correctness: `blankConstant` covers only `constantValue === null`, so an empty or whitespace-only constant skips the `nillable` check. Against a non-nillable string target, `null` correctly gives `PUBLISH_TARGET_FIELD_REQUIRED`, while `''`, `'   '` and `''` with `text_truncate` all return `ok`. Salesforce stores an empty string as null and trims boundary whitespace, which I proved in the PR #18 review, so each of those writes null into a required field and the insert is rejected at ingestion. It also contradicts ADR 0013 and ADR 0017, which define null or empty as an explicit blank, and which ADR 0020 line 55 cites. Fix: treat null, empty and whitespace-only constants as blank so they take the existing transform and `nillable` branches, with tests for each.
+
+Note 45, informational: collector and submission stamp fields are checked for existence, write access and collisions but never datatype, so a stamp on a date, boolean or restricted picklist field passes. That is defensible while the ingestion stamp contract is undecided, but ADR 0020's future-work list should say so explicitly, and the check should land with that contract. A smaller observation: a nonblank constant with `none` is accepted for a picklist target and refused for a combobox one, while `picklist_match` accepts both; one ADR clause would settle whether that asymmetry is deliberate.
+
+Notes 36, 37 and 39 stay open; note 34 stays open until a reviewed Describe adapter and refusing publisher exist, as ADR 0020 says; notes 24, 25, 27 to 31 and 35 carry forward; 38, 40, 41 and 43 are answered; 42 is informational. No Enketo install and no Collect device decision were made.
+
+Capacity at 18:25 UTC: 4 of 6 daily and 3 of 3 active, with none in use.
+
+`HOLD: run 35257489966 at head 572a3cd`. The fix changes the head, so approving now would spend a scratch slot on a superseded head. Cancel it once the fixed head is pushed.
+
+`HOLD: PR #25, 1 finding` (44)
