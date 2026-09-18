@@ -112,8 +112,17 @@ integration-user REST Describe responses into that strict snapshot. It performs 
 uncached request per distinct target object, copies only required metadata, treats
 FLS-hidden fields as absent and fails closed on hostile, mismatched or oversized
 responses without leaking provider data. The concrete authenticated REST transport,
-target derivation from validated mappings and refusing publisher remain future
-units, so note 34 is not closed.
+and refusing publisher remain future units, so note 34 is not closed.
+
+The publication preflight boundary (ADR 0022) composes shared form preparation and
+XForm compilation with strict mapping decoding, deterministic mapping-derived target
+acquisition, the fresh Describe normalizer and target validation. It detaches the
+validated definition and mappings before its first asynchronous request, so caller
+mutation cannot change what is validated after Describe returns. Success provides a
+frozen in-memory `publication-preflight-only` result with XML, its SHA-256 digest,
+target names, warnings and exact request count. It is not immutable stored
+publication state and adds no OAuth transport, JavaRosa execution, transform
+execution, persistence, route or CLI publication.
 
 Private definition ownership still blocks cross-owner integration/supervisor reads.
 ADR 0011 records a future object-scoped read-all policy, not a current permission
