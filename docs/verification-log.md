@@ -1704,3 +1704,33 @@ Credential hygiene: all 531 log lines clean, with the ten masks being GitHub's o
 Unit outcome: ADR 0022 and the publication preflight are accepted with zero findings. Note 34 advances but stays open; notes 51 and 52 are informational.
 
 `PASS: PR #30 may be merged`
+
+## 2026-09-18: PR #32 content-addressed publication package (ADR 0023) at `b129d81`; no findings, run 35382549745 cleared
+
+Preconditions: head `b129d817927de35ea09c32e912a5414f05145ce7` is exactly one commit on accepted main `aab1c19`, with author and committer Bill Owiti <cobitechsolutions@gmail.com>. Main CI 35380800868 passed and main has not moved. Seven files change: `package.ts`, `preflight.ts`, two unit tests, ADR 0023, architecture.md and roadmap.md. The `.github`, `scripts` and `salesforce` trees and all four package and lock files are byte-identical to main, and the pin 1d0edc1 appears twice.
+
+Local, in a detached worktree: root 252 of 252, service unit 197 of 197, integration 1 passed and 1 skipped, lint, typecheck, format, scaffold, production audit with zero results and `git diff --check`. The interchange checker passed all 8 fixtures and the XLSX checker reproduced `e8aa7ba59d675ce3dbad3aaa7c96a9c696ada1c92dcadb1157ed2339ae030931`. Public CI 35382549668 passed.
+
+Adversarial probes, 99 of 99 plus targeted checks:
+
+- Public ADR 0022 compatibility: main and head built side by side return byte-identical preflight results across eight scenarios, with the same keys and no `targetSchema`.
+- Local refusals spend zero Describe calls, including a compile `OUTPUT_LIMIT`, an unsupported option and a table-only refusal. A 32,768-character label passes the public preflight with one call but is refused by the package with `XLSFORM_CELL_LIMIT` and zero calls, while 32,767 passes.
+- Mid-flight mutation of labels, author notes, choices, questions, title, targets, field order and mappings leaves package bytes identical to a control run. The internal target schema is frozen at every level, deep-frozen inputs work and inputs are unmutated.
+- Package targets and target-schema JSON read `Account` and `Visit__c` from Describe, the authoring JSON keeps `account` and `VISIT__C`, and the public preflight still reports mapping spelling.
+- Package bytes are invariant under reversed definition records, mapping arrays, mapping fields and key order, and under three shuffles of the real Account Describe across fields, picklists, references and record types. Repeat runs match on every digest. No locale sort, clock or randomness, and no request count or operational identifiers in the manifest.
+- The authoring JSON re-imports byte-stable, the decoded XLSX re-imports to the identical authoring JSON, and both compile to the exact packaged XML. Every digest recomputes, the XLSX digest is over decoded bytes, base64 is canonical, and the workbook has no formula elements with formula-prefix strings stored literally.
+- The digest verifier accepts only the exact lowercase digest over an in-limit string, rejects every tampering, casing, length, type and over-limit case tried, never coerces objects and does not parse.
+- Provider refusals match the public preflight's diagnostics with one request and no leak. Both size refusals are unreachable with valid input because upstream budgets cap local content well below 8,000,000 characters, so they were exercised through lowered-cap copies of the built module and each returned `PUBLICATION_PACKAGE_LIMIT` at `package` with `requestCount` 1.
+- Empty mappings give a valid, verifiable package with zero calls. Warnings are invariant under mapping reordering and frozen. `publisher-only` appears in result and manifest, and author notes appear in the authoring JSON and XLSX but never the XML.
+
+Documentation matches the code, and the roadmap now records log PR #28 before #29.
+
+Correction to note 51 as recorded for PR #30: the statement that the Describe snapshot's object names carry mapping spelling was wrong. The ADR 0021 normalizer stores the response name, confirmed in the code and in the packaged target-schema JSON. The statement about the preflight's `targetObjects` was correct. Note 51 is now answered at the package boundary.
+
+Note 53, informational, both pre-existing and failing closed: the ADR 0019 validator accepts at most 2,000 fields and 200 record types per object while the ADR 0021 normalizer accepts 5,000 and 1,000, so an object between those sizes is refused with `PUBLISH_SCHEMA_LIMIT` rather than `PUBLISH_DESCRIBE_LIMIT`, which was missed in the PR #27 review; and the definition text limit of 32,768 exceeds the XLSX cell limit of 32,767, so a label of exactly 32,768 can pass preflight but never be packaged. Align them when either boundary is next touched.
+
+Hosted run 35382549745 is on the exact head with its trusted checkout at pin 1d0edc1, and the pinned budget script printed `{"allowed":true,"kind":"initial","reason":"No prior attempt consumed this head and UTC day."}`. Zero active orgs and 5 of 6 daily remaining at 19:15 UTC.
+
+`SAFE TO APPROVE: run 35382549745 at head b129d81`
+
+`HOLD: PR #32, 0 findings`, pending hosted success. Note 51 is answered at the package boundary; note 52 stays within note 34's closing conditions; note 34 stays open; notes 36, 37 and 39 remain open; notes 47, 49, 50 and 53 are informational; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered.
