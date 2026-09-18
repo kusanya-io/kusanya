@@ -1734,3 +1734,15 @@ Hosted run 35382549745 is on the exact head with its trusted checkout at pin 1d0
 `SAFE TO APPROVE: run 35382549745 at head b129d81`
 
 `HOLD: PR #32, 0 findings`, pending hosted success. Note 51 is answered at the package boundary; note 52 stays within note 34's closing conditions; note 34 stays open; notes 36, 37 and 39 remain open; notes 47, 49, 50 and 53 are informational; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered.
+
+## 2026-09-18: PR #32 PASS at `b129d81`; run 35382549745 verified end to end
+
+Run 35382549745 attempt 1, no reruns. The trusted marker reads `{"schemaVersion":1,"role":"ci","runId":"35382549745-1","headSha":"b129d817927de35ea09c32e912a5414f05145ce7","startedAt":"2026-09-18T19:18:41.882Z","outcome":"passed","retryable":false}`. Apex: 81 passed, 473 of 475 executable lines at 99.58 percent, no C10 test claimed. Cleanup deleted one owned org with none already deleted, and no fallback step fired.
+
+Dev Hub, read-only: exactly one row carries the run's tag, `ScratchOrgInfo` `2SRbm000004ZSVNGA4`, org `00DEc00000lyX9N`, Status Deleted, created 19:18:46, `DeletedDate` 2026-09-18, `ErrorCode` null, with a matching `deleteScratchOrg` audit entry at 19:19:54 UTC. Zero active orgs; capacity 3 of 3 active and 4 of 6 daily.
+
+Credential hygiene: all 531 log lines clean, the ten masks being GitHub's own redactions and note 35's Node.js 20 notice the only warning. All five required checks passed on the unchanged head and the pull request is CLEAN.
+
+Unit outcome: ADR 0023 and the content-addressed publication package are accepted with zero findings. Note 51 is answered at the package boundary; note 53 is informational.
+
+`PASS: PR #32 may be merged`
