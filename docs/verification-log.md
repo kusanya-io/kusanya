@@ -1661,3 +1661,46 @@ All five required checks passed on this head, GitHub reports the pull request CL
 Unit outcome: ADR 0021 and the Describe normalizer are accepted. Findings 46 and 48 are closed, both found against real Salesforce metadata read from the Dev Hub rather than fixtures, and this unit was the first to run the whole publication chain on genuine Describe output. Notes 47, 49 and 50 are informational; note 34 remains open; notes 36, 37 and 39 remain open; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered. Zero open findings.
 
 `PASS: PR #27 may be merged`
+
+## 2026-09-18: PR #30 publication preflight (ADR 0022) at `1658e35`; no findings, run 35378272021 cleared
+
+Preconditions: head `1658e35879a09b2f5a1ee6ecbe20884723f7ddb6` is exactly one commit on accepted main `76c9a20`, attributed to Bill Owiti. Main CI 35280880673 passed and main has not moved. Five files change: `service/src/publication/preflight.ts`, its unit test, ADR 0022, architecture.md and roadmap.md. The `.github`, `scripts` and `salesforce` trees and all three package and lock files are byte-identical to main, and the pin 1d0edc1 appears twice.
+
+Local, in a detached worktree: root 252 of 252, service unit 189 of 189, integration 1 passed and 1 skipped without a disposable PostgreSQL URL, lint, typecheck, format check, scaffold, production audit at the low threshold with zero results, and `git diff --check`. Public CI 35378272063 passed.
+
+Adversarial probes, 72 of 72 plus two supplementary checks:
+
+- Nine form and mapping refusals and a compile-only `OUTPUT_LIMIT` refusal all make zero Describe calls. The output limit was reached within the input budget by five-fold ampersand escaping.
+- Mutating labels, types, names, questions, the title, targets, fields and the mapping list from inside the first Describe callback leaves the result byte-identical to an untouched control run and the request list unchanged. Throwing getters installed mid-flight are never read, and a mid-flight mutation can neither induce nor rescue a refusal.
+- Flip-flop getters, proxies, function-valued keys and symbol keys are refused at decode with zero calls, so no caller code runs between decode and snapshot. Deep-frozen inputs succeed.
+- 720 orderings of six mappings with four casings of one object give one output and one request order. Canonical-casing Describe answers are accepted.
+- No cache across runs. Provider failure at call 1, 2 or 3 reports exactly that count and stops, a malformed second response reports 2, and a target refusal after three calls reports 3.
+- Twelve hostile provider behaviours are refused as bounded failures with no secret disclosed.
+- The unmodified Account Describe from the Dev Hub passes a valid lowercase mapping, and a missing field, text into an integer, `Id`, an unknown restricted state code, a blank into required `Name`, a provider 404 and a non-createable object each fail with the expected code and no XML.
+- The hash equals SHA-256 over the UTF-8 bytes of the returned XML, is lowercase hex and deterministic, and lone surrogates are refused at input with `INPUT_TEXT`, so UTF-8 replacement cannot make two strings share a hash.
+- Success and failure results are frozen to the record level with exactly the documented keys, arrays are fresh per run, inputs are unmutated on every path, empty mappings make zero calls with only the compiler's own warnings, and the preflight XML equals `compileForm` output.
+- Form and target warnings both survive into one result, and the compiler adds no warnings beyond preparation.
+
+Documentation matches the code. Non-blocking observation: roadmap.md names only log PR #29 for PR #27, although log PR #28 (`b24d8a3`) also carried that unit's log.
+
+Note 51, informational: `targetObjects` and the snapshot's object names carry the code-unit-minimum mapping spelling, such as `account` or `VISIT__C`, not Salesforce's canonical spelling. This is deterministic, matches ADR 0022 and is accepted by Salesforce, but a future publisher or stored artifact should take canonical names from the Describe response if canonical spelling matters.
+
+Note 52, informational: Describe latency is unbounded. A Describe promise that never settles left the preflight pending beyond a two-second observation window with nothing in the code to end it. The concrete transport should enforce a per-request timeout and an overall deadline, and note 34's closure should verify it.
+
+Hosted run 35378272021 is on the exact head with its trusted checkout at pin 1d0edc1, and the pinned budget script printed `{"allowed":true,"kind":"initial","reason":"No prior attempt consumed this head and UTC day."}`. Zero active scratch orgs and 6 of 6 daily remaining at 18:18 UTC.
+
+`SAFE TO APPROVE: run 35378272021 at head 1658e35`
+
+`HOLD: PR #30, 0 findings`, pending hosted success with an exact-head marker, 85 percent coverage and a Deleted org. Note 34 advances but stays open; notes 36, 37 and 39 remain open; notes 47, 49, 50, 51 and 52 are informational; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered.
+
+## 2026-09-18: PR #30 PASS at `1658e35`; run 35378272021 verified end to end
+
+Run 35378272021 attempt 1, no reruns. The trusted marker reads `{"schemaVersion":1,"role":"ci","runId":"35378272021-1","headSha":"1658e35879a09b2f5a1ee6ecbe20884723f7ddb6","startedAt":"2026-09-18T18:21:04.930Z","outcome":"passed","retryable":false}`, and the post-test guard confirmed the head did not move during testing. Apex: 81 passed, 473 of 475 executable lines at 99.58 percent, no C10 test claimed, identical to the previous unit because the `salesforce` tree is unchanged. Cleanup deleted one owned org with none already deleted, and no fallback step fired.
+
+Dev Hub, read-only: exactly one row carries the run's tag, `ScratchOrgInfo` `2SRbm000004ZR33GAG`, org `00Dcb00000OFcHG`, Status Deleted, created 18:21:09, `DeletedDate` 2026-09-18, `ErrorCode` null, with a matching `deleteScratchOrg` audit entry at 18:22:29 UTC. Zero active orgs; capacity 3 of 3 active and 5 of 6 daily.
+
+Credential hygiene: all 531 log lines clean, with the ten masks being GitHub's own redactions and note 35's Node.js 20 notice the only warning. All five required checks passed on the unchanged head and the pull request is CLEAN.
+
+Unit outcome: ADR 0022 and the publication preflight are accepted with zero findings. Note 34 advances but stays open; notes 51 and 52 are informational.
+
+`PASS: PR #30 may be merged`
