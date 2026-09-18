@@ -16,9 +16,10 @@ its log PR #21 merged as `209e380`. Publication target validation passed PR #23 
 merged as `b3db0c7`; its log PR #24 merged as `8467e95`. Field compatibility passed
 PR #25 and merged as `96998ad`; its log PR #26 merged as `1e7c966`. Salesforce
 Describe normalization passed PR #27 and merged as `fb66940`; its log PR #29 merged
-as `76c9a20`. The current bounded unit composes those reviewed boundaries into a
-mapping-derived publication preflight (ADR 0022). The builder does not issue its own
-gate verdict.
+as `76c9a20`, after log PR #28 merged as `b24d8a3`. Publication preflight passed PR
+#30 and merged as `91dbe8d`; its log PR #31 merged as `aab1c19`. The current bounded
+unit turns those reviewed outputs into one content-addressed publication package
+(ADR 0023). The builder does not issue its own gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
 | --------- | --------------------------------------------------------------------------- | ---------------------------------------------- |
@@ -130,3 +131,12 @@ stored publication or publish success. The concrete authenticated transport,
 JavaRosa validation, transform execution, lifecycle/persistence and CLI/API command
 remain future work. Note 34 therefore advances but stays open, and no C10 test is
 claimed.
+
+The current package unit (ADR 0023) combines canonical authoring JSON, deterministic
+XLSX, exact XForm XML, the normalized target snapshot, warnings and component hashes
+under one bounded canonical JSON digest. Package target names use canonical Describe
+response spelling, answering note 51 at this boundary. The immutable string is not
+durable storage or publish success. Transactional persistence, lifecycle/audit,
+automatic JavaRosa validation and CLI/API publication remain future work; the
+deadline-enforcing authenticated transport required by notes 34 and 52 is also not
+added. No C10 test or Phase 1 gate is claimed.

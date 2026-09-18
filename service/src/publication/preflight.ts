@@ -11,7 +11,10 @@ import {
   loadSalesforceTargetSchema,
   type DescribeObject,
 } from './salesforce-describe.js';
-import { validatePublicationTargets } from './target-schema.js';
+import {
+  validatePublicationTargets,
+  type TargetSchemaSnapshot,
+} from './target-schema.js';
 
 const lower = (value: string): string => value.toLowerCase();
 const compareText = (a: string, b: string): number =>
@@ -35,6 +38,18 @@ export type PublicationPreflightResult =
       readonly warnings: readonly Diagnostic[];
     };
 
+type RejectedPreflightResult = Extract<
+  PublicationPreflightResult,
+  { readonly ok: false }
+>;
+
+/** Internal composition result for the package builder; not a publish verdict. */
+export type PublicationPreflightDetailsResult =
+  | RejectedPreflightResult
+  | (Extract<PublicationPreflightResult, { readonly ok: true }> & {
+      readonly targetSchema: TargetSchemaSnapshot;
+    });
+
 function immutableDiagnostics(
   diagnostics: readonly Diagnostic[],
 ): readonly Diagnostic[] {
@@ -43,10 +58,29 @@ function immutableDiagnostics(
   );
 }
 
+function immutableSnapshot(
+  snapshot: TargetSchemaSnapshot,
+): TargetSchemaSnapshot {
+  for (const object of snapshot.objects) {
+    for (const field of object.fields) {
+      for (const value of field.picklistValues) Object.freeze(value);
+      Object.freeze(field.picklistValues);
+      Object.freeze(field.referenceTo);
+      Object.freeze(field);
+    }
+    for (const recordType of object.recordTypes) Object.freeze(recordType);
+    Object.freeze(object.fields);
+    Object.freeze(object.recordTypes);
+    Object.freeze(object);
+  }
+  Object.freeze(snapshot.objects);
+  return Object.freeze(snapshot);
+}
+
 function rejected(
   diagnostics: readonly Diagnostic[],
   requestCount: number,
-): PublicationPreflightResult {
+): RejectedPreflightResult {
   return Object.freeze({
     ok: false,
     diagnostics: immutableDiagnostics(diagnostics),
@@ -72,11 +106,11 @@ function targetObjects(bundle: PrintMappingBundle): readonly string[] {
  * Compile and validate a detached definition/mapping snapshot against Describe
  * metadata loaded immediately by the injected integration-user client.
  */
-export async function preflightPublication(
+export async function preflightPublicationDetails(
   formInput: unknown,
   mappingInput: unknown,
   describeObject: DescribeObject,
-): Promise<PublicationPreflightResult> {
+): Promise<PublicationPreflightDetailsResult> {
   const prepared = prepareForm(formInput);
   if (!prepared.ok) return rejected(prepared.diagnostics, 0);
 
@@ -119,5 +153,29 @@ export async function preflightPublication(
     targetObjects: objects,
     requestCount: described.requestCount,
     warnings: immutableDiagnostics(validated.warnings),
+    targetSchema: immutableSnapshot(described.snapshot),
+  });
+}
+
+/** Preserve ADR 0022's deliberately minimal public preflight result. */
+export async function preflightPublication(
+  formInput: unknown,
+  mappingInput: unknown,
+  describeObject: DescribeObject,
+): Promise<PublicationPreflightResult> {
+  const result = await preflightPublicationDetails(
+    formInput,
+    mappingInput,
+    describeObject,
+  );
+  if (!result.ok) return result;
+  return Object.freeze({
+    ok: true,
+    validation: result.validation,
+    xml: result.xml,
+    xformSha256: result.xformSha256,
+    targetObjects: result.targetObjects,
+    requestCount: result.requestCount,
+    warnings: result.warnings,
   });
 }

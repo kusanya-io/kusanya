@@ -5,7 +5,10 @@ import type {
   PrintMapping,
   PrintMappingBundle,
 } from '../../src/print/mappings.js';
-import { preflightPublication } from '../../src/publication/preflight.js';
+import {
+  preflightPublication,
+  preflightPublicationDetails,
+} from '../../src/publication/preflight.js';
 import { simpleForm } from '../fixtures/compiler.js';
 
 function mapping(
@@ -255,4 +258,42 @@ void test('carries target warnings in a detached immutable result', async () => 
     { code: 'PUBLISH_MATCH_NOT_UNIQUE', location: 'mappings[0].matchingField' },
   ]);
   assert.ok(Object.isFrozen(result.warnings[0]));
+});
+
+void test('keeps normalized package details internal and deeply frozen', async () => {
+  const result = await preflightPublicationDetails(
+    simpleForm(),
+    bundle([mapping('visit', 'Visit__c', 1)]),
+    async (name) =>
+      rawObject(name, [
+        rawField('Answer__c'),
+        rawField('Status__c', {
+          type: 'picklist',
+          restrictedPicklist: true,
+          picklistValues: [{ value: 'open', active: true }],
+        }),
+        rawField('Account__c', {
+          type: 'reference',
+          referenceTo: ['Account'],
+        }),
+      ]),
+  );
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  const object = result.targetSchema.objects[0]!;
+  const reference = object.fields.find(
+    ({ apiName }) => apiName === 'Account__c',
+  )!;
+  const picklist = object.fields.find(
+    ({ apiName }) => apiName === 'Status__c',
+  )!;
+  assert.ok(Object.isFrozen(result.targetSchema));
+  assert.ok(Object.isFrozen(result.targetSchema.objects));
+  assert.ok(Object.isFrozen(object));
+  assert.ok(Object.isFrozen(object.fields));
+  assert.ok(Object.isFrozen(object.recordTypes));
+  assert.ok(Object.isFrozen(picklist));
+  assert.ok(Object.isFrozen(picklist.picklistValues));
+  assert.ok(Object.isFrozen(picklist.picklistValues[0]));
+  assert.ok(Object.isFrozen(reference.referenceTo));
 });
