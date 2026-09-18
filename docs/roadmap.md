@@ -13,10 +13,12 @@ merged as `0f1b209`.
 The authoring-interchange unit passed PR #18 and merged as `3caea7a`; log PR #19
 merged as `e90b05e`. The strict XLSX adapter passed PR #20 and merged as `2a4a1f1`;
 its log PR #21 merged as `209e380`. Publication target validation passed PR #23 and
-merged as `b3db0c7`; its log PR #24 merged as `8467e95`. The current bounded unit
-normalizes fresh Salesforce Describe responses for that pure boundary (ADR 0021),
-following the verified field datatype and base picklist compatibility in ADR 0020.
-The builder does not issue its own gate verdict.
+merged as `b3db0c7`; its log PR #24 merged as `8467e95`. Field compatibility passed
+PR #25 and merged as `96998ad`; its log PR #26 merged as `1e7c966`. Salesforce
+Describe normalization passed PR #27 and merged as `fb66940`; its log PR #29 merged
+as `76c9a20`. The current bounded unit composes those reviewed boundaries into a
+mapping-derived publication preflight (ADR 0022). The builder does not issue its own
+gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
 | --------- | --------------------------------------------------------------------------- | ---------------------------------------------- |
@@ -119,3 +121,12 @@ object and bounded, non-disclosing failures. It does not own OAuth, tenant token
 API-version selection, mapping-derived target acquisition, immutable artifacts or
 CLI publication. Note 34 remains open until the concrete authenticated adapter and
 refusing publisher are reviewed together.
+
+The current preflight unit (ADR 0022) validates form and mapping inputs before I/O,
+compiles deterministic XML, derives and deduplicates every mapping target, loads a
+fresh ADR 0021 snapshot and runs ADR 0019/0020 validation against detached inputs.
+It returns a frozen in-memory candidate and exact request count, not an immutable
+stored publication or publish success. The concrete authenticated transport,
+JavaRosa validation, transform execution, lifecycle/persistence and CLI/API command
+remain future work. Note 34 therefore advances but stays open, and no C10 test is
+claimed.
