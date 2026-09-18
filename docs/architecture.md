@@ -124,6 +124,16 @@ target names, warnings and exact request count. It is not immutable stored
 publication state and adds no OAuth transport, JavaRosa execution, transform
 execution, persistence, route or CLI publication.
 
+The content-addressed package boundary (ADR 0023) runs that preflight over the
+canonical authoring snapshot and combines its XForm with the deterministic XLSX and
+normalized target-schema snapshot. Canonical JSON carries the exact content and
+component SHA-256 values under one overall digest; package target names use the
+canonical spelling returned by Describe while authoring mappings retain their saved
+spelling. The package is explicitly publisher-only. This immutable in-memory string
+is not durable publication. It contains no timestamp, actor or storage identity and
+adds no lifecycle transaction, OAuth, transport deadline, JavaRosa execution,
+persistence, route or CLI.
+
 Private definition ownership still blocks cross-owner integration/supervisor reads.
 ADR 0011 records a future object-scoped read-all policy, not a current permission
 grant. A reviewed implementation with effective-access tests must precede any
