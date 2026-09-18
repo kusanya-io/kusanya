@@ -1692,3 +1692,15 @@ Hosted run 35378272021 is on the exact head with its trusted checkout at pin 1d0
 `SAFE TO APPROVE: run 35378272021 at head 1658e35`
 
 `HOLD: PR #30, 0 findings`, pending hosted success with an exact-head marker, 85 percent coverage and a Deleted org. Note 34 advances but stays open; notes 36, 37 and 39 remain open; notes 47, 49, 50, 51 and 52 are informational; 24, 25, 27 to 31 and 35 carry forward; 42 and 45 are informational; 38, 40, 41, 43 and 44 are answered.
+
+## 2026-09-18: PR #30 PASS at `1658e35`; run 35378272021 verified end to end
+
+Run 35378272021 attempt 1, no reruns. The trusted marker reads `{"schemaVersion":1,"role":"ci","runId":"35378272021-1","headSha":"1658e35879a09b2f5a1ee6ecbe20884723f7ddb6","startedAt":"2026-09-18T18:21:04.930Z","outcome":"passed","retryable":false}`, and the post-test guard confirmed the head did not move during testing. Apex: 81 passed, 473 of 475 executable lines at 99.58 percent, no C10 test claimed, identical to the previous unit because the `salesforce` tree is unchanged. Cleanup deleted one owned org with none already deleted, and no fallback step fired.
+
+Dev Hub, read-only: exactly one row carries the run's tag, `ScratchOrgInfo` `2SRbm000004ZR33GAG`, org `00Dcb00000OFcHG`, Status Deleted, created 18:21:09, `DeletedDate` 2026-09-18, `ErrorCode` null, with a matching `deleteScratchOrg` audit entry at 18:22:29 UTC. Zero active orgs; capacity 3 of 3 active and 5 of 6 daily.
+
+Credential hygiene: all 531 log lines clean, with the ten masks being GitHub's own redactions and note 35's Node.js 20 notice the only warning. All five required checks passed on the unchanged head and the pull request is CLEAN.
+
+Unit outcome: ADR 0022 and the publication preflight are accepted with zero findings. Note 34 advances but stays open; notes 51 and 52 are informational.
+
+`PASS: PR #30 may be merged`
