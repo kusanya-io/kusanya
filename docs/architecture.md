@@ -134,6 +134,15 @@ is not durable publication. It contains no timestamp, actor or storage identity 
 adds no lifecycle transaction, OAuth, transport deadline, JavaRosa execution,
 persistence, route or CLI.
 
+The automatic validation boundary (ADR 0024) gates that exact packaged XForm on a
+dependency-injected validator. Its concrete ODK Validate 1.20.0 adapter requires
+explicit absolute Java/JAR paths, verifies the reviewed JAR digest, copies the
+verified bytes into a private temporary workspace, runs without a shell under
+heap/time/output/environment bounds, discards tool output and cleans up before it
+can report success. Package results are now labelled `odk-validate-1.20.0`; no JAR
+is committed or downloaded. This definition-validation gate is not Collect or
+Enketo runtime evidence, durable publication, delivery, lifecycle or CLI/API work.
+
 Private definition ownership still blocks cross-owner integration/supervisor reads.
 ADR 0011 records a future object-scoped read-all policy, not a current permission
 grant. A reviewed implementation with effective-access tests must precede any

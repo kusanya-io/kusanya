@@ -17,9 +17,11 @@ merged as `b3db0c7`; its log PR #24 merged as `8467e95`. Field compatibility pas
 PR #25 and merged as `96998ad`; its log PR #26 merged as `1e7c966`. Salesforce
 Describe normalization passed PR #27 and merged as `fb66940`; its log PR #29 merged
 as `76c9a20`, after log PR #28 merged as `b24d8a3`. Publication preflight passed PR
-#30 and merged as `91dbe8d`; its log PR #31 merged as `aab1c19`. The current bounded
-unit turns those reviewed outputs into one content-addressed publication package
-(ADR 0023). The builder does not issue its own gate verdict.
+#30 and merged as `91dbe8d`; its log PR #31 merged as `aab1c19`. The content-addressed
+publication package passed PR #32 and merged as `164f35b`; its log PR #33 merged as
+`92ec5d3`. The current bounded unit automatically gates the exact package XForm with
+the reviewed ODK Validate 1.20.0 process boundary (ADR 0024). The builder does not
+issue its own gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
 | --------- | --------------------------------------------------------------------------- | ---------------------------------------------- |
@@ -132,7 +134,7 @@ JavaRosa validation, transform execution, lifecycle/persistence and CLI/API comm
 remain future work. Note 34 therefore advances but stays open, and no C10 test is
 claimed.
 
-The current package unit (ADR 0023) combines canonical authoring JSON, deterministic
+The verified package unit (ADR 0023) combines canonical authoring JSON, deterministic
 XLSX, exact XForm XML, the normalized target snapshot, warnings and component hashes
 under one bounded canonical JSON digest. Package target names use canonical Describe
 response spelling, answering note 51 at this boundary. The immutable string is not
@@ -140,3 +142,12 @@ durable storage or publish success. Transactional persistence, lifecycle/audit,
 automatic JavaRosa validation and CLI/API publication remain future work; the
 deadline-enforcing authenticated transport required by notes 34 and 52 is also not
 added. No C10 test or Phase 1 gate is claimed.
+
+The current automatic-validation unit (ADR 0024) makes package success conditional
+on the exact package XForm passing the reviewed ODK Validate 1.20.0 JAR. The concrete
+adapter requires explicit tool paths, verifies and snapshots the pinned JAR bytes,
+runs without a shell under heap/time/output/environment bounds, discards output and
+fails closed if cleanup does not complete. It commits or downloads no JAR and is not
+Collect/Enketo runtime evidence. Persistence, lifecycle/audit, authenticated bounded
+Describe transport and CLI/API publication remain future work. Notes 34/36/37/39
+remain open, note 53 remains informational, and no C10 or Phase 1 gate is claimed.
