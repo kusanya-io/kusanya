@@ -1794,3 +1794,15 @@ Runs: 35619801600 is stale on `5e9dfce` and still waiting; 35638518820 is on the
 `SAFE TO APPROVE: run 35638518820 at head 3a2b4ce`, after the stale run is cleared.
 
 `HOLD: PR #34, 0 findings`, pending hosted success with an exact-head marker, 85 percent coverage and a Deleted org.
+
+## 2026-09-21: PR #34 PASS at `3a2b4ce`; run 35638518820 verified end to end
+
+Run 35638518820 attempt 1, no reruns. The trusted marker reads `{"schemaVersion":1,"role":"ci","runId":"35638518820-1","headSha":"3a2b4ce711e7de919f03d3d2967240bcd9e84937","startedAt":"2026-09-21T19:01:30.170Z","outcome":"passed","retryable":false}`. Apex: 81 passed, 473 of 475 executable lines at 99.58 percent, no C10 test claimed, unchanged because the `salesforce` tree does not change in this unit. Cleanup deleted one owned org with none already deleted, and no fallback step fired.
+
+Dev Hub, read-only: one row carries the run's tag, `kusanya-ci-v1__35638518820-1__3a2b4ce711e7__5a185eeb2233`, org `00DRL00000WhOMP`, Status Deleted, created 19:01:34, `DeletedDate` 2026-09-21, `ErrorCode` null, with a matching `deleteScratchOrg` audit entry at 19:03:13 UTC. Zero active orgs; capacity 3 of 3 active and 5 of 6 daily. The superseded run 35619801600 ended in failure with zero steps in its protected job and created no org.
+
+Credential hygiene: all 531 log lines clean, the ten masks being GitHub's own redactions and note 35's Node.js 20 notice the only warning. All five required checks passed on the unchanged head and the pull request is CLEAN.
+
+Unit outcome: ADR 0024 and the automatic ODK Validate publication gate are accepted. Finding 54 is closed. Notes 55, 56 and 58 are informational. Note 57 remains open until the pinned JAR digest is confirmed once against ODK's published release checksum.
+
+`PASS: PR #34 may be merged`
