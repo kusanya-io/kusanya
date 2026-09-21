@@ -1774,3 +1774,23 @@ Documentation matches the code, and note 53 is correctly untouched.
 `HOLD: run 35619801600 at head 5e9dfce`
 
 `HOLD: PR #34, 1 finding` (54). Notes 55 to 58 are informational. Note 34 stays open with note 52 inside its closing conditions; notes 36, 37 and 39 remain open; notes 42, 45, 47, 49, 50 and 53 are informational; 38, 40, 41, 43, 44 and 51 are answered; 24, 25, 27 to 31 and 35 carry forward.
+
+## 2026-09-21: PR #34 corrective head `3a2b4ce` closes finding 54; run 35638518820 cleared
+
+Head `3a2b4ce711e7de919f03d3d2967240bcd9e84937` is the reviewed head `5e9dfce` plus one commit on base `92ec5d3`, authored and committed by Bill Owiti. The corrective delta touches only `package.ts`, its unit test and ADR 0024. Everything else is byte-identical to the previously reviewed head, including `odk-validate.ts`, `preflight.ts`, the adapter test, architecture.md, roadmap.md, the `.github`, `scripts` and `salesforce` trees and both lockfiles, and the pin appears twice, so the adapter review carries forward unchanged.
+
+Local: root 252 of 252, service unit 207 of 207, integration 1 passed and 1 skipped, lint, typecheck, format, scaffold, production audit with zero results and `git diff --check`. Public CI 35638518629 passed.
+
+Finding 54 closed. The `types.isProxy` guard is placed before any descriptor read, so a proxy is rejected before its traps can run, and the nested guard runs before the prototype check. Thirteen proxy shapes at both levels were refused as `PUBLICATION_VALIDATOR_FAILURE` at `validator`, with no package, exact request counts and no leakage: ordinary proxies over valid true and false results, the prototype-lying proxy that previously passed, a descriptor-forging proxy fabricating `ok` through `ownKeys` and `getOwnPropertyDescriptor`, revoked and trap-throwing proxies at the top level, ordinary, prototype-lying, revoked and trap-throwing proxies in the nested diagnostic, and proxies wrapping proxies at both levels. With every trap instrumented, the only trap that fired was a single `get` of `then`, which is the thenable lookup `await` performs on any value; the decoder touched nothing.
+
+Plain results are unaffected: a valid result still succeeds with the `odk-validate-1.20.0` label, documented refusals still surface their own codes, a frozen plain object still succeeds and a null-prototype plain object is still refused. The full package suite passes 112 of 112 on this head.
+
+Observation, not a defect: a validator may return a thenable, including a proxy acting as one, and `await` resolves it before decoding, so a proxy can only enter by resolving to a genuine plain object, which conveys nothing extra. A throwing `then` accessor is caught as `PUBLICATION_VALIDATOR_FAILURE`.
+
+ADR 0024 now records note 55 accurately, including that adapter-initiated timeout and output-limit terminations remain infrastructure failures because the adapter records that it initiated them, which matches the `forcedFailure` flag. Notes 56, 57 and 58 remain informational, and note 57 still awaits one out-of-band confirmation of the pinned digest against ODK's published checksum.
+
+Runs: 35619801600 is stale on `5e9dfce` and still waiting; 35638518820 is on the exact corrective head with pin 1d0edc1 resolved and a budget verdict of `{"allowed":true,"kind":"initial","reason":"No prior attempt consumed this head and UTC day."}`. The new run's protected job reads `pending` rather than `waiting` because the single non-cancelling concurrency group is held by the stale run, so the stale run must be cleared first. Capacity at 18:35 UTC: 0 active, 6 of 6 daily.
+
+`SAFE TO APPROVE: run 35638518820 at head 3a2b4ce`, after the stale run is cleared.
+
+`HOLD: PR #34, 0 findings`, pending hosted success with an exact-head marker, 85 percent coverage and a Deleted org.
