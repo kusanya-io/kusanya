@@ -143,6 +143,15 @@ can report success. Package results are now labelled `odk-validate-1.20.0`; no J
 is committed or downloaded. This definition-validation gate is not Collect or
 Enketo runtime evidence, durable publication, delivery, lifecycle or CLI/API work.
 
+The bounded Salesforce Describe transport (ADR 0025) supplies the first concrete
+HTTP implementation of the Describe callback used by publication preflight. It
+constructs only pinned REST API 64.0 Describe URLs under an exact Salesforce HTTPS
+origin, obtains a fresh short-lived token for each call, follows no redirects or
+retries, and bounds token acquisition, network work and streamed JSON under both
+per-request and attempt-wide deadlines. The adapter stores no credential and makes
+no tenant OAuth decision; tenant binding, encrypted token persistence and the
+refusing publisher remain future boundaries.
+
 Private definition ownership still blocks cross-owner integration/supervisor reads.
 ADR 0011 records a future object-scoped read-all policy, not a current permission
 grant. A reviewed implementation with effective-access tests must precede any

@@ -19,9 +19,10 @@ Describe normalization passed PR #27 and merged as `fb66940`; its log PR #29 mer
 as `76c9a20`, after log PR #28 merged as `b24d8a3`. Publication preflight passed PR
 #30 and merged as `91dbe8d`; its log PR #31 merged as `aab1c19`. The content-addressed
 publication package passed PR #32 and merged as `164f35b`; its log PR #33 merged as
-`92ec5d3`. The current bounded unit automatically gates the exact package XForm with
-the reviewed ODK Validate 1.20.0 process boundary (ADR 0024). The builder does not
-issue its own gate verdict.
+`92ec5d3`. The automatic validation unit passed PR #34 and merged as `308ff7f`; its
+log PR #35 merged as `aa80c5c`. The current bounded unit adds the concrete deadline-
+enforcing Salesforce REST Describe transport (ADR 0025). The builder does not issue
+its own gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
 | --------- | --------------------------------------------------------------------------- | ---------------------------------------------- |
@@ -151,3 +152,12 @@ fails closed if cleanup does not complete. It commits or downloads no JAR and is
 Collect/Enketo runtime evidence. Persistence, lifecycle/audit, authenticated bounded
 Describe transport and CLI/API publication remain future work. Notes 34/36/37/39
 remain open, note 53 remains informational, and no C10 or Phase 1 gate is claimed.
+
+The current Describe-transport unit (ADR 0025) turns the injected ADR 0021 callback
+into a concrete API 64.0 HTTPS request boundary with strict origin/path construction,
+fresh caller-supplied tokens, no redirect/retry/cache behavior, bounded streamed JSON
+and per-request plus publication-attempt deadlines. It implements note 52's network
+deadline requirement without selecting or storing tenant OAuth credentials. Note 34
+remains open until a tenant-bound authenticated connection, definition reader and
+refusing publisher are composed and reviewed. No Salesforce metadata, dependency,
+workflow, harness, Enketo or Android boundary changes in this unit.
