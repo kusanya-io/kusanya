@@ -4,6 +4,7 @@ import type { Diagnostic } from '../compiler/types.js';
 import { exportAuthoringBundle } from '../interchange/bundle.js';
 import { exportXlsFormWorkbook } from '../interchange/xlsx-workbook.js';
 import type { DescribeObject } from './salesforce-describe.js';
+import type { ValidateXForm } from './odk-validate.js';
 import { preflightPublicationDetails } from './preflight.js';
 
 const maxTargetSchemaJson = 8_000_000;
@@ -12,6 +13,13 @@ const compareText = (a: string, b: string): number =>
   a < b ? -1 : a > b ? 1 : 0;
 const sha256 = (value: string | Uint8Array): string =>
   createHash('sha256').update(value).digest('hex');
+const validatorFailures = new Map([
+  ['PUBLICATION_XFORM_INVALID', 'xform'],
+  ['PUBLICATION_VALIDATOR_CONFIGURATION', 'validator'],
+  ['PUBLICATION_VALIDATOR_PIN', 'validator'],
+  ['PUBLICATION_VALIDATOR_FAILURE', 'validator'],
+  ['PUBLICATION_VALIDATOR_CLEANUP', 'validator'],
+]);
 
 export type PublicationPackageResult =
   | {
@@ -21,7 +29,7 @@ export type PublicationPackageResult =
     }
   | {
       readonly ok: true;
-      readonly validation: 'publication-package-only';
+      readonly validation: 'odk-validate-1.20.0';
       readonly audience: 'publisher-only';
       readonly packageJson: string;
       readonly packageSha256: string;
@@ -51,6 +59,63 @@ function rejected(
     diagnostics: immutableDiagnostics(diagnostics),
     requestCount,
   });
+}
+
+function decodeValidationResult(value: unknown): true | Diagnostic {
+  if (value === null || typeof value !== 'object')
+    throw new PackageFailure('PUBLICATION_VALIDATOR_FAILURE');
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  if (Object.getPrototypeOf(value) !== Object.prototype)
+    throw new PackageFailure('PUBLICATION_VALIDATOR_FAILURE');
+  const ownKeys = Reflect.ownKeys(descriptors);
+  if (ownKeys.some((key) => typeof key !== 'string'))
+    throw new PackageFailure('PUBLICATION_VALIDATOR_FAILURE');
+  const keys = (ownKeys as string[]).sort(compareText);
+  const ok = descriptors.ok;
+  if (ok === undefined || 'get' in ok || 'set' in ok)
+    throw new PackageFailure('PUBLICATION_VALIDATOR_FAILURE');
+  if (ok.value === true && keys.length === 1 && keys[0] === 'ok') return true;
+  if (
+    ok.value !== false ||
+    keys.length !== 2 ||
+    keys[0] !== 'diagnostic' ||
+    keys[1] !== 'ok'
+  )
+    throw new PackageFailure('PUBLICATION_VALIDATOR_FAILURE');
+  const diagnosticDescriptor = descriptors.diagnostic;
+  if (
+    diagnosticDescriptor === undefined ||
+    'get' in diagnosticDescriptor ||
+    'set' in diagnosticDescriptor ||
+    diagnosticDescriptor.value === null ||
+    typeof diagnosticDescriptor.value !== 'object' ||
+    Object.getPrototypeOf(diagnosticDescriptor.value) !== Object.prototype
+  )
+    throw new PackageFailure('PUBLICATION_VALIDATOR_FAILURE');
+  const diagnosticDescriptors = Object.getOwnPropertyDescriptors(
+    diagnosticDescriptor.value,
+  );
+  const diagnosticKeys = Reflect.ownKeys(diagnosticDescriptors);
+  if (
+    diagnosticKeys.some((key) => typeof key !== 'string') ||
+    (diagnosticKeys as string[]).sort(compareText).join(',') !== 'code,location'
+  )
+    throw new PackageFailure('PUBLICATION_VALIDATOR_FAILURE');
+  const code = diagnosticDescriptors.code;
+  const location = diagnosticDescriptors.location;
+  if (
+    code === undefined ||
+    location === undefined ||
+    'get' in code ||
+    'set' in code ||
+    'get' in location ||
+    'set' in location ||
+    typeof code.value !== 'string' ||
+    typeof location.value !== 'string' ||
+    validatorFailures.get(code.value) !== location.value
+  )
+    throw new PackageFailure('PUBLICATION_VALIDATOR_FAILURE');
+  return Object.freeze({ code: code.value, location: location.value });
 }
 
 function canonicalJson(value: unknown, limit: number, code: string): string {
@@ -105,6 +170,7 @@ export async function createPublicationPackage(
   formInput: unknown,
   mappingInput: unknown,
   describeObject: DescribeObject,
+  validateXForm: ValidateXForm,
 ): Promise<PublicationPackageResult> {
   const authoring = exportAuthoringBundle(formInput, mappingInput);
   if (!authoring.ok) return rejected(authoring.diagnostics, 0);
@@ -122,6 +188,18 @@ export async function createPublicationPackage(
   if (!preflight.ok)
     return rejected(preflight.diagnostics, preflight.requestCount);
 
+  try {
+    const validation = decodeValidationResult(
+      await validateXForm(preflight.xml),
+    );
+    if (validation !== true)
+      return rejected([validation], preflight.requestCount);
+  } catch {
+    return rejected(
+      [{ code: 'PUBLICATION_VALIDATOR_FAILURE', location: 'validator' }],
+      preflight.requestCount,
+    );
+  }
   try {
     const targetSchemaJson = canonicalJson(
       preflight.targetSchema,
@@ -155,7 +233,7 @@ export async function createPublicationPackage(
     );
     return Object.freeze({
       ok: true,
-      validation: 'publication-package-only',
+      validation: 'odk-validate-1.20.0',
       audience: 'publisher-only',
       packageJson,
       packageSha256: sha256(packageJson),

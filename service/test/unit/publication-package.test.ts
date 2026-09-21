@@ -13,6 +13,9 @@ import {
 } from '../../src/publication/package.js';
 import { question, simpleForm } from '../fixtures/compiler.js';
 
+const acceptXForm = async (): Promise<{ readonly ok: true }> =>
+  Object.freeze({ ok: true });
+
 interface PackageShape {
   audience: string;
   authoring: { json: string; sha256: string };
@@ -98,13 +101,14 @@ void test('builds a self-contained content-addressed package using canonical Des
       requested.push(name);
       return describedObject('Visit__c');
     },
+    acceptXForm,
   );
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.deepEqual(requested, ['visit__c']);
   assert.deepEqual(result.targetObjects, ['Visit__c']);
   assert.equal(result.requestCount, 1);
-  assert.equal(result.validation, 'publication-package-only');
+  assert.equal(result.validation, 'odk-validate-1.20.0');
   assert.equal(result.audience, 'publisher-only');
   assert.equal(result.packageSha256, sha256(result.packageJson));
   assert.ok(
@@ -166,6 +170,7 @@ void test('packages an explicitly empty mapping bundle with no Describe request'
       calls++;
       return describedObject(name);
     },
+    acceptXForm,
   );
   assert.equal(result.ok, true);
   if (!result.ok) return;
@@ -199,11 +204,13 @@ void test('is byte-deterministic under definition, mapping and Describe reorderi
     formA,
     bundle([account, visit]),
     makeDescribe(false),
+    acceptXForm,
   );
   const second = await createPublicationPackage(
     formB,
     bundle([visit, account]),
     makeDescribe(true),
+    acceptXForm,
   );
   assert.deepEqual(first, second);
 });
@@ -215,10 +222,15 @@ void test('finishes from detached canonical inputs when callers mutate during De
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const pending = createPublicationPackage(form, mappings, async (name) => {
-    await gate;
-    return describedObject(name);
-  });
+  const pending = createPublicationPackage(
+    form,
+    mappings,
+    async (name) => {
+      await gate;
+      return describedObject(name);
+    },
+    acceptXForm,
+  );
   form.questions[0]!.name = 'changed_after_request';
   mappings.mappings[0]!.targetObject = 'Other__c';
   mappings.mappings[0]!.fields[0]!.targetField = 'Missing__c';
@@ -242,6 +254,7 @@ void test('performs authoring and workbook refusal before Describe I/O', async (
       calls++;
       return describedObject(name);
     },
+    acceptXForm,
   );
   assert.deepEqual(result, {
     ok: false,
@@ -259,6 +272,7 @@ void test('returns no partial package after provider or target refusal', async (
     async () => {
       throw new Error('PROVIDER_SECRET');
     },
+    acceptXForm,
   );
   assert.equal(provider.ok, false);
   assert.equal(provider.requestCount, 1);
@@ -269,6 +283,7 @@ void test('returns no partial package after provider or target refusal', async (
     simpleForm(),
     mappings,
     async (name) => describedObject(name, []),
+    acceptXForm,
   );
   assert.deepEqual(target, {
     ok: false,
@@ -281,6 +296,100 @@ void test('returns no partial package after provider or target refusal', async (
     requestCount: 1,
   });
   assert.equal('packageJson' in target, false);
+});
+
+void test('validates the exact packaged XForm and fails closed without partial content', async () => {
+  const form = simpleForm();
+  const mappings = bundle([mapping('visit', 'Visit__c', 1)]);
+  let validatedXml = '';
+  const accepted = await createPublicationPackage(
+    form,
+    mappings,
+    async (name) => describedObject(name),
+    async (xml) => {
+      validatedXml = xml;
+      return Object.freeze({ ok: true });
+    },
+  );
+  assert.equal(accepted.ok, true);
+  if (!accepted.ok) return;
+  const packaged = JSON.parse(accepted.packageJson) as PackageShape;
+  assert.equal(validatedXml, packaged.xform.xml);
+  assert.equal(sha256(validatedXml), packaged.xform.sha256);
+
+  for (const validateXForm of [
+    async () =>
+      Object.freeze({
+        ok: false as const,
+        diagnostic: Object.freeze({
+          code: 'PUBLICATION_XFORM_INVALID',
+          location: 'xform',
+        }),
+      }),
+    async () => {
+      throw new Error('VALIDATOR_SECRET');
+    },
+  ]) {
+    const refused = await createPublicationPackage(
+      form,
+      mappings,
+      async (name) => describedObject(name),
+      validateXForm,
+    );
+    assert.equal(refused.ok, false);
+    assert.equal('packageJson' in refused, false);
+    assert.equal(JSON.stringify(refused).includes('VALIDATOR_SECRET'), false);
+    assert.ok(Object.isFrozen(refused));
+  }
+});
+
+void test('strictly decodes validator results without invoking accessors or leaking values', async () => {
+  const form = simpleForm();
+  const mappings = bundle([mapping('visit', 'Visit__c', 1)]);
+  let getterCalls = 0;
+  const accessor = {};
+  Object.defineProperty(accessor, 'ok', {
+    enumerable: true,
+    get() {
+      getterCalls++;
+      return true;
+    },
+  });
+  const hostileResults: unknown[] = [
+    null,
+    { ok: true, extra: 'RESULT_SECRET' },
+    { ok: true, [Symbol('RESULT_SECRET')]: true },
+    {
+      ok: false,
+      diagnostic: { code: 'RESULT_SECRET', location: 'RESULT_SECRET' },
+    },
+    accessor,
+    new Proxy(
+      {},
+      {
+        ownKeys() {
+          throw new Error('PROXY_SECRET');
+        },
+      },
+    ),
+  ];
+  for (const hostile of hostileResults) {
+    const result = await createPublicationPackage(
+      form,
+      mappings,
+      async (name) => describedObject(name),
+      async () => hostile as never,
+    );
+    assert.deepEqual(result, {
+      ok: false,
+      diagnostics: [
+        { code: 'PUBLICATION_VALIDATOR_FAILURE', location: 'validator' },
+      ],
+      requestCount: 1,
+    });
+    assert.equal(JSON.stringify(result).includes('SECRET'), false);
+  }
+  assert.equal(getterCalls, 0);
 });
 
 void test('seals warnings and detects package or digest tampering', async () => {
@@ -298,6 +407,7 @@ void test('seals warnings and detects package or digest tampering', async () => 
     simpleForm(),
     mappings,
     async (name) => describedObject(name, [field('Name')]),
+    acceptXForm,
   );
   assert.equal(result.ok, true);
   if (!result.ok) return;
