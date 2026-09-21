@@ -1834,3 +1834,15 @@ Two observations that are not defects: the declared `content-length` is parsed l
 `SAFE TO APPROVE: run 35646852402 at head 7997324`
 
 `HOLD: PR #36, 0 findings`, pending hosted success with an exact-head marker, 85 percent coverage and a Deleted org. Note 34 stays open; notes 36, 37 and 39 remain open; notes 47, 49, 50, 53, 55, 56, 58 and 59 are informational; note 57 stays with Bill; 38, 40, 41, 43, 44, 51 and 54 are answered or closed; 24, 25, 27 to 31 and 35 carry forward.
+
+## 2026-09-21: PR #36 PASS at `7997324`; run 35646852402 verified end to end
+
+Run 35646852402 attempt 1, no reruns. The trusted marker reads `{"schemaVersion":1,"role":"ci","runId":"35646852402-1","headSha":"7997324d200ee60b42d768a626b33a885d5e5d79","startedAt":"2026-09-21T20:41:17.183Z","outcome":"passed","retryable":false}`. Apex: 81 passed, 473 of 475 executable lines at 99.58 percent, no C10 test claimed, unchanged because the `salesforce` tree is untouched in this unit. Cleanup deleted one owned org with none already deleted, and no fallback step fired.
+
+Dev Hub, read-only: one row carries the run's tag, `kusanya-ci-v1__35646852402-1__7997324d200e__21238f12c9b0`, org `00DRt00000XJawZ`, Status Deleted, created 20:41:21, `DeletedDate` 2026-09-21, `ErrorCode` null, with a matching `deleteScratchOrg` audit entry at 20:42:20 UTC. Zero active orgs; capacity 3 of 3 active and 4 of 6 daily.
+
+Credential hygiene: all 531 log lines clean, the ten masks being GitHub's own redactions and note 35's Node.js 20 notice the only warning. All five required checks passed on the unchanged head and the pull request is CLEAN.
+
+Unit outcome: ADR 0025 and the bounded Salesforce Describe transport are accepted with zero findings. Note 52 is implemented at this concrete HTTP boundary; note 34 remains open for tenant OAuth selection, encrypted credential persistence and rotation, restricted-user FLS proof, definition loading and the refusing publisher; note 59 is informational.
+
+`PASS: PR #36 may be merged`
