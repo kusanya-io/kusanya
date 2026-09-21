@@ -1746,3 +1746,31 @@ Credential hygiene: all 531 log lines clean, the ten masks being GitHub's own re
 Unit outcome: ADR 0023 and the content-addressed publication package are accepted with zero findings. Note 51 is answered at the package boundary; note 53 is informational.
 
 `PASS: PR #32 may be merged`
+
+## 2026-09-21: PR #34 automatic ODK Validate gate (ADR 0024) at `5e9dfce`; finding 54, run 35619801600 on hold
+
+Preconditions: head `5e9dfce57be48d1d521760060ea3219c545a1a92` is exactly one commit on accepted main `92ec5d3`, authored and committed by Bill Owiti. Main CI 35385815996 passed and main has not moved. Exactly the seven declared files change; the `.github`, `scripts` and `salesforce` trees and all four package and lock files are byte-identical to main; the pin 1d0edc1 appears twice.
+
+Local, in a detached worktree: root 252 of 252, service unit 206 of 206, integration 1 passed and 1 skipped, lint, typecheck, format, scaffold, production audit with zero results, `git diff --check`, 8 interchange fixtures and the XLSX fixture digest. Public CI 35619801599 passed.
+
+Finding 54, low severity: `decodeValidationResult` accepts an ordinary `Proxy`. Both `new Proxy({ ok: true }, {})` and a proxy whose `getPrototypeOf` trap returns `Object.prototype` over a null-prototype target produce a full package. The trap case defeats the decoder's own prototype check, and `Object.getOwnPropertyDescriptors` runs traps before that check. No security impact was found: values are snapshotted into descriptors and read once, so there is no time-of-check gap, and `code` and `location` must still match the fixed allowlist, so a proxy conveys nothing a plain object could not. It is reported because the brief requires refusing proxies and because `types.isProxy` is already the house rule at four other input boundaries, in `compiler/definition.ts` twice, `interchange/bundle.ts` and `interchange/xlsform-tables.ts` twice. Bounded fix: import `types` from `node:util`, add `types.isProxy(value)` to the first guard in `decodeValidationResult` and `types.isProxy(diagnosticDescriptor.value)` to the diagnostic guard, with two unit cases.
+
+Everything else in the brief holds, across 173 probe checks plus mutation and genuine-tool runs. The string handed to the validator is the exact string embedded in package JSON and covered by `xformSha256`, and the validator runs once. Forty hostile result shapes are refused without running a getter or trap and without leaking a supplied value, while the five documented code and location pairs pass through as fresh frozen records. Every refusal returns only `ok`, `diagnostics` and `requestCount` with exact counts. Authoring, mapping, compile, workbook, provider and target refusals all precede validation; as ADR 0024 documents, an invalid XForm is refused after Describe and therefore costs one request per target.
+
+Adapter: relative Java or JAR paths refuse before any process starts; a missing JAR, a directory, an empty file, one flipped byte, a truncated copy and a 65 MiB file all fail closed without disclosing paths or XML; configuration mutated after construction is ignored. Overwriting the configured JAR while validation was in flight did not affect the run, which completed from the verified copy, and the next call refused the replaced file with `PUBLICATION_VALIDATOR_PIN`. Exit 0 is valid, exits 1, 2, 3, 42 and 137 are invalid, and a missing executable, timeout, overflow and output split across both streams are infrastructure. With the cap lowered to 200 ms against the real JVM the adapter refused in 233 ms, removed its workspace and left no orphan Java process. A directory name full of shell metacharacters ran as one literal argument with no side effect. No temporary directory survived any path, and with `rm` forced to throw an otherwise valid form returned `PUBLICATION_VALIDATOR_CLEANUP`. Package bytes and digests are identical to those from accepted main, inputs are unmutated, and omitting the validator argument fails closed.
+
+Genuine ODK Validate 1.20.0: the JAR available on this machine hashes to the pinned digest exactly. It accepted four compiled fixtures and the largest form the compiler will emit at 157,383 characters, in about half a second under the 256 MiB heap, and refused malformed XML, a non-XForm document, an empty string, an invalid XPath bind, a duplicate instance id and a truncated form.
+
+Note 55, informational: on Windows an abnormally terminated JVM reports exit code 1 with no signal, so the classifier records an invalid XForm rather than an infrastructure failure. On Linux, where the service runs, the signal is reported and the classification is correct. Worth one sentence in the ADR.
+
+Note 56, informational: on Windows libuv adds `HOMEDRIVE`, `HOMEPATH`, `LOGONSERVER`, `SYSTEMDRIVE`, `USERDOMAIN`, `USERNAME` and `USERPROFILE` to any child environment regardless of the code's allowlist, confirmed by a direct spawn carrying one variable. No credential-shaped variable reaches the child; the only exposure is the local account name to the pinned JAR.
+
+Note 57, informational: the JAR on this machine matches the pin exactly, but both the file and the pin originate from the builder's download, and nothing outside the repository was fetched during this review. The digest should be confirmed once against ODK's published release checksum.
+
+Note 58, informational: ODK Validate 1.20.0 accepts a bind that points at a node absent from the instance, so this gate proves JavaRosa parsing and XPath validity rather than structural completeness, consistent with what ADR 0024 already disclaims about runtime behaviour.
+
+Documentation matches the code, and note 53 is correctly untouched.
+
+`HOLD: run 35619801600 at head 5e9dfce`
+
+`HOLD: PR #34, 1 finding` (54). Notes 55 to 58 are informational. Note 34 stays open with note 52 inside its closing conditions; notes 36, 37 and 39 remain open; notes 42, 45, 47, 49, 50 and 53 are informational; 38, 40, 41, 43, 44 and 51 are answered; 24, 25, 27 to 31 and 35 carry forward.
