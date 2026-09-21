@@ -392,6 +392,39 @@ void test('strictly decodes validator results without invoking accessors or leak
   assert.equal(getterCalls, 0);
 });
 
+void test('refuses ordinary and prototype-lying proxies at both validator result levels', async () => {
+  const form = simpleForm();
+  const mappings = bundle([mapping('visit', 'Visit__c', 1)]);
+  const ordinaryProxy = new Proxy({ ok: true }, {});
+  const nullPrototypeDiagnostic = Object.assign(Object.create(null), {
+    code: 'PUBLICATION_XFORM_INVALID',
+    location: 'xform',
+  }) as object;
+  const prototypeLyingProxy = new Proxy(nullPrototypeDiagnostic, {
+    getPrototypeOf() {
+      return Object.prototype;
+    },
+  });
+  for (const hostile of [
+    ordinaryProxy,
+    { ok: false, diagnostic: prototypeLyingProxy },
+  ]) {
+    const result = await createPublicationPackage(
+      form,
+      mappings,
+      async (name) => describedObject(name),
+      async () => hostile as never,
+    );
+    assert.deepEqual(result, {
+      ok: false,
+      diagnostics: [
+        { code: 'PUBLICATION_VALIDATOR_FAILURE', location: 'validator' },
+      ],
+      requestCount: 1,
+    });
+  }
+});
+
 void test('seals warnings and detects package or digest tampering', async () => {
   const mappings = bundle([
     {

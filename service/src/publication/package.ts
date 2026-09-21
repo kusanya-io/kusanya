@@ -1,5 +1,6 @@
 /** Content-addressed publication package only. No storage or publication I/O. */
 import { createHash } from 'node:crypto';
+import { types } from 'node:util';
 import type { Diagnostic } from '../compiler/types.js';
 import { exportAuthoringBundle } from '../interchange/bundle.js';
 import { exportXlsFormWorkbook } from '../interchange/xlsx-workbook.js';
@@ -62,7 +63,7 @@ function rejected(
 }
 
 function decodeValidationResult(value: unknown): true | Diagnostic {
-  if (value === null || typeof value !== 'object')
+  if (value === null || typeof value !== 'object' || types.isProxy(value))
     throw new PackageFailure('PUBLICATION_VALIDATOR_FAILURE');
   const descriptors = Object.getOwnPropertyDescriptors(value);
   if (Object.getPrototypeOf(value) !== Object.prototype)
@@ -89,6 +90,7 @@ function decodeValidationResult(value: unknown): true | Diagnostic {
     'set' in diagnosticDescriptor ||
     diagnosticDescriptor.value === null ||
     typeof diagnosticDescriptor.value !== 'object' ||
+    types.isProxy(diagnosticDescriptor.value) ||
     Object.getPrototypeOf(diagnosticDescriptor.value) !== Object.prototype
   )
     throw new PackageFailure('PUBLICATION_VALIDATOR_FAILURE');

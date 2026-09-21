@@ -50,6 +50,10 @@ stdout/stderr; timeout or excess output terminates the child and is an infrastru
 failure. Output is counted and discarded, never returned or logged. A zero exit is
 valid, a non-zero exit is `PUBLICATION_XFORM_INVALID`, and spawn, signal, missing-
 tool and abnormal-exit failures are `PUBLICATION_VALIDATOR_FAILURE`.
+On Windows, Node can surface abnormal process termination as a non-zero exit rather
+than a signal, so that platform case is conservatively reported as XForm invalid;
+timeout and output-limit terminations remain infrastructure failures because the
+adapter records that it initiated them.
 
 The temporary directory is recursively removed on every path. Failure to clean it
 overrides an otherwise successful result with `PUBLICATION_VALIDATOR_CLEANUP`, so a
