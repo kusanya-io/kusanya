@@ -1806,3 +1806,31 @@ Credential hygiene: all 531 log lines clean, the ten masks being GitHub's own re
 Unit outcome: ADR 0024 and the automatic ODK Validate publication gate are accepted. Finding 54 is closed. Notes 55, 56 and 58 are informational. Note 57 remains open until the pinned JAR digest is confirmed once against ODK's published release checksum.
 
 `PASS: PR #34 may be merged`
+
+## 2026-09-21: PR #36 bounded Salesforce Describe transport (ADR 0025) at `7997324`; no findings, run 35646852402 cleared
+
+Preconditions: head `7997324d200ee60b42d768a626b33a885d5e5d79` is exactly one commit on accepted main `aa80c5c`, authored and committed by Bill Owiti. Main CI 35643486321 passed and main has not moved. Exactly the five declared files change; the `.github`, `scripts` and `salesforce` trees, all four package and lock files and `salesforce-describe.ts` are byte-identical to main; the pin 1d0edc1 appears twice.
+
+Local, in a detached worktree: root 252 of 252, service unit 216 of 216, integration 1 passed and 1 skipped, lint, typecheck, format, scaffold, production audit with zero results and `git diff --check`. Public CI 35646852421 passed.
+
+Probes, 149 checks plus targeted follow-ups:
+
+- Configuration: fifteen hostile shapes refused at construction, including ordinary, prototype-lying and revoked proxies, null prototypes, class instances, extra and symbol keys, each missing key and an accessor-valued key whose getter never ran.
+- Origins: three realistic origins accepted; twenty-four refused, including HTTP, trailing slash, explicit `:443`, path, query, fragment, credentials, `evilsalesforce.com`, `salesforce.com.evil.test`, a trailing-dot FQDN, loopback IPv4 and IPv6, `file:` and `javascript:`, whitespace padding, uppercase, a non-443 port, a punycode lookalike and a 2,100-character host.
+- Timeouts: zero, negative, fractional, NaN, Infinity, string, unsafe-integer and over-cap values refused on both timers, an overall shorter than per-request refused, and the exact maxima and an equal pair accepted.
+- Requests: the URL is exactly `/services/data/v64.0/sobjects/<name>/describe` and 64.0 matches `salesforce/sfdx-project.json` and the Apex metadata. GET with exactly `accept` and `authorization`, `cache: no-store`, `credentials: omit`, `redirect: manual`, an abort signal, no body and no retry. Seventeen malformed names, including traversal, slash, query suffix, leading digit, leading underscore, 256 characters and non-strings, are refused before token acquisition or network I/O; 255 characters is accepted; each call takes a fresh token and makes exactly one fetch.
+- Tokens: empty, whitespace, newline, carriage return, tab, control character, non-ASCII, over-length, null, numeric and object values refused before the fetch, so Bearer header injection is unreachable; 4,096 characters accepted; a throwing provider gives a bounded silent failure.
+- Responses: 201, 204, 301, 302, 401, 403, 500, missing content type, `text/html`, `application/json-patch+json`, `text/json`, `application/ld+json`, over-cap or malformed declared length, empty body, malformed JSON, trailing junk, invalid UTF-8 under fatal decoding, a forced `redirected` flag, a throwing fetch and a non-Response return are all refused. `application/json` with parameters, any case and surrounding whitespace is accepted. The size boundary is exact: 8,388,608 bytes succeed and 8,388,609 fail; a declared 8 MiB is accepted and one more refused; a 9 MiB chunked body is refused with an absent or falsely small declared length.
+- Redirects: a 301 to `https://evil.test/` is refused after exactly one fetch, so no second request or Authorization header exists.
+- Deadlines: hanging fetch, token provider and body read each refuse within the per-request budget; the timeout aborts the fetch signal and cancels a locked reader; the shared overall deadline lets two 500 ms calls through a 1,200 ms budget and refuses the third, a later call fails immediately with no I/O, and a fresh adapter starts a fresh deadline. Three concurrent calls each get their own controller. No unhandled rejection and no surviving timer handle. A fetch that ignores the abort and resolves 400 ms late still refused on time, and the orphaned continuation cancelled that late response's body itself because the signal was already aborted.
+- Composition: real Account metadata flows through the transport into the ADR 0021 normalizer; hostile-but-parsable JSON is still refused by the normalizer rather than the transport; failures become `PUBLISH_DESCRIBE_REQUEST` at `objects[0]` and `objects[1]` with exact counts; repeated names refetch, so no result or token cache exists; frozen input names and the provider's object are unmutated.
+
+Documentation matches the implementation. Note 52 is implemented at this HTTP boundary, and note 34 correctly stays open for tenant OAuth selection, encrypted credential persistence and rotation, restricted-user FLS proof, definition loading and the refusing publisher.
+
+Note 59, informational: the per-request timer is unref'd, so in a process where nothing else keeps the event loop alive and the fetch registers no handle, the timer cannot fire and the call never settles. This matches the ODK adapter's deliberate pattern and is unreachable with the real `fetch` or inside the running service, but it matters for a future short-lived CLI publish command.
+
+Two observations that are not defects: the declared `content-length` is parsed leniently, so values like `1e3` are accepted while the streamed counter remains authoritative; and nothing enforces the ADR's rule against reusing an adapter across attempts, though a reused adapter simply finds its deadline expired and fails closed.
+
+`SAFE TO APPROVE: run 35646852402 at head 7997324`
+
+`HOLD: PR #36, 0 findings`, pending hosted success with an exact-head marker, 85 percent coverage and a Deleted org. Note 34 stays open; notes 36, 37 and 39 remain open; notes 47, 49, 50, 53, 55, 56, 58 and 59 are informational; note 57 stays with Bill; 38, 40, 41, 43, 44, 51 and 54 are answered or closed; 24, 25, 27 to 31 and 35 carry forward.
