@@ -127,56 +127,71 @@ private class DefinitionSnapshotReaderTest {
 
     @IsTest
     static void emitsPortableDeterministicBundleWithoutRecordIds() {
-        Form_Version__c version = [SELECT Id FROM Form_Version__c LIMIT 1];
-        Integer dmlBefore = Limits.getDmlStatements();
-        Integer queriesBefore = Limits.getQueries();
-        Map<String, Object> first = DefinitionSnapshotReader.readVersion(
-            version.Id
-        );
-        Map<String, Object> second = DefinitionSnapshotReader.readVersion(
-            version.Id
-        );
-        Assert.areEqual(dmlBefore, Limits.getDmlStatements());
-        Assert.isTrue(Limits.getQueries() - queriesBefore <= 14);
-        Assert.areEqual(JSON.serialize(first), JSON.serialize(second));
-        Assert.areEqual(1, first.get('schemaVersion'));
+        User integration = createUser('portable');
+        assignPermission(integration.Id, 'Kusanya_Integration');
 
-        Map<String, Object> definition = (Map<String, Object>) first.get(
-            'definition'
-        );
-        Map<String, Object> form = (Map<String, Object>) definition.get('form');
-        Assert.isTrue(((String) form.get('key')).startsWith('form_'));
-        Assert.areEqual('Synthetic snapshot', form.get('title'));
-        Assert.areEqual(3, ((List<Object>) definition.get('questions')).size());
-        Assert.areEqual(
-            1,
-            ((List<Object>) definition.get('choiceLists')).size()
-        );
-        Assert.areEqual(1, ((List<Object>) definition.get('skipRules')).size());
+        System.runAs(integration) {
+            Form_Version__c version = [SELECT Id FROM Form_Version__c LIMIT 1];
+            Integer dmlBefore = Limits.getDmlStatements();
+            Integer queriesBefore = Limits.getQueries();
+            Map<String, Object> first = DefinitionSnapshotReader.readVersion(
+                version.Id
+            );
+            Map<String, Object> second = DefinitionSnapshotReader.readVersion(
+                version.Id
+            );
+            Assert.areEqual(dmlBefore, Limits.getDmlStatements());
+            Assert.isTrue(Limits.getQueries() - queriesBefore <= 14);
+            Assert.areEqual(JSON.serialize(first), JSON.serialize(second));
+            Assert.areEqual(1, first.get('schemaVersion'));
 
-        Map<String, Object> mappingBundle = (Map<String, Object>) first.get(
-            'mappingBundle'
-        );
-        List<Object> mappings = (List<Object>) mappingBundle.get('mappings');
-        Assert.areEqual(2, mappings.size());
-        Map<String, Object> child = (Map<String, Object>) mappings[1];
-        Assert.areEqual('mapping_1', child.get('parentMapping'));
-        Assert.areEqual(2, ((List<Object>) child.get('fields')).size());
+            Map<String, Object> definition = (Map<String, Object>) first.get(
+                'definition'
+            );
+            Map<String, Object> form = (Map<String, Object>) definition.get(
+                'form'
+            );
+            Assert.isTrue(((String) form.get('key')).startsWith('form_'));
+            Assert.areEqual('Synthetic snapshot', form.get('title'));
+            Assert.areEqual(
+                3,
+                ((List<Object>) definition.get('questions')).size()
+            );
+            Assert.areEqual(
+                1,
+                ((List<Object>) definition.get('choiceLists')).size()
+            );
+            Assert.areEqual(
+                1,
+                ((List<Object>) definition.get('skipRules')).size()
+            );
 
-        String serialized = JSON.serialize(first);
-        for (SObject record : [
-            SELECT Id
-            FROM Question__c
-        ]) {
-            Assert.isFalse(serialized.contains(String.valueOf(record.Id)));
+            Map<String, Object> mappingBundle = (Map<String, Object>) first.get(
+                'mappingBundle'
+            );
+            List<Object> mappings = (List<Object>) mappingBundle.get(
+                'mappings'
+            );
+            Assert.areEqual(2, mappings.size());
+            Map<String, Object> child = (Map<String, Object>) mappings[1];
+            Assert.areEqual('mapping_1', child.get('parentMapping'));
+            Assert.areEqual(2, ((List<Object>) child.get('fields')).size());
+
+            String serialized = JSON.serialize(first);
+            for (SObject record : [
+                SELECT Id
+                FROM Question__c
+            ]) {
+                Assert.isFalse(serialized.contains(String.valueOf(record.Id)));
+            }
+            for (SObject record : [
+                SELECT Id
+                FROM Mapping__c
+            ]) {
+                Assert.isFalse(serialized.contains(String.valueOf(record.Id)));
+            }
+            Assert.isFalse(serialized.contains(String.valueOf(version.Id)));
         }
-        for (SObject record : [
-            SELECT Id
-            FROM Mapping__c
-        ]) {
-            Assert.isFalse(serialized.contains(String.valueOf(record.Id)));
-        }
-        Assert.isFalse(serialized.contains(String.valueOf(version.Id)));
     }
 
     @IsTest
