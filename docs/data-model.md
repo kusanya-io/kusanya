@@ -162,11 +162,13 @@ definitions as published artifacts. See ADR 0013 for tests and exact boundaries.
 ## Access and verification status
 
 Unassigned `Kusanya_Admin`, `Kusanya_Integration`, `Kusanya_Supervisor` permission
-sets grant model CRUD, read/create/edit and read respectively, retaining sharing
-and no setup permissions. All four derived keys are read-only. Required/master-detail
-fields omit FLS entries. These do not assign users, create collectors or grant
-access to customer target objects, and their definitions alone do not establish
-effective access for a particular user.
+sets grant model CRUD, read/create/edit and read respectively, with no setup
+permissions. Integration and Supervisor have View All Records on exactly the nine
+definition objects so ADR 0026's user-mode reader can cross private definition
+ownership; neither has Modify All Records or View All Data. All four derived keys
+are read-only. Required/master-detail fields omit FLS entries. These permissions
+do not assign users, create collectors, grant customer-target access or allow a
+Supervisor to edit definitions.
 
 Private ownership still prevents integration/supervisor reads of another user's
 definitions by default (Claude note 24). ADRs 0011/0013 select a future nine-object
@@ -202,6 +204,12 @@ permissions change in that unit. It uses portable question names, not Salesforce
 record IDs or namespaced API names; future Salesforce readers/importers must resolve
 their connection's namespace before constructing it. Existing empty/`ksny__` resolver
 fixtures do not prove a namespaced deployment.
+
+ADR 0026 adds an internal, bounded Salesforce reader that translates one Form
+Version and its definition/mapping graph into those existing portable shapes. It
+uses Salesforce IDs only while resolving relationships, emits no record IDs, and
+assigns deterministic snapshot-local keys where the stored model has no portable
+Choice List or Mapping key. It is not an external endpoint or publication write.
 
 The compiler checks question reference scope and excludes Author Notes from generated
 XML (notes 27/28). It does not yet validate Mapping/Field Mapping execution scope,

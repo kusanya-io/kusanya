@@ -5,7 +5,9 @@ Phase 1 slice added Folder, Form and Form Version with version identity/validati
 The subsequent unit added Question (sections/repeats), Choice List, Choice and Skip
 Rule. The current unit adds Mapping and Field Mapping definitions with integrity
 triggers and synthetic model tests. No collection, mapping execution,
-authentication, compiler, publishing or C10 capability is claimed. See
+authentication, external publishing or C10 capability is claimed. ADR 0026 adds
+an internal, bounded user-mode definition snapshot reader; it exposes no endpoint
+and performs no publication write. See
 [the data model](../docs/data-model.md) and ADRs 0009/0010/0013 for exact limitations.
 
 Question tree updates validate the entire affected version and protect partial-DML
@@ -96,6 +98,8 @@ line coverage and cleans only positively owned orgs. It never selects an existin
 target. Quota shortage is `BLOCKED` (exit 75), not a test pass or skip. Tests,
 coverage, unknown failures and cleanup errors fail the run. Creation timeouts need
 exact job/tag reconciliation. See the CI runbook for retry and cleanup restrictions.
+Apex test classes must not use `@TestSetup` while the gate requires exact equality
+between the summary test count and the detailed result rows.
 
 Pair-acquisition unit tests prepare for C10 test 14. The existing runner deploys
 the complete reviewed source and runs all local Apex tests, including the new
