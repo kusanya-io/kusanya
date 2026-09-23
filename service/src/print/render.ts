@@ -161,7 +161,7 @@ export function renderPrintView(
       );
       for (const warning of warningEntries) {
         put(`<li>${code(warning.context)}: ${code(warning.code)}`);
-        if (warning.code === 'DYNAMIC_REPEAT_RETAINS_INSTANCES')
+        if (warning.code === 'DYNAMIC_REPEAT_CLIENT_SPECIFIC')
           put(
             '<p>Count reduction is client-specific: JavaRosa retains existing instances; the Enketo probe removes trailing answered rows. Final counts and data retention are not equivalent. A publication/ingestion rule remains required.</p>',
           );

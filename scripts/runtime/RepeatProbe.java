@@ -137,11 +137,14 @@ public final class RepeatProbe {
     traverse(zero, new int[]{0,0});
     expect(zero, "initial-zero", new int[]{0,0});
     sourceCounts(zero, "member_count", new int[]{0,0});
+    String zeroId = instanceId(zero);
     traverse(zero, new int[]{2,3});
     expect(zero, "zero-to-positive", new int[]{2,3});
     sourceCounts(zero, "member_count", new int[]{2,3});
+    if (!zeroId.equals(instanceId(zero))) throw new AssertionError("Nested count change cleared or changed instanceID");
+    System.out.println("nested-count-change preserved nonempty instanceID=true");
     Map<String,String> beforeReduction = values(zero);
-    String beforeReductionId = instanceId(zero);
+    String beforeReductionId = zeroId;
     traverse(zero, new int[]{1,1}, "member_count", null, false);
     expect(zero, "reduction-retains-existing", new int[]{2,3});
     sourceCounts(zero, "member_count", new int[]{1,1});
@@ -161,12 +164,11 @@ public final class RepeatProbe {
     int[] wrongCounts = counts(wrong, "members");
     if (!Arrays.equals(wrongCounts, new int[]{2,2})) throw new AssertionError("Negative control did not demonstrate wrong context: " + Arrays.toString(wrongCounts));
     System.out.println("negative-context-control detected members=" + Arrays.toString(wrongCounts) + " expected=[0, 0]");
-    // Reproduce the complete previous compiler metadata, rather than claiming
-    // that removing once alone changes JavaRosa's namespaced restore behavior.
-    if (!xml.contains("once(concat(&apos;uuid:&apos;, uuid()))") || !xml.contains("<orx:meta>") || !xml.contains("<orx:instanceID/>"))
+    // Reproduce the former bare calculation while preserving the corrected
+    // unprefixed metadata structure.
+    if (!xml.contains("once(concat(&apos;uuid:&apos;, uuid()))") || !xml.contains("<meta>") || !xml.contains("<instanceID/>"))
       throw new AssertionError("Negative ID baseline metadata changed");
-    String idNegative = xml.replace("once(concat(&apos;uuid:&apos;, uuid()))", "concat(&apos;uuid:&apos;, uuid())")
-      .replace("orx:meta", "meta").replace("orx:instanceID", "instanceID");
+    String idNegative = xml.replace("once(concat(&apos;uuid:&apos;, uuid()))", "concat(&apos;uuid:&apos;, uuid())");
     if (idNegative.equals(xml)) throw new AssertionError("Negative ID mutation missed");
     FormEntryController wrongId = load(idNegative, null);
     traverse(wrongId, null);

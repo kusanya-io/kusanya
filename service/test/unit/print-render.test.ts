@@ -268,7 +268,7 @@ void test('renders all 144 synthetic question nodes without claiming the real ac
 
 void test('compiler warnings use canonical paths and explain the client-specific count limitation', () => {
   const { html, warnings } = printed();
-  assert.equal(warnings[0]!.code, 'DYNAMIC_REPEAT_RETAINS_INSTANCES');
+  assert.equal(warnings[0]!.code, 'DYNAMIC_REPEAT_CLIENT_SPECIFIC');
   assert.ok(html.includes('/data/visit/students'));
   assert.ok(html.includes('Count reduction is client-specific'));
   assert.ok(html.includes('JavaRosa retains existing instances'));

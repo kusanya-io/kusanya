@@ -64,13 +64,13 @@ continue excluding those annotation values. A visible `note` question remains
 collector content; it is distinct from Author Notes. Do not distribute reviewer
 HTML to collectors or respondents.
 
-Answer-driven repeats retain the compiler warning code
-`DYNAMIC_REPEAT_RETAINS_INSTANCES`. The print explanation states the observed
-client difference: JavaRosa retains existing instances; the Enketo probe removes
+Answer-driven repeats use compiler warning code
+`DYNAMIC_REPEAT_CLIENT_SPECIFIC`. The print explanation states the observed client
+difference: Collect/JavaRosa retains existing instances; the Enketo probe removes
 trailing answered rows. It makes no promise of equivalent final counts or data
-retention. Notes 36 and 37 remain open for actual Collect UI evidence and the
-publication/ingestion cardinality decision. This unit claims no C10 acceptance
-test, CLI publish capability or completed Phase 1 gate.
+retention. Collect evidence has since answered note 36 for nested count context;
+note 37 remains open for the publication/ingestion cardinality decision. This unit
+claims no C10 acceptance test, CLI publish capability or completed Phase 1 gate.
 
 ## Mapping snapshot
 

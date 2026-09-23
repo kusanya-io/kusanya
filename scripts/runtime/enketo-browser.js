@@ -49,9 +49,14 @@ window.kusanyaSnapshot = (kind) => {
     ).length,
     onceValue: doc.querySelector(kind === 'nested' ? 'once_note' : 'root_count')
       ?.textContent,
-    instanceIds: [
-      ...doc.getElementsByTagNameNS('http://openrosa.org/xforms', 'instanceID'),
-    ].map((el) => el.textContent),
+    instanceIds: [...doc.documentElement.children]
+      .filter((el) => el.localName === 'meta' && !el.namespaceURI)
+      .flatMap((meta) =>
+        [...meta.children].filter(
+          (el) => el.localName === 'instanceID' && !el.namespaceURI,
+        ),
+      )
+      .map((el) => el.textContent),
     authorNoteLeaked:
       document.body.textContent.includes('RUNTIME_AUTHOR_ONLY_SENTINEL') ||
       xml.includes('RUNTIME_AUTHOR_ONLY_SENTINEL'),

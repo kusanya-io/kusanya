@@ -187,10 +187,11 @@ export function renderXForm(
   );
   renderCounts('/data', 5);
   for (const root of graph.roots) instance(root, 5);
-  // The data tree has no namespace; OpenRosa metadata must be explicitly qualified.
-  line(5, '<orx:meta>');
-  line(6, '<orx:instanceID/>');
-  line(5, '</orx:meta>');
+  // Collect requires the conventional unprefixed metadata nodes when nested
+  // repeat counts change during entry; qualified nodes can lose instanceID.
+  line(5, '<meta>');
+  line(6, '<instanceID/>');
+  line(5, '</meta>');
   line(4, '</data>');
   line(3, '</instance>');
   for (const count of orderedCounts)
@@ -213,7 +214,7 @@ export function renderXForm(
   }
   line(
     3,
-    `<bind nodeset="/data/orx:meta/orx:instanceID" type="string" readonly="true()"${attr('calculate', "once(concat('uuid:', uuid()))")}/>`,
+    `<bind nodeset="/data/meta/instanceID" type="string" readonly="true()"${attr('calculate', "once(concat('uuid:', uuid()))")}/>`,
   );
   line(2, '</model>');
   line(1, '</h:head>');

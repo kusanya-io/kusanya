@@ -56,6 +56,12 @@ void test('compiler emits contextualized wrappers for nested dynamic and fixed r
   assert.match(xml, /<checks jr:template="">\s+<check_note><\/check_note>/);
   assert.match(xml, /<input ref="\/data\/once_note">/);
   assert.doesNotMatch(xml, /\/data\/families\/once_note/);
+  assert.match(xml, /<meta>\s+<instanceID\/>\s+<\/meta>/);
+  assert.match(
+    xml,
+    /<bind nodeset="\/data\/meta\/instanceID"[^>]+calculate="once\(concat\(&apos;uuid:&apos;, uuid\(\)\)\)"/,
+  );
+  assert.doesNotMatch(xml, /orx:(?:meta|instanceID)/);
 });
 
 void test('compiler emits multi-level sibling-section and root-scope count references', () => {

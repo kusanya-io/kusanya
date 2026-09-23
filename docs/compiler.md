@@ -126,12 +126,14 @@ Hidden removes the control, not the instance node; it is not confidentiality or
 authorization. Required hidden/read-only/reference values need a nonempty default
 or a calculation. Defaults cannot coexist with a calculation.
 
-Generated record metadata uses `orx:meta/orx:instanceID` in the OpenRosa namespace,
-not the unnamespaced question tree. Its qualified bind calculates
+Generated record metadata uses the conventional unprefixed `meta/instanceID`
+nodes and bind `/data/meta/instanceID`. Its calculation is
 `once(concat('uuid:', uuid()))`: a client assigns a fresh ID to a new record and
-retains a nonempty ID when reopening a draft. Compilation itself remains
-deterministic. This does not define editing an already-submitted record, and does
-not add `once()` to the authored-expression grammar.
+retains it when reopening a draft or changing nested repeat counts. Finding 60's
+Collect evidence showed that the former qualified `orx:meta/orx:instanceID` could
+be cleared after a nested count change. Compilation itself remains deterministic.
+This does not define editing an already-submitted record, and does not add `once()`
+to the authored-expression grammar.
 
 Nonempty defaults are supported for text-like, numeric and select types. Numeric
 defaults must satisfy authored bounds; select values must exist (multi-select uses
@@ -167,11 +169,12 @@ or deeper-repeat values cannot be used as scalars. There is no aggregation or
 implicit first-instance selection. A once-only question remains outside the
 repeat; referencing it does not duplicate it.
 
-Every answer-driven repeat returns warning `DYNAMIC_REPEAT_RETAINS_INSTANCES`.
-Reducing the count does not delete prior instances in native ODK behavior. No
-automatic trimming, extra-instance hiding or server-side exact-count check is
-implemented here. Keep this warning visible; do not claim C10.2 or C10.3 from
-`jr:count` alone. See [ODK's count-reduction guidance](https://docs.getodk.org/form-logic/#hiding-extra-repeats-when-the-repeat-count-is-reduced).
+Every answer-driven repeat returns warning `DYNAMIC_REPEAT_CLIENT_SPECIFIC`.
+Reducing the count retains prior answered instances in Collect but removes trailing
+answered instances in the Enketo probe. No automatic trimming, extra-instance
+hiding or server-side exact-count check is implemented here. Keep this warning
+visible; do not claim C10.2 or C10.3 from `jr:count` alone. See
+[ODK's count-reduction guidance](https://docs.getodk.org/form-logic/#hiding-extra-repeats-when-the-repeat-count-is-reduced).
 
 This warning describes ODK/JavaRosa, not equivalent behavior in every client:
 the Enketo 9.0.1 probe removes trailing **answered** instances when their count
@@ -183,8 +186,10 @@ and `../_ksny_count_checks`, section-crossing `../../settings/member_limit`, and
 root-absolute counts. The existing paths are retained. Each repeat's labelled
 wrapper has `ref` equal to its `nodeset`; JavaRosa's relative count resolution
 depends on that context. Tests cover separate outer instances, zero counts,
-draft reload and intentionally incorrect paths. **Actual Collect app execution
-is still outstanding**, so these results do not close note 36 or claim C10.2/.3.
+draft reload and intentionally incorrect paths. Bill's BlueStacks run with Collect
+v2026.3.4 confirms that nested relative counts evaluate per outer instance, so the
+Collect half of note 36 is answered. The verifier has not rerun the optional Enketo
+probe; no C10.2/.3 claim follows.
 
 ## Expression grammar
 
