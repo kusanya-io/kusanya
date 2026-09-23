@@ -7,6 +7,9 @@ trigger MappingDefinition on Mapping__c(
   before update,
   before delete
 ) {
+  PublishedDefinitionGuard.protectMappings(
+    Trigger.isDelete ? Trigger.old : Trigger.new
+  );
   if (Trigger.isDelete) {
     MappingDefinitionHandler.validateDeletion(Trigger.oldMap);
   } else {

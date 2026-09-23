@@ -34,6 +34,7 @@ const objects = {
     'Compile_Warnings__c',
     'Published_By__c',
     'Published_At__c',
+    'Publication_Digest__c',
     'Change_Log__c',
     'Version_Key__c',
   ],
@@ -400,6 +401,8 @@ test('new Apex uses local references, responsibility headers and API 64 without 
     'MappingDeletionTest',
     'FieldMappingDefinitionHandler',
     'FieldMappingDefinitionModelTest',
+    'PublicationLifecycle',
+    'PublishedDefinitionGuard',
   ]) {
     const cls = read(`classes/${name}.cls`);
     assert.match(cls, /Responsibility:/);
@@ -438,6 +441,14 @@ test('new Apex uses local references, responsibility headers and API 64 without 
   assert.match(questionTrigger, /before delete/);
   assert.match(questionTrigger, /Trigger\.isDelete/);
   assert.match(questionTrigger, /Trigger\.oldMap/);
+  assert.match(
+    read('triggers/FormVersionIdentity.trigger'),
+    /PublicationLifecycle\.validateVersions/,
+  );
+  assert.match(
+    read('triggers/FormDefinitionDeletion.trigger'),
+    /before insert,[\s\S]*before update,[\s\S]*before delete/,
+  );
   assert.equal(
     JSON.parse(
       readFileSync(

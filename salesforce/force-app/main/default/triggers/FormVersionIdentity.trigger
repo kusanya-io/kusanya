@@ -1,6 +1,5 @@
 /**
- * Responsibility: derive version identity on writes and clear owned skip rules before direct deletion.
- * Publication and full lifecycle transitions remain outside this trigger's responsibility.
+ * Responsibility: derive version identity and enforce publication-owned lifecycle changes.
  */
 trigger FormVersionIdentity on Form_Version__c(
   before insert,
@@ -8,8 +7,14 @@ trigger FormVersionIdentity on Form_Version__c(
   before delete
 ) {
   if (Trigger.isDelete) {
+    PublicationLifecycle.validateVersions(Trigger.old, Trigger.oldMap, true);
     DefinitionDeletionHandler.beforeVersionsDelete(Trigger.oldMap.keySet());
   } else {
     FormVersionIdentityHandler.assignKeys(Trigger.new);
+    PublicationLifecycle.validateVersions(
+      Trigger.new,
+      Trigger.isUpdate ? Trigger.oldMap : null,
+      false
+    );
   }
 }

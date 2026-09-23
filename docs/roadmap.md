@@ -22,9 +22,11 @@ publication package passed PR #32 and merged as `164f35b`; its log PR #33 merged
 `92ec5d3`. The automatic validation unit passed PR #34 and merged as `308ff7f`; its
 log PR #35 merged as `aa80c5c`. The bounded Describe transport passed PR #36 and
 merged as `f48d788`; log PR #37 merged as `d9fce7e`. Collect evidence and finding 60
-were logged through PR #38 as `b62b8c9`. The current corrective unit fixes the
-merged compiler's Collect `instanceID` failure and client-specific repeat warning
-under amended ADR 0015. The builder does not issue its own gate verdict.
+were logged through PR #38 as `b62b8c9`. The Collect `instanceID` correction passed
+in PR #40 and its log merged in PR #41. Scoped definition snapshots passed in PR
+#42 and their log merged in PR #43. The current unit implements the bounded atomic
+Salesforce publication commit under ADR 0027. The builder does not issue its own
+gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
 | --------- | --------------------------------------------------------------------------- | ---------------------------------------------- |
@@ -81,8 +83,9 @@ automatic per-artifact JavaRosa validation remain required before corresponding
 runtime/publish claims. No CI or harness change is included; notes 29/31/35 remain
 separate reviewed tooling/workflow work.
 
-Next units must complete compilation/runtime validation, immutable publication
-and draft deletion behavior, XLSForm round trips, reviewer delivery and CLI publication.
+Next units must complete the authenticated publisher/CLI composition, artifact
+delivery and retention, client-specific repeat-count policy, Enketo evidence and
+general edited-XLSForm import.
 No model unit claims C10 tests 10/12. Do not mark Phase 1 complete from model tests.
 
 The runtime-regression unit (ADR 0015) adds optional Enketo 9.0.1/JavaRosa 6.0.0
@@ -176,3 +179,11 @@ endpoint, OAuth selection, credential storage, lifecycle mutation or publication
 write. Note 24 closes only after real-org effective-access verification; note 34
 advances through definition loading but remains open for the authenticated refusing
 publisher and its remaining connection requirements. No C10 test is claimed.
+
+The current publication-lifecycle unit (ADR 0027) adds an internal user-mode,
+savepoint-backed commit for a validated package digest and two already-uploaded
+caller-owned Files. It atomically links artifacts, records audit metadata, advances
+one current Published version, supersedes the prior one and freezes the complete
+published definition graph. Exact retries are no-DML and mismatches refuse. It adds
+no external endpoint, OAuth selection, artifact upload/delivery, target write or
+CLI, so notes 34 and 39 remain open and no C10 test is claimed.

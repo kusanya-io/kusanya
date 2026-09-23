@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Publication_Digest__c</fullName>
+    <description>Lowercase SHA-256 digest of the exact canonical ADR 0023 publication package committed for this immutable version.</description>
+    <externalId>false</externalId>
+    <label>Publication Digest</label>
+    <length>64</length>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

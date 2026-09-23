@@ -10,7 +10,7 @@ approval. `salesforce/sfdx-project.json` still has an empty namespace.
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `Folder__c`        | Name, Description                                                                                                                                                                        | Private owned root; deleting it clears a form's folder lookup.                                                                  |
 | `Form__c`          | Name, Status, Description, Folder, Default_Target_Object, Current_Version, Language, Country, Allow_Ad_Hoc_Submissions, GPS_Capture, Close_Message                                       | Private owned root; Current_Version must belong to this form.                                                                   |
-| `Form_Version__c`  | Form, Version_Number, Status, XForm, XLSForm, Compiled_At, Compile_Warnings, Published_By, Published_At, Change_Log, derived Version_Key                                                 | Non-reparentable master-detail to Form; inherits sharing and deletion. Auto-number Name.                                        |
+| `Form_Version__c`  | Form, Version_Number, Status, XForm, XLSForm, Publication_Digest, Compiled_At, Compile_Warnings, Published_By, Published_At, Change_Log, derived Version_Key                             | Non-reparentable master-detail to Form; inherits sharing and deletion. Auto-number Name.                                        |
 | `Question__c`      | All C4 question fields: tree/identity, labels, Hint, Author_Notes, types/flags, expressions/constraints, repeat/media/prefill/lineage settings; derived Question_Key                     | Non-reparentable detail of Form Version; same-version Parent lookup, with Apex protection for direct deletes.                   |
 | `Choice_List__c`   | Name, Description, optional Owner_Question                                                                                                                                               | Private owned root; reusable when owner is null, otherwise immutable inline ownership by a select question.                     |
 | `Choice__c`        | Choice_List, Value, Label, Order, Filter_Value, Score, derived Choice_Key                                                                                                                | Non-reparentable detail of Choice List; exact Value unique within its list.                                                     |
@@ -25,11 +25,13 @@ must be positive integers and unique within a form. A before-write trigger deriv
 the unique key from the Form ID and version number, replacing supplied keys without
 query/DML loops. The key must not be exported as portable identity.
 
-XForm/XLSForm fields hold intended ContentDocument IDs as text, not validated Files
-relationships. The current-version pointer checks the parent, not Published state.
-Publication, artifact integrity, automatic version allocation, immutable published
-versions and published/submission-aware deletion protection remain future work.
-Do not interpret a manually set status or file pointer as a valid publication.
+XForm/XLSForm fields hold committed ContentDocument IDs as text, with the exact
+ADR 0023 package digest stored separately. ADR 0027's internal lifecycle verifies
+caller-visible file ownership, extensions and links, then atomically advances the
+statuses and current pointer. It cannot hash large file bodies in synchronous Apex;
+the later authenticated publisher must validate and upload the exact bytes before
+calling it. Automatic version allocation, file retention and submission-aware
+deletion remain future work. A manually supplied pointer or status is refused.
 
 ## Question authoring rules
 
@@ -97,8 +99,9 @@ To author inline choices, create the select question with no list, create the li
 with that Owner Question, then set the question's Choice List backlink. Owner
 cannot change or be cleared. To delete, clear the backlink, delete the list (and
 its choices), then delete the question after removing any other references. Shared
-lists are reusable across questions/versions; published snapshot protection is not
-implemented yet. Values are nonblank Text(255), labels are separately required,
+lists are reusable across Draft questions/versions. Once any Published or
+Superseded version uses a shared list, that list and its choices are immutable.
+Values are nonblank Text(255), labels are separately required,
 and exact case-sensitive values are unique per list via a derived SHA-256 key.
 
 Skip Rule stores answered/is/is_not/less_than/greater_than/in_range/contains
@@ -155,9 +158,11 @@ ingestion tests must reject conflicts with user field mappings and enforce C7.
 Direct deletion of a referenced parent Mapping is refused with a generic message;
 deleting it with all dependent mappings in one trigger batch is allowed. Larger
 direct batches may need leaf-first order. Form/Version deletion cascades ownership;
-Mapping deletion cascades Field Mappings. Published/submission-aware protection and
-note 30's undelete behavior remain future lifecycle work; do not use restored
-definitions as published artifacts. See ADR 0013 for tests and exact boundaries.
+Mapping deletion cascades Field Mappings. ADR 0027 blocks direct mutation and
+deletion of Published/Superseded mappings and their Field Mappings.
+Submission-aware retention and note 30's undelete behavior remain future work; do
+not use restored definitions as published artifacts. See ADR 0013 for the earlier
+storage tests and exact boundaries.
 
 ## Access and verification status
 
@@ -183,8 +188,9 @@ Synthetic `FormDefinitionModelTest`, `QuestionDefinitionModelTest`,
 deployment and Apex behavior require the approved hosted run and independent
 verification. No C10 acceptance test is claimed by this slice.
 
-The remaining Salesforce work includes executable mapping validation/ingestion, compiler adapters and publication,
-version lifecycle, jobs/tasks/prefill, assignment groups, collectors, submissions/answers,
+The remaining Salesforce work includes executable mapping/ingestion, an authenticated
+publication composition and artifact delivery/retention, jobs/tasks/prefill,
+assignment groups, collectors, submissions/answers,
 scoring and operational audit records. Every future object and field must carry a
 description. Target customer objects and fields are mapping data, never constants
 hard-coded from the Splash seed.
