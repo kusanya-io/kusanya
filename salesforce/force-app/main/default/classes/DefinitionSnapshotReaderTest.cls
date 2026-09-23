@@ -4,7 +4,6 @@
  */
 @IsTest
 private class DefinitionSnapshotReaderTest {
-    @TestSetup
     static void createDefinitionOwnedByAnotherPrincipal() {
         Folder__c folder = new Folder__c(
             Name = 'Synthetic folder',
@@ -127,8 +126,12 @@ private class DefinitionSnapshotReaderTest {
 
     @IsTest
     static void emitsPortableDeterministicBundleWithoutRecordIds() {
-        User integration = createUser('portable');
-        assignPermission(integration.Id, 'Kusanya_Integration');
+        createDefinitionOwnedByAnotherPrincipal();
+        User integration;
+        System.runAs(new User(Id = UserInfo.getUserId())) {
+            integration = createUser('portable');
+            assignPermission(integration.Id, 'Kusanya_Integration');
+        }
 
         System.runAs(integration) {
             Form_Version__c version = [SELECT Id FROM Form_Version__c LIMIT 1];
@@ -196,10 +199,15 @@ private class DefinitionSnapshotReaderTest {
 
     @IsTest
     static void integrationAndSupervisorReadCrossOwnerDefinitions() {
-        User integration = createUser('integr');
-        User supervisor = createUser('super');
-        assignPermission(integration.Id, 'Kusanya_Integration');
-        assignPermission(supervisor.Id, 'Kusanya_Supervisor');
+        createDefinitionOwnedByAnotherPrincipal();
+        User integration;
+        User supervisor;
+        System.runAs(new User(Id = UserInfo.getUserId())) {
+            integration = createUser('integr');
+            supervisor = createUser('super');
+            assignPermission(integration.Id, 'Kusanya_Integration');
+            assignPermission(supervisor.Id, 'Kusanya_Supervisor');
+        }
         Id versionId = [SELECT Id FROM Form_Version__c LIMIT 1].Id;
 
         System.runAs(integration) {
@@ -237,7 +245,11 @@ private class DefinitionSnapshotReaderTest {
 
     @IsTest
     static void ungrantedPrincipalAndWrongIdentityFailClosed() {
-        User restricted = createUser('restr');
+        createDefinitionOwnedByAnotherPrincipal();
+        User restricted;
+        System.runAs(new User(Id = UserInfo.getUserId())) {
+            restricted = createUser('restr');
+        }
         Id versionId = [SELECT Id FROM Form_Version__c LIMIT 1].Id;
         System.runAs(restricted) {
             try {
