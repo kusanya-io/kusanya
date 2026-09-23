@@ -51,7 +51,7 @@ ordinary compiler XML, for byte identity only, not a signature or approval.
 
 The print renderer retains the compiler's unsupported-input rejection and XML
 output limits. There is no permissive preview for forms the compiler rejects.
-The existing `DYNAMIC_REPEAT_RETAINS_INSTANCES` warning gains explanatory print
+The `DYNAMIC_REPEAT_CLIENT_SPECIFIC` warning gains explanatory print
 text: JavaRosa retains instances while the Enketo probe removes trailing answered
 rows. This does not assert equivalent final counts or data retention, close notes
 36/37, or implement a publication/ingestion rule.

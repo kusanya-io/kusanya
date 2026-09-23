@@ -4,9 +4,12 @@ This optional local runbook covers synthetic repeat and saved-instance regressio
 under [ADR 0015](decisions/0015-client-runtime-regressions.md). It is not a
 Salesforce run, deployment, publication approval or C10 acceptance claim.
 
-**Evidence status:** both tracked engine probes passed locally on 2026-09-16,
-as recorded below. Actual Collect UI execution has not been completed. Claude note
-36 remains open; JavaRosa execution alone cannot close it.
+**Evidence status:** both tracked engine probes passed locally on 2026-09-16 for
+the former qualified-metadata bytes. On 2026-09-23 Bill authorized a BlueStacks
+Pie64 emulator running Android 9 and Collect v2026.3.4; Claude confirmed nested
+count context and count-reduction behavior and found the qualified `instanceID`
+failure recorded as finding 60. The corrected bytes passed the tracked JavaRosa
+probe; the Enketo tooling remains uninstalled and unapproved.
 
 ## Targets and boundaries
 
@@ -15,7 +18,7 @@ as recorded below. Actual Collect UI execution has not been completed. Claude no
 | Compiler source tests | Existing Node 24 service toolchain                                                | Generated paths/wrappers, deterministic bytes and author-note exclusion                                |
 | Browser engine        | Enketo Core 9.0.1; Transformer 4.2.0; installed Chromium version recorded per run | Real transformation, `Form` initialization, input changes, model/DOM repeats and saved-instance reload |
 | JVM engine            | JavaRosa 6.0.0, as pinned by Collect v2026.3.4                                    | Parsing, traversal, answers, instance serialization/reload and engine count behavior                   |
-| Android application   | ODK Collect v2026.3.4 on a Bill-approved test device/emulator                     | Actual client navigation, local draft storage and reload; still outstanding                            |
+| Android application   | ODK Collect v2026.3.4 on Bill's BlueStacks Pie64 emulator                         | Actual nested-count navigation, finalized XML and count-reduction behavior                             |
 
 Node 22.23.2, Playwright Core 1.63.0 and esbuild 0.28.2 are isolated optional
 tooling, not service runtime dependencies. The runtime package lockfile and JVM
@@ -146,12 +149,12 @@ files while cleaning up.
 
 ## Required probe matrix
 
-| Fixture                     | Positive checks                                                                                                                                                            | Sensitive comparison                                                                                          |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `nestedCountRuntimeForm()`  | Two `families`; initial `member_count=0`; change counts independently to 2 and 3; three `checks` per family; `once_note` exists once                                       | `../member_count` and `../_ksny_count_checks` preserve each family's context                                  |
-| `sectionCountRuntimeForm()` | Two `households`; `settings/member_limit` independently becomes 2 and 3; `survey/people` follows it; root `root_count=1` creates one `root_counted` instance per household | `../../settings/member_limit` crosses sibling sections; `/data/root_count` stays once-only                    |
-| Both                        | Enter distinct synthetic child answers, save, reload and compare per-parent values, counts and metadata                                                                    | No cross-instance answers; unchanged draft keeps its instance ID; a separate new instance gets a different ID |
-| Answer-driven repeats       | Reduce an already answered count, then save/reload                                                                                                                         | Record retained or removed rows for each engine; do not assume parity                                         |
+| Fixture                     | Positive checks                                                                                                                                                            | Sensitive comparison                                                                             |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `nestedCountRuntimeForm()`  | Two `families`; initial `member_count=0`; change counts independently to 2 and 3; three `checks` per family; `once_note` exists once                                       | `../member_count` and `../_ksny_count_checks` preserve each family's context                     |
+| `sectionCountRuntimeForm()` | Two `households`; `settings/member_limit` independently becomes 2 and 3; `survey/people` follows it; root `root_count=1` creates one `root_counted` instance per household | `../../settings/member_limit` crosses sibling sections; `/data/root_count` stays once-only       |
+| Both                        | Enter distinct synthetic child answers, change nested counts, save, reload and compare per-parent values, counts and metadata                                              | No cross-instance answers; count changes keep a nonempty instance ID; unchanged drafts retain it |
+| Answer-driven repeats       | Reduce an already answered count, then save/reload                                                                                                                         | Record retained or removed rows for each engine; do not assume parity                            |
 
 Count each parent's children separately; a matching global total can hide wrong
 parent assignment. Check initialization errors, transformed controls, model data
@@ -164,12 +167,12 @@ negative control's expected failure is separate from the positive suite's exit
 status. Do not transfer deliberately broken forms to a user's Collect project.
 
 Enketo natively removes trailing repeats when counts decrease; Collect/JavaRosa
-can retain instances. The existing compiler warning does not establish identical
-semantics. Do not claim final submission cardinality or introduce data deletion
-to make the engines appear equivalent. A future reviewed publication/ingestion
-policy must resolve that product requirement.
+can retain instances. Compiler warning `DYNAMIC_REPEAT_CLIENT_SPECIFIC` records
+that divergence without choosing a policy. Do not claim final submission
+cardinality or introduce data deletion to make the engines appear equivalent. A
+future reviewed publication/ingestion policy must resolve that product requirement.
 
-## Collect USB-only check: pending Bill's device choice
+## Collect emulator check and repeat procedure
 
 Generate the two positive fixtures and their hash manifest without running any
 engine or contacting a device:
@@ -179,11 +182,13 @@ npm.cmd --prefix service run build
 node scripts/runtime/export-fixtures.mjs
 ```
 
-Do not run device commands until Bill identifies a test device/emulator and
-approves using it. Do not install or upgrade Collect, enable debugging, change an
-existing project or delete anything on a personal/production phone implicitly.
-Record Collect's exact version and Android version. A different client version
-requires a recorded test-matrix change, not an unlabelled substitution.
+The 2026-09-23 run used Bill's approved BlueStacks Pie64 emulator, Android 9 and
+Collect v2026.3.4. It confirmed per-parent nested counts and retained answered rows
+after reduction. It also produced finding 60: changing a nested count could clear
+the former qualified `orx:instanceID`, while the otherwise identical conventional
+unprefixed metadata retained its UUID. No continuing device access, installation,
+upgrade or deletion is implied. A different client version requires a recorded
+test-matrix change, not an unlabelled substitution.
 
 With that approval, use a dedicated offline synthetic-test project and no real
 collector credentials. Bill controls any USB debugging authorization. Official
@@ -222,23 +227,24 @@ when finished, following [ODK's ADB safety guidance](https://docs.getodk.org/col
 
 ## Evidence record
 
-| Check                           | Result                                           | Evidence to record                                                                                     |
-| ------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| Final source/unit suite         | 75/75 service tests; lint/typecheck passed       | Includes five new source-contract tests; no engine test is counted as a service unit test              |
-| Tracked Enketo runner           | Passed, exit 0 on 2026-09-16                     | `work/runtime-enketo-HNMz8I/report.json`; Chromium 153.0.8010.47, Node 22.23.2; both negative controls |
-| Tracked JavaRosa runner         | Passed, exit 0 on 2026-09-16                     | `work/runtime-javarosa-pkShx4/report.json`; Zulu Java/javac 21.0.12.1; both negative controls          |
-| Real Collect UI                 | Not run; device choice/authorization outstanding | Collect/Android versions, approved device scope, fixture hashes, navigation/draft/reduction results    |
-| Claude independent verification | Pending normal PR review                         | Review URL and verdict                                                                                 |
+| Check                           | Result                                                                | Evidence to record                                                                                        |
+| ------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Final source/unit suite         | 216/216 service tests; lint/typecheck passed                          | Includes the metadata and warning regression assertions; no engine test is counted as a service unit test |
+| Tracked Enketo runner           | Former bytes passed 2026-09-16; corrected bytes pending authorization | Optional dependencies remain uninstalled; no new compatibility claim                                      |
+| Tracked JavaRosa runner         | Passed, exit 0 on 2026-09-23                                          | `work/runtime-javarosa-mB21cw/report.json`; nested count changes kept a nonempty stable ID                |
+| Real Collect UI                 | Run 2026-09-23; finding 60 reproduced and corrected shape proved      | BlueStacks Pie64, Android 9, Collect v2026.3.4; full evidence is in the verification log                  |
+| Claude independent verification | Pending normal PR review                                              | Review URL and verdict                                                                                    |
 
-Do not close note 36 from the first three rows. No C10 test is claimed by this
-unit: C10.2/.3 also require mapping/Task/cardinality behavior, and C10.13 requires
-the real browser/phone delivery and Task-link workflow. Keep earlier carried
-notes and normal Salesforce CI approval requirements separate from these probes.
+Note 36 is answered for Collect and remains dependent on the earlier builder-only
+Enketo evidence until an authorized rerun. No C10 test is claimed: C10.2/.3 also
+require mapping/Task/cardinality behavior, and C10.13 requires real browser/phone
+delivery and Task-link workflow. Keep earlier carried notes and normal Salesforce
+CI approval requirements separate from these probes.
 
 Both tracked engine runs consumed exactly these compiled bytes:
 
-- `nested.xml`: SHA-256 `2c3d69141face5e0acae2a637e7024ae61a6b37c8a0db65b38fdd62af6bcc652`
-- `section.xml`: SHA-256 `f4fd514a1aa9737e131c6261598cbce960bf7352c1a6e24209dec207bc1d1117`
+- `nested.xml`: SHA-256 `d26c035155de12b57c23d9a020a3aa5fe071b4cfbcd2c9239d4a5bfa170abf5f`
+- `section.xml`: SHA-256 `38906385e643c4c453c0f2bf5a496586f7d298e65e855de0f8393ba898505e7b`
 
 Reports are local builder evidence, not Claude's verdict. The PR supplies the
 reviewed source commit. Re-run from that exact source after building the service;

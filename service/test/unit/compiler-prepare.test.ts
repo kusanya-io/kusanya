@@ -12,16 +12,16 @@ import {
   simpleForm,
 } from '../fixtures/compiler.js';
 
-// Captured from the unmodified compiler at bb292e6 before extracting preparation.
+// Updated for finding 60's conventional unprefixed metadata contract.
 // These fixed UTF-8 XML hashes protect against both consumers drifting together.
-const originalXmlHashes = {
-  mixed: '9bd28e3e4e8ac9016a965dd550176a47fabee6f2ca6e327bc1f75a59209a5d55',
-  nested: 'e116c155152d901e027a06d04bb0499c27a4e9fc39278c89752aa0d78d3ad83d',
-  scalars: '17d96e2ab852781988877eabb85c9ef2503641ecc2a4bc317b3091603ca2765e',
-  quoted: 'c27dafdba7e103118fb754f7b87ce5c814a8bc8c214d384d70ba1a612a09c877',
+const reviewedXmlHashes = {
+  mixed: 'c2e80f3641417435a7d6ffffcfe6bb52ba06acb12c80e7334426a56dcb658b00',
+  nested: 'e5a7445aed35b6c09a3cfce374dbe4f24053252c686662c21e9a8261a273c44d',
+  scalars: 'f2d7d53e03cc980409b274916ba6ae21ac1f255db90d02fadadef51d3f16ebc5',
+  quoted: '0d8520181c046ed70d42c85a9c6dc482cbd5f0c5d9cca567de1962e164419703',
 };
 
-void test('shared preparation preserves pre-refactor fixture XML bytes and public contract', () => {
+void test('shared preparation preserves reviewed fixture XML bytes and public contract', () => {
   for (const name of Object.keys(odkFixtures) as Array<
     keyof typeof odkFixtures
   >) {
@@ -40,7 +40,7 @@ void test('shared preparation preserves pre-refactor fixture XML bytes and publi
     assert.equal(rendered, compiled.xml);
     assert.equal(
       createHash('sha256').update(compiled.xml, 'utf8').digest('hex'),
-      originalXmlHashes[name],
+      reviewedXmlHashes[name],
       name,
     );
     assert.deepEqual(Object.keys(compiled).sort(), [
@@ -86,7 +86,7 @@ void test('preparation provides generated relevance, constraints and repeat refe
   ]);
   assert.deepEqual(prepared.warnings, [
     {
-      code: 'DYNAMIC_REPEAT_RETAINS_INSTANCES',
+      code: 'DYNAMIC_REPEAT_CLIENT_SPECIFIC',
       location: 'questions[3]',
     },
   ]);

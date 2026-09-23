@@ -203,14 +203,23 @@ try {
   assert.deepEqual(negative.errors, []);
   assert.deepEqual((await snapshot(negative.page, 'nested')).counts, [2, 2]);
   await negative.page.close();
-  const oldMetadata = fixtures.nested
-    .replaceAll('orx:meta', 'meta')
-    .replaceAll('orx:instanceID', 'instanceID');
+  const oldMetadata = fixtures.nested.replace(
+    'once(concat(&apos;uuid:&apos;, uuid()))',
+    'concat(&apos;uuid:&apos;, uuid())',
+  );
   assert.notEqual(oldMetadata, fixtures.nested);
   negative = await open(oldMetadata);
-  assert.ok(
-    negative.errors.some((error) => error.includes('Invalid XML')),
-    'Unqualified-metadata negative control must fail XML initialization',
+  assert.deepEqual(negative.errors, []);
+  const oldId = await snapshot(negative.page, 'nested');
+  assert.equal(oldId.instanceIds.length, 1);
+  await negative.page.close();
+  negative = await open(oldMetadata, oldId.xml);
+  assert.deepEqual(negative.errors, []);
+  const reloadedOldId = await snapshot(negative.page, 'nested');
+  assert.notDeepEqual(
+    reloadedOldId.instanceIds,
+    oldId.instanceIds,
+    'Bare UUID calculation must reproduce instanceID regeneration',
   );
   await negative.page.close();
   assert.deepEqual(browserErrors, [], 'No uncaught page errors');
@@ -227,7 +236,7 @@ try {
     browser: version,
     fixtures: manifest.files,
     results,
-    negativeControls: ['wrong-count-context', 'unqualified-metadata'],
+    negativeControls: ['wrong-count-context', 'bare-instance-id-calculation'],
     blockedRequests,
     collectUiTested: false,
     acceptanceTestsClaimed: [],

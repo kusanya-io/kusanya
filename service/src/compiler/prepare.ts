@@ -405,7 +405,7 @@ export function prepareForm(input: unknown): PreparationResult {
           '. >= 0',
           `. <= ${question.repeatMax ?? 1000}`,
         ]);
-        warnings.push({ code: 'DYNAMIC_REPEAT_RETAINS_INSTANCES', location });
+        warnings.push({ code: 'DYNAMIC_REPEAT_CLIENT_SPECIFIC', location });
       } else if (question.repeatMode === 'open') {
         if (
           question.repeatCount !== undefined ||

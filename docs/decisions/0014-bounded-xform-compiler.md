@@ -102,7 +102,7 @@ are unsupported rather than silently omitted.
 Fixed and answer-driven repeats use `jr:count` with `jr:noAddRemove`. This does
 not mean an answer-driven count shrinks existing data. ODK documents that reducing
 a count retains previously created instances. Each answer-driven repeat therefore
-emits `DYNAMIC_REPEAT_RETAINS_INSTANCES`. We do not add silent deletion or claim
+emits `DYNAMIC_REPEAT_CLIENT_SPECIFIC`. We do not add silent deletion or claim
 exact final submission counts. Hiding/removing surplus answers and validating
 ingested counts need a later unit and real client tests before C10.2/C10.3.
 This specification-driven limitation is explicit despite the brief's eventual

@@ -14,13 +14,13 @@ repeat counts or saved-instance reload. The earlier plan named Enketo Core 7.2.5
 from its old repository's release list; current packages live in the Enketo
 monorepo. Neither version is a deployed Kusanya server choice.
 
-Initial builder probes exposed two issues beyond the count question: Enketo's
-transformer did not recognize unqualified metadata below the compiler's
-`<data xmlns="">`, and the former renderer's unqualified-metadata/bare-UUID
-combination changed a JavaRosa instance's ID when its saved data was loaded.
-These observations motivate regressions; they are not independent verification
-or a Collect UI result. They do not isolate the missing `once()` as the cause:
-qualified metadata without that guard also retained the ID in the builder probe.
+Initial builder probes exposed a saved-instance ID regression when an unguarded
+UUID calculation was reloaded. They did not exercise the later-discovered Collect
+path where changing a nested repeat count clears a namespace-qualified metadata
+node. Real Collect v2026.3.4 evidence recorded as finding 60 supersedes this ADR's
+earlier qualified-metadata choice: two otherwise identical forms showed an empty
+qualified `instanceID` and a populated conventional unprefixed `instanceID` after
+the same nested count change.
 
 ## Decision
 
@@ -51,9 +51,9 @@ slf4j-api 1.7.33. Require explicit absolute Java and javac paths. The older
 JavaRosa 5.1.0 bundled in ODK Validate remains a separate parsing check.
 
 An engine probe is not Collect's Android UI, offline storage, navigation or
-submission behavior. A Bill-approved test device or emulator must run the same
-compiled fixtures in Collect before note 36 can close. No device access,
-installation, upgrade, data deletion or new hosting is authorized by this ADR.
+submission behavior. Bill has now supplied separate BlueStacks/Collect v2026.3.4
+evidence for nested count context, count reduction and finding 60. That approval
+does not authorize further device access, installation, upgrade or data deletion.
 
 ### Preserve repeat-context structure
 
@@ -77,12 +77,14 @@ with zero counts, independent outer instances, nested fixed helpers and a count
 in a sibling section. Include a deliberately wrong relative path as a negative
 control.
 
-### Qualified metadata and stable draft instance IDs
+### Conventional metadata and stable instance IDs
 
-Emit `orx:meta` and `orx:instanceID` using the already declared OpenRosa namespace,
-with bind nodeset `/data/orx:meta/orx:instanceID`. The form data tree deliberately
-has no namespace, so an unprefixed metadata node there is not XForms/OpenRosa
-metadata. Do not rely on a transformer to invent or repair it.
+Emit the conventional unprefixed `<meta><instanceID/></meta>` block with bind
+nodeset `/data/meta/instanceID`, matching XLSForm/pyxform output. Do not emit
+`orx:meta` or `orx:instanceID`: Collect can clear that qualified value when a
+nested counted repeat changes during entry, leaving a finalized submission without
+its deduplication identity. The root may retain the declared `orx` namespace for
+other OpenRosa vocabulary; declaration does not qualify these instance nodes.
 
 Use `once(concat('uuid:', uuid()))` for this generated metadata calculation.
 Compilation remains deterministic: the client creates the UUID when the value is
@@ -90,11 +92,12 @@ empty and preserves it on draft reload. This is an explicit defensive contract,
 not a claim that removing `once()` alone reproduces the old defect in JavaRosa.
 This generated expression does not add
 `once()` to the portable author-expression allowlist. Require separate new
-instances to have different IDs and unchanged draft instances to retain theirs;
-this does not define a future edit-of-finalized-submission protocol.
+instances to have different IDs, unchanged draft instances to retain theirs and a
+nested count change to leave the ID nonempty. This does not define a future
+edit-of-finalized-submission protocol.
 
 The [ODK metadata specification](https://getodk.github.io/xforms-spec/#metadata)
-describes qualified metadata and warns about recalculation on draft load;
+describes the conventional metadata block and warns about recalculation on draft load;
 [`once()`](https://getodk.github.io/xforms-spec/#fn:once) preserves an existing
 nonempty value.
 
@@ -104,8 +107,8 @@ Test count reductions after entering distinct synthetic answers, but report each
 engine's behavior separately. Enketo's count implementation removes trailing
 instances. Collect/JavaRosa can retain already-created instances, as described in
 [ODK's count-reduction guidance](https://docs.getodk.org/form-logic/#hiding-extra-repeats-when-the-repeat-count-is-reduced).
-The compiler warning about retained instances must not imply that both clients
-behave identically. No silent cross-client trimming or hiding policy is added.
+The compiler warning is `DYNAMIC_REPEAT_CLIENT_SPECIFIC` and must not imply that
+both clients behave identically. No silent cross-client trimming or hiding policy is added.
 Publication/ingestion cardinality rules need a later reviewed decision before
 exact-count acceptance tests can be claimed.
 

@@ -443,13 +443,13 @@ void test('renderer includes runtime instance ID metadata without compile-time r
   const xml = renderXForm(input, new Map(), []);
   assert.match(xml, /<data xmlns="" id="synthetic_form" version="1">/);
   assert.match(xml, /xmlns:orx="http:\/\/openrosa.org\/xforms"/);
-  assert.match(xml, /<orx:meta>\s+<orx:instanceID\/>\s+<\/orx:meta>/);
-  assert.doesNotMatch(xml, /<meta>|<instanceID/);
+  assert.match(xml, /<meta>\s+<instanceID\/>\s+<\/meta>/);
+  assert.doesNotMatch(xml, /<orx:meta>|<orx:instanceID/);
   assert.match(
     xml,
-    /<bind nodeset="\/data\/orx:meta\/orx:instanceID" type="string" readonly="true\(\)" calculate="once\(concat\(&apos;uuid:&apos;, uuid\(\)\)\)"\/>/,
+    /<bind nodeset="\/data\/meta\/instanceID" type="string" readonly="true\(\)" calculate="once\(concat\(&apos;uuid:&apos;, uuid\(\)\)\)"\/>/,
   );
-  assert.equal(xml.split('<orx:instanceID/>').length - 1, 1);
+  assert.equal(xml.split('<instanceID/>').length - 1, 1);
   assert.ok(xml.endsWith('</h:html>\n'));
   assert.equal(xml.includes('\r'), false);
   assert.equal(renderXForm(input, new Map(), []), xml);

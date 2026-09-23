@@ -95,7 +95,7 @@ void test('dynamic repeats advertise retained-instance limitation and constrain 
   const result = compileForm(mixedRepeatForm());
   assert.equal(result.ok, true);
   if (!result.ok) return;
-  assert.equal(result.warnings[0]?.code, 'DYNAMIC_REPEAT_RETAINS_INSTANCES');
+  assert.equal(result.warnings[0]?.code, 'DYNAMIC_REPEAT_CLIENT_SPECIFIC');
   assert.ok(result.xml.includes('. &gt;= 0'));
   assert.ok(result.xml.includes('. &lt;= 40'));
 });

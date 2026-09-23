@@ -20,9 +20,11 @@ as `76c9a20`, after log PR #28 merged as `b24d8a3`. Publication preflight passed
 #30 and merged as `91dbe8d`; its log PR #31 merged as `aab1c19`. The content-addressed
 publication package passed PR #32 and merged as `164f35b`; its log PR #33 merged as
 `92ec5d3`. The automatic validation unit passed PR #34 and merged as `308ff7f`; its
-log PR #35 merged as `aa80c5c`. The current bounded unit adds the concrete deadline-
-enforcing Salesforce REST Describe transport (ADR 0025). The builder does not issue
-its own gate verdict.
+log PR #35 merged as `aa80c5c`. The bounded Describe transport passed PR #36 and
+merged as `f48d788`; log PR #37 merged as `d9fce7e`. Collect evidence and finding 60
+were logged through PR #38 as `b62b8c9`. The current corrective unit fixes the
+merged compiler's Collect `instanceID` failure and client-specific repeat warning
+under amended ADR 0015. The builder does not issue its own gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
 | --------- | --------------------------------------------------------------------------- | ---------------------------------------------- |
@@ -83,11 +85,14 @@ Next units must complete compilation/runtime validation, immutable publication
 and draft deletion behavior, XLSForm round trips, reviewer delivery and CLI publication.
 No model unit claims C10 tests 10/12. Do not mark Phase 1 complete from model tests.
 
-The runtime-regression unit (ADR 0015) corrects qualified OpenRosa metadata and
-draft ID generation, and adds optional Enketo 9.0.1/JavaRosa 6.0.0 engine probes.
-Nested count contexts, draft reload and count-reduction differences are tested
-with synthetic forms. Actual Collect app testing remains outstanding, so note
-36 stays open. No C10 or publish-ready claim follows from these engine results.
+The runtime-regression unit (ADR 0015) adds optional Enketo 9.0.1/JavaRosa 6.0.0
+engine probes. Bill's later Collect v2026.3.4 emulator run confirmed nested count
+contexts and the count-reduction divergence, answering note 36 for Collect and
+confirming note 37. It also found that qualified metadata can lose `instanceID`
+after a nested count change. The finding 60 correction emits conventional
+unprefixed metadata, retains the guarded UUID calculation and changes the warning
+to `DYNAMIC_REPEAT_CLIENT_SPECIFIC`. Note 37 remains open for the later
+publication/ingestion cardinality rule. No C10 or publish-ready claim follows.
 
 The verified reviewer-print unit (ADR 0016) adds a
 pure static HTML renderer using shared compiler preparation and supplied mapping
