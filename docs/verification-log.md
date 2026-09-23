@@ -1865,3 +1865,13 @@ Finding 60, high severity for the product, in merged compiler output rather than
 The observable rule is that changing a nested repeat count clears the value of the namespace-prefixed metadata node, while an unprefixed root calculate in the same form keeps its value. Consequence: submissions for any form using nested counted repeats can reach a server with no submission identity, which breaks OpenRosa deduplication and edit semantics and would make ingestion unreliable. Bounded correction: emit the metadata block unprefixed as `<meta><instanceID/></meta>` with the bind `/data/meta/instanceID`, which is what XLSForm and pyxform produce, and add a compiler test asserting the unprefixed nodeset. Verified fix behaviour is recorded above. A runtime regression test should drive a nested counted repeat whose count changes and assert a non-empty `instanceID`.
 
 Notes ledger: note 36 is answered for Collect and still open for Enketo; note 37 is confirmed on the Collect side and stays open until a publication or ingestion rule is decided and tested in both engines; finding 60 is new and open. Notes 34, 39 remain open, note 52 is implemented, note 57 stays with Bill, and notes 47, 49, 50, 53, 55, 56, 58 and 59 remain informational.
+
+## 2026-09-23: note 57 closed; the ODK Validate pin matches ODK's published release
+
+With Bill's approval, the verifier made one read-only query to the public GitHub release metadata for `getodk/validate` at tag `v1.20.0`. Nothing was downloaded and no repository outside Kusanya was modified.
+
+The release publishes exactly one asset, `ODK-Validate-v1.20.0.jar`, released 8 January 2026, size 5,885,216 bytes, with digest `sha256:92756ea4aed195355a07e5572f025f0921a31282387a870ae63e1f5cdf37e0c3`.
+
+Three independent values now agree: the digest ODK publishes, the constant `odkValidate120Sha256` pinned in the merged `service/src/publication/odk-validate.ts`, and the SHA-256 of the JAR on the build machine, which is also 5,885,216 bytes. The concern behind note 57 was that the file and the pin shared one origin, the builder's download, so a wrong or tampered file would have produced a self-consistent but meaningless match. That is now excluded by an independent publisher-side value.
+
+Note 57 is closed. The ADR 0024 gate therefore runs the genuine reviewed ODK Validate 1.20.0, and any future change of pinned version must repeat this check against the publisher's digest.
