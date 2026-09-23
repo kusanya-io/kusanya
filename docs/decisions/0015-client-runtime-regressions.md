@@ -22,6 +22,11 @@ earlier qualified-metadata choice: two otherwise identical forms showed an empty
 qualified `instanceID` and a populated conventional unprefixed `instanceID` after
 the same nested count change.
 
+An earlier Enketo Transformer 4.2.0 builder probe rejected unprefixed metadata
+below `<data xmlns="">` with `Invalid XML`; the corrected bytes have not been
+rerun in Enketo, so that contradiction must be resolved before any Enketo-based
+claim, and notes 36 and 37 remain open on the Enketo side.
+
 ## Decision
 
 ### Separate source checks, engine probes and actual Collect evidence
@@ -160,11 +165,12 @@ negative controls and the count-reduction differences, not just pass totals.
 Retain author-only exclusion through compilation; future delivery serializers
 still need their own tests.
 
-No C10 acceptance test is claimed, and note 36 remains open pending actual Collect
-execution. Salesforce adapters, publication, target validation, XLSForm round
-trip, print view, CLI publish, Task integration and submission mapping remain
-outside this unit. All normal CI approval and independent-verification rules
-continue to apply; this ADR grants no additional scratch allocation.
+No C10 acceptance test is claimed. Collect evidence answers the Collect side of
+note 36 and confirms note 37, while both remain open for the corrected Enketo
+bytes. Salesforce adapters, publication, target validation, XLSForm round trip,
+print view, CLI publish, Task integration and submission mapping remain outside
+this unit. All normal CI approval and independent-verification rules continue to
+apply; this ADR grants no additional scratch allocation.
 
 ## Revisit when
 

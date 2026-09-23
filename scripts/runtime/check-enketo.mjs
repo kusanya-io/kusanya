@@ -100,6 +100,11 @@ try {
     await input.blur();
   }
   for (const [kind, xml] of Object.entries(fixtures)) {
+    assert.match(
+      xml,
+      /<meta>\s*<instanceID\/>\s*<\/meta>/,
+      `${kind}: fixture must use corrected unprefixed metadata`,
+    );
     let { page, errors } = await open(xml);
     assert.deepEqual(errors, [], `${kind}: no initialization errors`);
     const first = await snapshot(page, kind);
@@ -111,7 +116,11 @@ try {
     );
     assert.equal(first.onceCount, 1);
     assert.equal(first.authorNoteLeaked, false);
-    assert.equal(first.instanceIds.length, 1);
+    assert.equal(
+      first.instanceIds.length,
+      1,
+      `${kind}: corrected unprefixed metadata must initialize with exactly one instanceID`,
+    );
     assert.match(first.instanceIds[0], /^uuid:[0-9a-f-]{36}$/i);
     const countPath =
       kind === 'nested'
