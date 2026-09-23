@@ -449,7 +449,7 @@ test('new Apex uses local references, responsibility headers and API 64 without 
   );
 });
 
-test('permission sets grant only this model and never grant setup or collector access', () => {
+test('permission sets grant only scoped definition access and never setup or collector access', () => {
   for (const [name, canWrite, canDelete] of [
     ['Kusanya_Admin', true, true],
     ['Kusanya_Integration', true, false],
@@ -473,7 +473,10 @@ test('permission sets grant only this model and never grant setup or collector a
       assert.equal(tag(grant, 'allowCreate'), String(canWrite));
       assert.equal(tag(grant, 'allowEdit'), String(canWrite));
       assert.equal(tag(grant, 'allowDelete'), String(canDelete));
-      assert.equal(tag(grant, 'viewAllRecords'), 'false');
+      assert.equal(
+        tag(grant, 'viewAllRecords'),
+        String(name !== 'Kusanya_Admin'),
+      );
       assert.equal(tag(grant, 'modifyAllRecords'), 'false');
     }
     const fieldGrants = [

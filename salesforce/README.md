@@ -5,7 +5,9 @@ Phase 1 slice added Folder, Form and Form Version with version identity/validati
 The subsequent unit added Question (sections/repeats), Choice List, Choice and Skip
 Rule. The current unit adds Mapping and Field Mapping definitions with integrity
 triggers and synthetic model tests. No collection, mapping execution,
-authentication, compiler, publishing or C10 capability is claimed. See
+authentication, external publishing or C10 capability is claimed. ADR 0026 adds
+an internal, bounded user-mode definition snapshot reader; it exposes no endpoint
+and performs no publication write. See
 [the data model](../docs/data-model.md) and ADRs 0009/0010/0013 for exact limitations.
 
 Question tree updates validate the entire affected version and protect partial-DML

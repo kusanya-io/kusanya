@@ -1,6 +1,6 @@
 # ADR 0011: Object-scoped definition reads before Phase 2
 
-- Status: Accepted design decision; permission implementation deferred
+- Status: Accepted; implemented by ADR 0026 pending independent verification
 - Date: 2026-09-14
 - Brief sections: C2, C4 sharing and permissions, C8, C11 Phase 2, C12
 - Decision owner: Cobitech Solutions
@@ -50,11 +50,12 @@ definitions allowed by that collector's work, never arbitrary draft definitions
 or Author Notes. Object Read All cannot replace service authorization or field
 allowlisting. A connection's access must never cross Salesforce orgs/tenants.
 
-**This PR records the decision only.** The permission sets continue to have
-`viewAllRecords=false` and `modifyAllRecords=false` on the seven original objects
-and the two mapping objects added in ADR 0013. No users,
-assignments, shares or org security settings are created or changed. Note 24's
-runtime access gap stays open until the follow-up implementation and tests pass.
+ADR 0026 implements this decision by setting `viewAllRecords=true` and retaining
+`modifyAllRecords=false` on the seven original objects and the two mapping objects
+for Integration and Supervisor only. It adds the internal user-mode reader and the
+required distinct-principal tests without assigning users or creating shares.
+Note 24 closes only after those effective-access tests pass independent review in
+a real org.
 
 ## Alternatives considered
 

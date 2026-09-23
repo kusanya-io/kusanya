@@ -166,3 +166,13 @@ deadline requirement without selecting or storing tenant OAuth credentials. Note
 remains open until a tenant-bound authenticated connection, definition reader and
 refusing publisher are composed and reviewed. No Salesforce metadata, dependency,
 workflow, harness, Enketo or Android boundary changes in this unit.
+
+The current definition-snapshot unit (ADR 0026) implements ADR 0011's narrow
+definition-only View All policy for Integration and Supervisor and adds an internal
+`with sharing`, user-mode reader for one bounded Form Version graph. Salesforce
+IDs are resolved internally and replaced with deterministic snapshot identities
+before the existing compiler/mapping shapes are returned. It adds no external
+endpoint, OAuth selection, credential storage, lifecycle mutation or publication
+write. Note 24 closes only after real-org effective-access verification; note 34
+advances through definition loading but remains open for the authenticated refusing
+publisher and its remaining connection requirements. No C10 test is claimed.
