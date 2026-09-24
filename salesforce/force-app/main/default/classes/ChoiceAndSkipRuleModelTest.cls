@@ -74,7 +74,7 @@ private class ChoiceAndSkipRuleModelTest {
         Integer queryCount = Limits.getQueries();
         Integer dmlCount = Limits.getDmlStatements();
         insert choices;
-        Assert.areEqual(queryCount, Limits.getQueries());
+        Assert.areEqual(queryCount + 3, Limits.getQueries());
         Assert.areEqual(dmlCount + 1, Limits.getDmlStatements());
         List<Choice__c> saved = [
             SELECT Choice_Key__c
@@ -293,7 +293,7 @@ private class ChoiceAndSkipRuleModelTest {
         Integer queries = Limits.getQueries();
         Integer dml = Limits.getDmlStatements();
         insert rules;
-        Assert.areEqual(queries + 1, Limits.getQueries());
+        Assert.areEqual(queries + 2, Limits.getQueries());
         Assert.areEqual(dml + 1, Limits.getDmlStatements());
         Assert.areEqual(200, [SELECT COUNT() FROM Skip_Rule__c]);
     }

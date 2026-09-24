@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
     <deploymentStatus>Deployed</deploymentStatus>
-    <description>Root form definition and current-version pointer. Publishing and lifecycle enforcement are not implemented by this schema slice.</description>
+    <description>Root form definition whose lifecycle-owned current-version pointer is advanced only by an atomic publication commit.</description>
     <enableActivities>false</enableActivities>
     <enableFeeds>false</enableFeeds>
     <enableHistory>false</enableHistory>

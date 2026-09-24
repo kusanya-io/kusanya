@@ -2,12 +2,11 @@
 
 Phase 0 supplies the Developer scratch definition and runtime smoke test. The first
 Phase 1 slice added Folder, Form and Form Version with version identity/validation.
-The subsequent unit added Question (sections/repeats), Choice List, Choice and Skip
-Rule. The current unit adds Mapping and Field Mapping definitions with integrity
-triggers and synthetic model tests. No collection, mapping execution,
-authentication, external publishing or C10 capability is claimed. ADR 0026 adds
-an internal, bounded user-mode definition snapshot reader; it exposes no endpoint
-and performs no publication write. See
+The subsequent units added the complete definition graph and its bounded portable
+snapshot reader. ADR 0027 adds an internal, user-mode publication commit that binds
+two caller-owned Salesforce Files and the canonical package digest atomically,
+then freezes the published source graph. It exposes no endpoint and does not choose
+OAuth credentials, upload artifacts, execute mappings or claim C10. See
 [the data model](../docs/data-model.md) and ADRs 0009/0010/0013 for exact limitations.
 
 Question tree updates validate the entire affected version and protect partial-DML
@@ -22,7 +21,8 @@ direct Question batches with outside question dependants. Two additional probes
 protect Mapping/Field Mapping references (three fixed queries, no DML).
 Form/Form Version cascades bypass it; the deletion tests cover that
 platform distinction and partial-DML retries. Source conversion is not a deploy
-test. Full publication/version deletion protection remains deferred.
+test. Published/Superseded definitions are now protected by ADR 0027;
+submission-aware retention and draft recovery remain deferred.
 
 Form and direct Form Version deletion first remove only their target-owned skip
 rules (one query, at most one all-or-none child delete), then allow the native

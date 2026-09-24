@@ -385,14 +385,14 @@ private class FieldMappingDefinitionModelTest {
         Integer queries = Limits.getQueries();
         Integer statements = Limits.getDmlStatements();
         insert fields;
-        Assert.areEqual(2, Limits.getQueries() - queries);
+        Assert.areEqual(3, Limits.getQueries() - queries);
         Assert.areEqual(1, Limits.getDmlStatements() - statements);
         for (Field_Mapping__c field : fields)
             field.Transform__c = 'text_truncate';
         queries = Limits.getQueries();
         statements = Limits.getDmlStatements();
         update fields;
-        Assert.areEqual(2, Limits.getQueries() - queries);
+        Assert.areEqual(3, Limits.getQueries() - queries);
         Assert.areEqual(1, Limits.getDmlStatements() - statements);
         Test.stopTest();
     }

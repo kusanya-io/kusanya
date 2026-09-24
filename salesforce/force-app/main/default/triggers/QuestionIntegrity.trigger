@@ -7,6 +7,9 @@ trigger QuestionIntegrity on Question__c(
   before update,
   before delete
 ) {
+  PublishedDefinitionGuard.protectQuestions(
+    Trigger.isDelete ? Trigger.old : Trigger.new
+  );
   if (Trigger.isDelete) {
     QuestionIntegrityHandler.validateDeletion(Trigger.oldMap);
   } else {

@@ -152,11 +152,21 @@ per-request and attempt-wide deadlines. The adapter stores no credential and mak
 no tenant OAuth decision; tenant binding, encrypted token persistence and the
 refusing publisher remain future boundaries.
 
-Private definition ownership still blocks cross-owner integration/supervisor reads.
-ADR 0011 records a future object-scoped read-all policy, not a current permission
-grant. A reviewed implementation with effective-access tests must precede any
-Phase 2 definition reader. Read access, publishing write authorization and collector
-task/tenant authorization remain distinct boundaries.
+ADR 0026 implements the narrow ADR 0011 definition-only View All policy and an
+internal user-mode reader that translates one Salesforce definition graph into the
+portable compiler shapes without exporting record IDs. Integration and Supervisor
+can read cross-owner definitions; Supervisor remains read-only and neither role has
+Modify All. Read access, publication write authorization and collector task/tenant
+authorization remain distinct boundaries.
+
+ADR 0027 adds the internal Salesforce commit boundary for two already-uploaded,
+caller-owned artifacts and the canonical ADR 0023 package digest. Locked user-mode
+reads and all-or-none writes link the files, store audit metadata, supersede the
+prior version and advance the Form under one savepoint. Exact retries perform no
+DML; trigger-private authorization prevents direct lifecycle changes, and the full
+Published/Superseded definition graph is immutable. This is not an endpoint or
+artifact upload, retention or delivery implementation: the future authenticated
+publisher must still validate and upload the exact bytes before calling it.
 
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure

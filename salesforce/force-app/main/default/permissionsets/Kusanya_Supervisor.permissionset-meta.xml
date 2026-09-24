@@ -73,6 +73,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>false</editable>
+        <field>Form_Version__c.Publication_Digest__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
         <field>Form_Version__c.Version_Key__c</field>
         <readable>true</readable>
     </fieldPermissions>

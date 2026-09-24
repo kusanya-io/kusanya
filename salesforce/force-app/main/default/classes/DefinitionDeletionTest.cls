@@ -19,7 +19,7 @@ private class DefinitionDeletionTest {
         Integer queriesBefore = Limits.getQueries();
         Integer dmlBefore = Limits.getDmlStatements();
         delete first;
-        Assert.areEqual(queriesBefore + 1, Limits.getQueries());
+        Assert.areEqual(queriesBefore + 2, Limits.getQueries());
         Assert.areEqual(dmlBefore + 2, Limits.getDmlStatements());
         Assert.areEqual(1, [SELECT COUNT() FROM Form__c]);
         Assert.areEqual(1, [SELECT COUNT() FROM Form_Version__c]);
@@ -65,7 +65,7 @@ private class DefinitionDeletionTest {
         Integer queriesBefore = Limits.getQueries();
         Integer dmlBefore = Limits.getDmlStatements();
         delete form;
-        Assert.areEqual(queriesBefore + 1, Limits.getQueries());
+        Assert.areEqual(queriesBefore + 3, Limits.getQueries());
         Assert.areEqual(dmlBefore + 2, Limits.getDmlStatements());
         Assert.areEqual(0, [SELECT COUNT() FROM Form__c]);
         Assert.areEqual(0, [SELECT COUNT() FROM Skip_Rule__c]);
@@ -158,7 +158,7 @@ private class DefinitionDeletionTest {
         Integer queriesBefore = Limits.getQueries();
         Integer dmlBefore = Limits.getDmlStatements();
         delete forms;
-        Assert.areEqual(queriesBefore + 1, Limits.getQueries());
+        Assert.areEqual(queriesBefore + 3, Limits.getQueries());
         Assert.areEqual(dmlBefore + 2, Limits.getDmlStatements());
         Assert.areEqual(0, [SELECT COUNT() FROM Form__c]);
         Assert.areEqual(0, [SELECT COUNT() FROM Form_Version__c]);

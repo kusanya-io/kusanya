@@ -387,7 +387,7 @@ private class MappingDefinitionModelTest {
         update definition;
         Integer queriesBefore = Limits.getQueries();
         update repeat;
-        Assert.areEqual(queriesBefore + 4, Limits.getQueries());
+        Assert.areEqual(queriesBefore + 5, Limits.getQueries());
         Assert.areEqual(
             'text',
             [SELECT Type__c FROM Question__c WHERE Id = :repeat.Id].Type__c
@@ -404,7 +404,7 @@ private class MappingDefinitionModelTest {
         Integer queriesBefore = Limits.getQueries();
         Integer dmlBefore = Limits.getDmlStatements();
         insert definitions;
-        Assert.areEqual(queriesBefore + 3, Limits.getQueries());
+        Assert.areEqual(queriesBefore + 4, Limits.getQueries());
         Assert.areEqual(dmlBefore + 1, Limits.getDmlStatements());
         for (Integer index = 1; index < definitions.size(); index++) {
             definitions[index].Parent_Mapping__c = definitions[index - 1].Id;
@@ -413,7 +413,7 @@ private class MappingDefinitionModelTest {
         queriesBefore = Limits.getQueries();
         dmlBefore = Limits.getDmlStatements();
         update definitions;
-        Assert.areEqual(queriesBefore + 3, Limits.getQueries());
+        Assert.areEqual(queriesBefore + 4, Limits.getQueries());
         Assert.areEqual(dmlBefore + 1, Limits.getDmlStatements());
         Assert.areEqual(200, [SELECT COUNT() FROM Mapping__c]);
     }
