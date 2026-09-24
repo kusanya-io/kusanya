@@ -1,6 +1,6 @@
 # ADR 0015: Client runtime regression probes
 
-- Status: Accepted; instance-namespace correction proposed in ADR 0028
+- Status: Accepted; namespace corrected by ADR 0028 and cardinality policy selected by ADR 0029
 - Date: 2026-09-16
 - Brief sections: C2, C3.6/.19, C4, C5, C11 Phase 1, C12
 - Decision owner: Cobitech Solutions
@@ -30,7 +30,7 @@ parse. Removing only the reset let the instance inherit the XForms namespace;
 Transformer then retained the existing unprefixed metadata and initialized the
 form. The same candidate passed JavaRosa 6.0.0 and a real Collect v2026.3.4 device
 run, including a nested count change and a populated finalized `instanceID`.
-ADR 0028 records the correction and the exact-source verification still required.
+ADR 0028 records the correction and its completed exact-source verification.
 
 ## Decision
 
@@ -117,16 +117,17 @@ describes the conventional metadata block and warns about recalculation on draft
 [`once()`](https://getodk.github.io/xforms-spec/#fn:once) preserves an existing
 nonempty value.
 
-### Observe count reduction without inventing a data-loss policy
+### Observe count reduction and defer policy to the ingestion boundary
 
 Test count reductions after entering distinct synthetic answers, but report each
 engine's behavior separately. Enketo's count implementation removes trailing
 instances. Collect/JavaRosa can retain already-created instances, as described in
 [ODK's count-reduction guidance](https://docs.getodk.org/form-logic/#hiding-extra-repeats-when-the-repeat-count-is-reduced).
 The compiler warning is `DYNAMIC_REPEAT_CLIENT_SPECIFIC` and must not imply that
-both clients behave identically. No silent cross-client trimming or hiding policy is added.
-Publication/ingestion cardinality rules need a later reviewed decision before
-exact-count acceptance tests can be claimed.
+both clients behave identically. ADR 0029 now makes the submitted count
+authoritative during ingestion, excludes trailing instances beyond it and retains
+the raw submission for audit. This ADR continues to record the engine observation;
+it does not retroactively make the clients' raw payloads equivalent.
 
 ### Local, bounded and separate from credentialed verification
 
@@ -170,17 +171,17 @@ licence requirement.
 ## Consequences and verification
 
 The [runtime runbook](../runtime-validation.md) separates source evidence, engine
-results and actual-device evidence. Finding 70's isolated candidate has passed
-Enketo, JavaRosa and Collect; ADR 0028 requires the tracked source, browser probe
-and ODK Validate gate to agree on the exact reviewed bytes before the finding can
-close. Record negative controls and the count-reduction differences, not just pass
-totals. Retain author-only exclusion through compilation; future delivery
-serializers still need their own tests.
+results and actual-device evidence. Finding 70's corrected source passed Enketo,
+JavaRosa, Collect and ODK Validate at the independently reviewed ADR 0028 head.
+Record negative controls and the count-reduction differences, not just pass totals.
+Retain author-only exclusion through compilation; future delivery serializers
+still need their own tests.
 
-No C10 acceptance test is claimed. Exact-source verification under ADR 0028 can
-answer note 36's Enketo initialization/runtime boundary. Note 37 remains open
-until a publication or ingestion rule resolves the confirmed count-reduction
-difference. Salesforce adapters, publication, target validation, XLSForm round
+No C10 acceptance test is claimed. ADR 0028 answered note 36's Enketo
+initialization/runtime boundary. ADR 0029 selects the count-reduction rule and
+can answer note 37 at the pure policy boundary after independent verification,
+but the ingestion acceptance tests remain future work. Salesforce adapters,
+publication, target validation, XLSForm round
 trip, print view, CLI publish, Task integration and submission mapping remain
 outside this unit. All normal CI approval and independent-verification rules
 continue to apply; this ADR grants no additional scratch allocation.

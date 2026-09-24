@@ -67,9 +67,9 @@ HTML to collectors or respondents.
 Answer-driven repeats use compiler warning code
 `DYNAMIC_REPEAT_CLIENT_SPECIFIC`. The print explanation states the observed client
 difference: Collect/JavaRosa retains existing instances; the Enketo probe removes
-trailing answered rows. It makes no promise of equivalent final counts or data
-retention. Collect evidence has since answered note 36 for nested count context;
-note 37 remains open for the publication/ingestion cardinality decision. This unit
+trailing answered rows. ADR 0029 now makes the submitted count authoritative for
+normalized Answers and mapping, excludes trailing instances beyond it and retains
+the raw submission for audit. The raw client payloads remain different. This unit
 claims no C10 acceptance test, CLI publish capability or completed Phase 1 gate.
 
 ## Mapping snapshot

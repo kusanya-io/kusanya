@@ -163,7 +163,7 @@ export function renderPrintView(
         put(`<li>${code(warning.context)}: ${code(warning.code)}`);
         if (warning.code === 'DYNAMIC_REPEAT_CLIENT_SPECIFIC')
           put(
-            '<p>Count reduction is client-specific: JavaRosa retains existing instances; the Enketo probe removes trailing answered rows. Final counts and data retention are not equivalent. A publication/ingestion rule remains required.</p>',
+            '<p>Count reduction is client-specific: Collect can retain trailing answered rows while Enketo removes them. Kusanya uses the submitted count as authoritative during ingestion and excludes trailing instances beyond that count; the raw submission remains retained for audit.</p>',
           );
         put('</li>');
       }

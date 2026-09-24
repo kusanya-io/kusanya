@@ -72,6 +72,13 @@ null namespace, while metadata stays conventional and unprefixed. The same candi
 initializes in Enketo, passes JavaRosa and ODK Validate, and has separate Collect
 device evidence; exact-head independent verification remains the unit gate.
 
+ADR 0029 makes a submitted dynamic-repeat count authoritative across clients.
+The pure normalizer retains the first `N` instances per parent context, excludes
+Collect's possible trailing retained rows from later Answers/mapping, refuses
+missing or ambiguous cardinality, and leaves the raw submission untouched for
+audit. Publication package schema 2 pins this as `submitted-count-v1`; XML parsing,
+durable submission storage and target writes remain later ingestion work.
+
 The [reviewer-only print view](print-view.md) shares the compiler's prepared
 graph and expressions, and adds a strict supplied-mapping summary (ADR 0016).
 It emits static escaped HTML with fixed print CSS and no external resources.
