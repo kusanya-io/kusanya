@@ -1,6 +1,6 @@
 # ADR 0023: Content-addressed publication package
 
-- Status: Accepted design decision; implementation awaiting independent verification
+- Status: Accepted; package schema advanced by ADR 0029
 - Date: 2026-09-18
 - Brief sections: C3.12/.16 foundation, C4 Form Version artifacts, C5 publish snapshot, C11 Phase 1
 - Decision owner: Cobitech Solutions
@@ -35,7 +35,7 @@ list from normalized snapshot object names, not mapping spelling, so canonical
 Salesforce response casing is retained. This answers note 51 only at the package
 boundary; authoring mappings continue to preserve exactly what the author saved.
 
-Success produces canonical JSON with schema version 1 and kind
+Success originally produced canonical JSON with schema version 1 and kind
 `kusanya-publication-package`. Both the manifest and returned result are labelled
 `publisher-only`, because they contain author annotations and target metadata and
 must never be served as collector or reviewer content. The package contains:
@@ -46,6 +46,12 @@ must never be served as collector or reviewer content. The package contains:
 - canonical normalized target-schema JSON and its SHA-256;
 - canonical target-object names; and
 - compiler and target-validation warnings.
+
+ADR 0029 advances the package to schema version 2 and adds the exact
+`submissionPolicy.dynamicRepeatCardinality` marker `submitted-count-v1`. The
+marker binds the later ingestion adapter to the reviewed repeat-cardinality rule
+and participates in the package digest. No version-1 production package exists
+that requires migration.
 
 Object keys in package and target-schema JSON use code-unit ordering. The overall
 package identity is the lowercase SHA-256 of the exact UTF-8 package JSON. A helper

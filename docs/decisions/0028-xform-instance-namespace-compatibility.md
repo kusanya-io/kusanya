@@ -1,6 +1,6 @@
 # ADR 0028: XForm instance namespace compatibility
 
-- Status: Proposed; implementation awaiting independent verification
+- Status: Accepted and independently verified
 - Date: 2026-09-24
 - Brief sections: C2, C3.6, C3.19, C5, C11 Phase 1, C12
 - Decision owner: Cobitech Solutions
@@ -59,7 +59,7 @@ The exact compiler output reviewed in this unit must pass:
 Engine and device evidence remains synthetic runtime evidence. It does not prove
 server delivery, Tasks, mappings, ingestion, authentication or any C10 acceptance
 test. Enketo's removal of answered rows after a count reduction and Collect's
-retention of them remain a genuine client difference governed by note 37.
+retention of them remain a genuine client difference governed by ADR 0029.
 
 ### Keep the tooling isolated
 
@@ -88,11 +88,11 @@ changes fixture hashes and any ADR 0023 package digest derived from it. Compilat
 remains deterministic, and no previously published production artifact exists in
 this repository that requires migration.
 
-Finding 70 closes only after independent verification of the exact reviewed head.
-That verification must run the ordinary suites, ODK Validate, the Enketo probe and
-the JavaRosa probe, and must compare the generated source with the device-tested
-candidate. A successful verdict answers note 36 at this compiler/runtime boundary.
-Note 37 remains open for the later publication/ingestion cardinality decision.
+Independent verification of the exact reviewed head ran the ordinary suites, ODK
+Validate, the Enketo probe and the JavaRosa probe, and matched the generated source
+to the device-tested candidate. Finding 70 is closed and note 36 is answered at
+this compiler/runtime boundary. ADR 0029 selects the later ingestion-cardinality
+rule for note 37.
 
 This unit makes no C10, deployed-Enketo, publish-ready or Phase 1 completion claim.
 Notes 34, 37, 39 and 69 and the carried operational notes are unchanged.
@@ -101,4 +101,4 @@ Notes 34, 37, 39 and 69 and the carried operational notes are unchanged.
 
 The selected Enketo or Collect version changes, the XForm root namespace changes,
 metadata nodes or their bind change, a delivery serializer rewrites namespaces, or
-the product adopts a reviewed count-reduction policy.
+the reviewed count-reduction policy changes.

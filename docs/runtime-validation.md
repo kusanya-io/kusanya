@@ -4,13 +4,11 @@ This optional local runbook covers synthetic repeat and saved-instance regressio
 under [ADR 0015](decisions/0015-client-runtime-regressions.md). It is not a
 Salesforce run, deployment, publication approval or C10 acceptance claim.
 
-**Evidence status:** the first authorized Enketo run reproduced finding 70 against
-the merged null-namespace bytes. The ADR 0028 candidate removes only that namespace
-reset. Its exact generated hashes pass the tracked Enketo and JavaRosa probes and
-ODK Validate 1.20.0. Claude also proved the candidate on Bill's BlueStacks Pie64
-emulator with Android 9 and Collect v2026.3.4: nested counts expanded correctly and
-the finalized submission retained a populated `instanceID`. Independent review of
-the exact source head remains required before finding 70 or note 36 closes.
+**Evidence status:** independent exact-head verification of ADR 0028 closed finding
+70 and answered note 36. The corrected hashes passed Enketo, JavaRosa and ODK
+Validate 1.20.0, and the nested fixture was byte-identical to the candidate Claude
+proved on Bill's BlueStacks Pie64 emulator with Android 9 and Collect v2026.3.4.
+ADR 0029 separately governs the confirmed count-reduction difference.
 
 ## Targets and boundaries
 
@@ -171,9 +169,10 @@ status. Do not transfer deliberately broken forms to a user's Collect project.
 
 Enketo natively removes trailing repeats when counts decrease; Collect/JavaRosa
 can retain instances. Compiler warning `DYNAMIC_REPEAT_CLIENT_SPECIFIC` records
-that divergence without choosing a policy. Do not claim final submission
-cardinality or introduce data deletion to make the engines appear equivalent. A
-future reviewed publication/ingestion policy must resolve that product requirement.
+that divergence. ADR 0029 makes the submitted count authoritative during later
+ingestion and excludes trailing instances from normalized Answers/mapping while
+retaining the raw submission. The engine probes continue to report raw behavior;
+they do not themselves prove the ingestion boundary or C10.2/.3.
 
 ## Collect emulator check and repeat procedure
 

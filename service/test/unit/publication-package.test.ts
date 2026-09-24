@@ -21,6 +21,7 @@ interface PackageShape {
   authoring: { json: string; sha256: string };
   kind: string;
   schemaVersion: number;
+  submissionPolicy: { dynamicRepeatCardinality: string };
   targetObjects: string[];
   targetSchema: { json: string; sha256: string };
   warnings: { code: string; location: string }[];
@@ -121,15 +122,19 @@ void test('builds a self-contained content-addressed package using canonical Des
     'authoring',
     'kind',
     'schemaVersion',
+    'submissionPolicy',
     'targetObjects',
     'targetSchema',
     'warnings',
     'xform',
     'xlsform',
   ]);
-  assert.equal(packaged.schemaVersion, 1);
+  assert.equal(packaged.schemaVersion, 2);
   assert.equal(packaged.kind, 'kusanya-publication-package');
   assert.equal(packaged.audience, 'publisher-only');
+  assert.deepEqual(packaged.submissionPolicy, {
+    dynamicRepeatCardinality: 'submitted-count-v1',
+  });
   assert.deepEqual(packaged.targetObjects, ['Visit__c']);
   assert.equal(packaged.authoring.sha256, sha256(packaged.authoring.json));
   assert.equal(packaged.xform.sha256, sha256(packaged.xform.xml));

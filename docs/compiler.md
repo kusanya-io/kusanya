@@ -177,9 +177,11 @@ repeat; referencing it does not duplicate it.
 
 Every answer-driven repeat returns warning `DYNAMIC_REPEAT_CLIENT_SPECIFIC`.
 Reducing the count retains prior answered instances in Collect but removes trailing
-answered instances in the Enketo probe. No automatic trimming, extra-instance
-hiding or server-side exact-count check is implemented here. Keep this warning
-visible; do not claim C10.2 or C10.3 from `jr:count` alone. See
+answered instances in the Enketo probe. ADR 0029 makes the submitted count
+authoritative at the later ingestion boundary: normalized Answers and mapping use
+only the first `N` instances per parent context, while the raw submission remains
+retained for audit. The compiler itself does not trim instance XML. Keep this
+warning visible; do not claim C10.2 or C10.3 from `jr:count` alone. See
 [ODK's count-reduction guidance](https://docs.getodk.org/form-logic/#hiding-extra-repeats-when-the-repeat-count-is-reduced).
 
 This warning describes ODK/JavaRosa, not equivalent behavior in every client:

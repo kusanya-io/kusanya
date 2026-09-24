@@ -7,6 +7,7 @@ import { exportXlsFormWorkbook } from '../interchange/xlsx-workbook.js';
 import type { DescribeObject } from './salesforce-describe.js';
 import type { ValidateXForm } from './odk-validate.js';
 import { preflightPublicationDetails } from './preflight.js';
+import { dynamicRepeatCardinalityPolicy } from '../submission/repeat-cardinality.js';
 
 const maxTargetSchemaJson = 8_000_000;
 const maxPackageJson = 8_000_000;
@@ -217,12 +218,15 @@ export async function createPublicationPackage(
     const warnings = immutableDiagnostics(preflight.warnings);
     const packageJson = canonicalJson(
       {
-        schemaVersion: 1,
+        schemaVersion: 2,
         kind: 'kusanya-publication-package',
         audience: 'publisher-only',
         authoring: { json: authoring.json, sha256: authoringSha256 },
         targetSchema: { json: targetSchemaJson, sha256: targetSchemaSha256 },
         targetObjects,
+        submissionPolicy: {
+          dynamicRepeatCardinality: dynamicRepeatCardinalityPolicy,
+        },
         warnings,
         xform: { xml: preflight.xml, sha256: preflight.xformSha256 },
         xlsform: {

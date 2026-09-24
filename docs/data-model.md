@@ -200,6 +200,13 @@ state and API-use counters. Tenant-scoped keys, uniqueness, migration rollback a
 retention constraints will be designed and tested before adding the first tables.
 Salesforce refresh credentials must be encrypted at rest with rotatable keys.
 
+ADR 0029 defines the future Answer cardinality boundary for dynamic repeats. The
+submitted count is authoritative per enclosing repeat instance; trailing physical
+rows beyond it are excluded from normalized Answers and mapped child records, a
+deficit or invalid count fails closed, and the raw XML remains retained separately.
+Publication package schema 2 pins the rule as `submitted-count-v1`. This unit does
+not add Submission/Answer objects or perform ingestion DML.
+
 No credentials or raw production seed records may become automated test fixtures.
 
 ## Portable compiler boundary

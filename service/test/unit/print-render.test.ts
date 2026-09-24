@@ -271,8 +271,9 @@ void test('compiler warnings use canonical paths and explain the client-specific
   assert.equal(warnings[0]!.code, 'DYNAMIC_REPEAT_CLIENT_SPECIFIC');
   assert.ok(html.includes('/data/visit/students'));
   assert.ok(html.includes('Count reduction is client-specific'));
-  assert.ok(html.includes('JavaRosa retains existing instances'));
-  assert.ok(html.includes('Enketo probe removes trailing answered rows'));
+  assert.ok(html.includes('submitted count as authoritative'));
+  assert.ok(html.includes('excludes trailing instances beyond that count'));
+  assert.ok(html.includes('raw submission remains retained for audit'));
 });
 
 void test('invalid/unsupported definitions and malformed mapping summaries return diagnostics with no partial HTML', () => {
