@@ -183,7 +183,7 @@ export function renderXForm(
   line(3, '<instance>');
   line(
     4,
-    `<data xmlns=""${attr('id', graph.definition.form.key)}${attr('version', String(graph.definition.form.version))}>`,
+    `<data${attr('id', graph.definition.form.key)}${attr('version', String(graph.definition.form.version))}>`,
   );
   renderCounts('/data', 5);
   for (const root of graph.roots) instance(root, 5);
