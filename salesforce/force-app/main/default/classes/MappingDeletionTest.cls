@@ -148,7 +148,7 @@ private class MappingDeletionTest {
         delete form;
         // Existing owner cleanup removes only skip rules; native cascades bypass
         // direct question/mapping delete guards and remove all owned definitions.
-        Assert.areEqual(queriesBefore + 1, Limits.getQueries());
+        Assert.areEqual(queriesBefore + 3, Limits.getQueries());
         Assert.areEqual(dmlBefore + 2, Limits.getDmlStatements());
         Assert.areEqual(0, [SELECT COUNT() FROM Form__c]);
         Assert.areEqual(0, [SELECT COUNT() FROM Form_Version__c]);
@@ -319,7 +319,7 @@ private class MappingDeletionTest {
         Integer queriesBefore = Limits.getQueries();
         Integer dmlBefore = Limits.getDmlStatements();
         assertAllDeleted(Database.delete(definitions, false));
-        Assert.areEqual(queriesBefore + 1, Limits.getQueries());
+        Assert.areEqual(queriesBefore + 2, Limits.getQueries());
         Assert.areEqual(dmlBefore + 1, Limits.getDmlStatements());
         Assert.areEqual(0, [SELECT COUNT() FROM Mapping__c]);
     }

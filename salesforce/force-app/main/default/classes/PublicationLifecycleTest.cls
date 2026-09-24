@@ -80,12 +80,13 @@ private class PublicationLifecycleTest {
             ];
             Assert.areEqual('Published', savedForm.Status__c);
             Assert.areEqual(second.Id, savedForm.Current_Version__c);
+            Set<Id> publishedVersionIds = new Set<Id>{ first.Id, second.Id };
             Assert.areEqual(
                 4,
                 [
                     SELECT COUNT()
                     FROM ContentDocumentLink
-                    WHERE LinkedEntityId IN :new Set<Id>{ first.Id, second.Id }
+                    WHERE LinkedEntityId IN :publishedVersionIds
                 ]
             );
         }

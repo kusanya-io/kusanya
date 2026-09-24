@@ -167,13 +167,22 @@ public with sharing class PublicationLifecycle {
                     AccessLevel.USER_MODE
                 );
 
-                Datetime committedAt = System.now();
+                Datetime committedAt = Datetime.newInstance(
+                    System.now().getTime() / 1000 * 1000
+                );
+                List<Form_Version__c> expectedVersions = new List<Form_Version__c>();
                 List<Form_Version__c> versionUpdates = new List<Form_Version__c>();
                 if (!published.isEmpty()) {
                     Form_Version__c previous = published[0]
                         .clone(true, true, false, false);
                     previous.Status__c = 'Superseded';
-                    versionUpdates.add(previous);
+                    expectedVersions.add(previous);
+                    versionUpdates.add(
+                        new Form_Version__c(
+                            Id = previous.Id,
+                            Status__c = 'Superseded'
+                        )
+                    );
                 }
                 Form_Version__c committed = target.clone(
                     true,
@@ -189,9 +198,22 @@ public with sharing class PublicationLifecycle {
                 committed.Published_By__c = UserInfo.getUserId();
                 committed.Published_At__c = committedAt;
                 committed.Publication_Digest__c = publicationDigest;
-                versionUpdates.add(committed);
+                expectedVersions.add(committed);
+                versionUpdates.add(
+                    new Form_Version__c(
+                        Id = committed.Id,
+                        Status__c = 'Published',
+                        XForm__c = committed.XForm__c,
+                        XLSForm__c = committed.XLSForm__c,
+                        Compiled_At__c = committedAt,
+                        Compile_Warnings__c = compileWarnings,
+                        Published_By__c = UserInfo.getUserId(),
+                        Published_At__c = committedAt,
+                        Publication_Digest__c = publicationDigest
+                    )
+                );
 
-                authorizeVersions(versionUpdates);
+                authorizeVersions(expectedVersions);
                 Database.update(versionUpdates, true, AccessLevel.USER_MODE);
 
                 Form__c publishedForm = form.clone(true, true, false, false);

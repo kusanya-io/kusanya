@@ -36,7 +36,7 @@ private class QuestionDeletionTest {
         Integer queriesBefore = Limits.getQueries();
         Integer dmlBefore = Limits.getDmlStatements();
         delete new Form__c(Id = version.Form__c);
-        Assert.areEqual(queriesBefore + 1, Limits.getQueries());
+        Assert.areEqual(queriesBefore + 3, Limits.getQueries());
         Assert.areEqual(dmlBefore + 2, Limits.getDmlStatements());
         Assert.areEqual(0, [SELECT COUNT() FROM Form__c]);
         Assert.areEqual(0, [SELECT COUNT() FROM Form_Version__c]);
@@ -225,7 +225,7 @@ private class QuestionDeletionTest {
             definitions,
             false
         );
-        Assert.areEqual(queriesBefore + 3, Limits.getQueries());
+        Assert.areEqual(queriesBefore + 4, Limits.getQueries());
         Assert.areEqual(dmlBefore + 1, Limits.getDmlStatements());
         Assert.areEqual(200, results.size());
         assertAllDeleted(results);

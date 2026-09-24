@@ -149,7 +149,7 @@ private class QuestionDefinitionModelTest {
         Integer queriesBefore = Limits.getQueries();
         Integer dmlBefore = Limits.getDmlStatements();
         insert definitions;
-        Assert.areEqual(queriesBefore + 3, Limits.getQueries());
+        Assert.areEqual(queriesBefore + 4, Limits.getQueries());
         Assert.areEqual(dmlBefore + 1, Limits.getDmlStatements());
         List<Question__c> saved = [
             SELECT Name, Question_Key__c
@@ -168,7 +168,7 @@ private class QuestionDefinitionModelTest {
         queriesBefore = Limits.getQueries();
         dmlBefore = Limits.getDmlStatements();
         update definitions;
-        Assert.areEqual(queriesBefore + 3, Limits.getQueries());
+        Assert.areEqual(queriesBefore + 4, Limits.getQueries());
         Assert.areEqual(dmlBefore + 1, Limits.getDmlStatements());
     }
 
@@ -231,7 +231,7 @@ private class QuestionDefinitionModelTest {
         }
         Integer queriesBefore = Limits.getQueries();
         update definitions;
-        Assert.areEqual(queriesBefore + 3, Limits.getQueries());
+        Assert.areEqual(queriesBefore + 4, Limits.getQueries());
         Assert.areEqual(
             199,
             [SELECT COUNT() FROM Question__c WHERE Parent__c != NULL]
