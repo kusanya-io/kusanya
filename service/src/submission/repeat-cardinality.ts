@@ -259,8 +259,17 @@ export function normalizeRepeatCardinality(
       node: MutableSubmissionNode,
       parent: QuestionNode | undefined,
       context: ReadonlyMap<string, number>,
+      knownScope = true,
     ): MutableSubmissionNode => {
       if (!('children' in node)) return node;
+      if (!knownScope)
+        return {
+          name: node.name,
+          children: node.children.map((child) =>
+            normalize(child, undefined, context, false),
+          ),
+          location: node.location,
+        };
       const groups = new Map<string, MutableSubmissionNode[]>();
       for (const child of node.children) {
         const definition = definitionFor(child.name);
@@ -343,7 +352,9 @@ export function normalizeRepeatCardinality(
           repeatContext.set(child.name, ordinal);
           nextContext = repeatContext;
         }
-        children.push(normalize(child, definition, nextContext));
+        children.push(
+          normalize(child, definition, nextContext, definition !== undefined),
+        );
       }
       return { name: node.name, children, location: node.location };
     };

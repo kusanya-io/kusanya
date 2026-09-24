@@ -36,6 +36,49 @@ function family(count: string, members: string[]): SubmissionNode {
   ]);
 }
 
+function rootDynamicForm(): FormDefinition {
+  return simpleForm([
+    question('row_count', {
+      type: 'integer',
+      minimum: 0,
+      maximum: 2,
+      order: 1,
+    }),
+    question('rows', {
+      type: 'repeat',
+      repeatMode: 'from_answer',
+      repeatSourceQuestion: 'row_count',
+      repeatMax: 2,
+      order: 2,
+    }),
+    question('answer', { parent: 'rows' }),
+  ]);
+}
+
+void test('root dynamic repeats preserve canonical metadata and unknown groups', () => {
+  const input = group('data', [
+    value('row_count', '1'),
+    group('rows', [
+      value('answer', 'kept'),
+      group('extension', [value('external', 'retained')]),
+    ]),
+    group('meta', [value('instanceID', 'uuid:synthetic')]),
+    group('empty_extension', []),
+  ]);
+  const result = normalizeRepeatCardinality(rootDynamicForm(), input);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.submission, input);
+  assert.equal(names(result.submission, 'rows').length, 1);
+  assert.deepEqual(names(result.submission, 'instanceID'), [
+    value('instanceID', 'uuid:synthetic'),
+  ]);
+  assert.deepEqual(names(result.submission, 'external'), [
+    value('external', 'retained'),
+  ]);
+  assert.equal(names(result.submission, 'empty_extension').length, 1);
+});
+
 void test('submitted counts trim retained Collect rows independently per parent', () => {
   const input = group('data', [
     value('once_note', 'visit'),

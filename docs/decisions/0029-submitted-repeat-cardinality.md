@@ -92,9 +92,9 @@ authoritative-count rule, trailing-instance exclusion and raw-payload retention.
 
 Unit tests cover per-parent and root-scoped counts, nested dynamic repeats, zero,
 surplus and deficit rows, malformed counts, fixed-repeat preservation, excluded
-outer branches, unknown nodes, immutability, determinism, hostile shapes and
-resource bounds. Publication-package tests require schema version 2 and the exact
-policy marker.
+outer branches, unknown leaf and group nodes (including canonical metadata),
+immutability, determinism, hostile shapes and resource bounds.
+Publication-package tests require schema version 2 and the exact policy marker.
 
 This decision answers note 37 at the policy and pure-normalization boundary after
 independent verification. It is only a foundation for C10.2 and C10.3: neither
