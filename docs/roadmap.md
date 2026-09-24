@@ -24,9 +24,10 @@ log PR #35 merged as `aa80c5c`. The bounded Describe transport passed PR #36 and
 merged as `f48d788`; log PR #37 merged as `d9fce7e`. Collect evidence and finding 60
 were logged through PR #38 as `b62b8c9`. The Collect `instanceID` correction passed
 in PR #40 and its log merged in PR #41. Scoped definition snapshots passed in PR
-#42 and their log merged in PR #43. The current unit implements the bounded atomic
-Salesforce publication commit under ADR 0027. The builder does not issue its own
-gate verdict.
+#42 and their log merged in PR #43. The atomic Salesforce publication commit passed
+PR #44 and merged as `eebd88d`; log PR #45 merged as `9b44ad3`. The current unit
+corrects finding 70's XForm instance namespace under ADR 0028. The builder does not
+issue its own gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
 | --------- | --------------------------------------------------------------------------- | ---------------------------------------------- |
@@ -94,17 +95,21 @@ contexts and the count-reduction divergence, answering note 36 for Collect and
 confirming note 37. It also found that qualified metadata can lose `instanceID`
 after a nested count change. The finding 60 correction emits conventional
 unprefixed metadata, retains the guarded UUID calculation and changes the warning
-to `DYNAMIC_REPEAT_CLIENT_SPECIFIC`. Note 37 remains open for the later
-publication/ingestion cardinality rule. No C10 or publish-ready claim follows.
+to `DYNAMIC_REPEAT_CLIENT_SPECIFIC`. The first authorized Enketo run then exposed
+finding 70: the separate `xmlns=""` reset made Transformer inject malformed
+metadata. ADR 0028 removes only that reset, preserving the Collect correction.
+Note 37 remains open for the later publication/ingestion cardinality rule. No C10
+or publish-ready claim follows.
 
 The verified reviewer-print unit (ADR 0016) adds a
 pure static HTML renderer using shared compiler preparation and supplied mapping
 summaries. Author-only annotations remain distinct from collector help and XML.
 Synthetic 144-node rendering is not the real C10 fixture or a phase gate.
-Note 38 is answered by a verified source tripwire for optional probe isolation; normal dependencies,
-CI and the harness are unchanged. Notes 36/37 remain open, including Bill's
-device/emulator decision and the cross-client count-reduction policy. Claude's
-Enketo reproduction still requires Bill's optional-install authorization.
+Note 38 is answered by a verified source tripwire for optional probe isolation;
+normal dependencies, CI and the harness are unchanged. Bill authorized the isolated
+Enketo installation and the first run produced finding 70. Note 36 awaits the ADR
+0028 exact-head verdict; note 37 remains open for the cross-client count-reduction
+policy.
 
 The verified authoring-interchange unit (ADR 0017) adds canonical JSON snapshots
 and an XLSForm-style table projection with full
@@ -187,3 +192,10 @@ one current Published version, supersedes the prior one and freezes the complete
 published definition graph. Exact retries are no-DML and mismatches refuse. It adds
 no external endpoint, OAuth selection, artifact upload/delivery, target write or
 CLI, so notes 34 and 39 remain open and no C10 test is claimed.
+
+The current instance-namespace correction (ADR 0028, issue #46) removes the
+`xmlns=""` reset from the generated `<data>` root while retaining conventional
+unprefixed metadata and the guarded UUID calculation. The same candidate shape has
+Enketo, JavaRosa, ODK Validate and real Collect evidence. Exact-head independent
+verification is still required before finding 70 or note 36 closes. Note 37 and
+all publication, delivery and storage boundaries remain outside this unit.

@@ -1,6 +1,6 @@
 # ADR 0015: Client runtime regression probes
 
-- Status: Accepted design decision; implementation awaiting independent verification
+- Status: Accepted; instance-namespace correction proposed in ADR 0028
 - Date: 2026-09-16
 - Brief sections: C2, C3.6/.19, C4, C5, C11 Phase 1, C12
 - Decision owner: Cobitech Solutions
@@ -22,10 +22,15 @@ earlier qualified-metadata choice: two otherwise identical forms showed an empty
 qualified `instanceID` and a populated conventional unprefixed `instanceID` after
 the same nested count change.
 
-An earlier Enketo Transformer 4.2.0 builder probe rejected unprefixed metadata
-below `<data xmlns="">` with `Invalid XML`; the corrected bytes have not been
-rerun in Enketo, so that contradiction must be resolved before any Enketo-based
-claim, and notes 36 and 37 remain open on the Enketo side.
+The first authorized Enketo Transformer 4.2.0 run established that the apparent
+client conflict was caused by the instance root's `xmlns=""` reset, not by the
+unprefixed metadata. Transformer did not recognize the null-namespace metadata,
+injected an undeclared `xf:meta` block and left a model that Enketo Core could not
+parse. Removing only the reset let the instance inherit the XForms namespace;
+Transformer then retained the existing unprefixed metadata and initialized the
+form. The same candidate passed JavaRosa 6.0.0 and a real Collect v2026.3.4 device
+run, including a nested count change and a populated finalized `instanceID`.
+ADR 0028 records the correction and the exact-source verification still required.
 
 ## Decision
 
@@ -90,6 +95,12 @@ nodeset `/data/meta/instanceID`, matching XLSForm/pyxform output. Do not emit
 nested counted repeat changes during entry, leaving a finalized submission without
 its deduplication identity. The root may retain the declared `orx` namespace for
 other OpenRosa vocabulary; declaration does not qualify these instance nodes.
+
+The instance `<data>` root must inherit the document's default XForms namespace.
+Do not emit `xmlns=""` on that element: the reset moves the instance and metadata
+into the null namespace, causing Transformer 4.2.0 to inject malformed replacement
+metadata. This namespace rule and the unprefixed metadata rule are complementary,
+not competing client-specific alternatives.
 
 Use `once(concat('uuid:', uuid()))` for this generated metadata calculation.
 Compilation remains deterministic: the client creates the UUID when the value is
@@ -159,18 +170,20 @@ licence requirement.
 ## Consequences and verification
 
 The [runtime runbook](../runtime-validation.md) separates source evidence, engine
-results and the outstanding device check. Both tracked engine runners passed
-locally; have Claude reproduce them through the normal PR process. Record
-negative controls and the count-reduction differences, not just pass totals.
-Retain author-only exclusion through compilation; future delivery serializers
-still need their own tests.
+results and actual-device evidence. Finding 70's isolated candidate has passed
+Enketo, JavaRosa and Collect; ADR 0028 requires the tracked source, browser probe
+and ODK Validate gate to agree on the exact reviewed bytes before the finding can
+close. Record negative controls and the count-reduction differences, not just pass
+totals. Retain author-only exclusion through compilation; future delivery
+serializers still need their own tests.
 
-No C10 acceptance test is claimed. Collect evidence answers the Collect side of
-note 36 and confirms note 37, while both remain open for the corrected Enketo
-bytes. Salesforce adapters, publication, target validation, XLSForm round trip,
-print view, CLI publish, Task integration and submission mapping remain outside
-this unit. All normal CI approval and independent-verification rules continue to
-apply; this ADR grants no additional scratch allocation.
+No C10 acceptance test is claimed. Exact-source verification under ADR 0028 can
+answer note 36's Enketo initialization/runtime boundary. Note 37 remains open
+until a publication or ingestion rule resolves the confirmed count-reduction
+difference. Salesforce adapters, publication, target validation, XLSForm round
+trip, print view, CLI publish, Task integration and submission mapping remain
+outside this unit. All normal CI approval and independent-verification rules
+continue to apply; this ADR grants no additional scratch allocation.
 
 ## Revisit when
 

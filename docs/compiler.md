@@ -7,9 +7,10 @@ claimed, including tests 10 and 12. Design decisions are in
 [ADR 0014](decisions/0014-bounded-xform-compiler.md).
 
 [ADR 0015](decisions/0015-client-runtime-regressions.md) adds optional real-engine
-regressions and corrects metadata for client initialization/draft reload. See the
-[runtime runbook](runtime-validation.md). Enketo/JavaRosa results are not an
-actual Collect app result; note 36 remains open.
+regressions and corrects metadata for client initialization/draft reload. ADR 0028
+keeps the instance in the default XForms namespace so the same metadata initializes
+in Enketo and Collect. See the [runtime runbook](runtime-validation.md). Engine
+results are not an actual Collect app result or a C10 acceptance claim.
 
 ## API and quick check
 
@@ -135,6 +136,11 @@ be cleared after a nested count change. Compilation itself remains deterministic
 This does not define editing an already-submitted record, and does not add `once()`
 to the authored-expression grammar.
 
+The `<data>` instance root does not reset the default namespace. It inherits the
+XForms namespace declared on the document root, allowing Transformer 4.2.0 to
+recognize and retain the unprefixed metadata. Restoring `xmlns=""` reproduces
+finding 70's malformed injected metadata and Enketo initialization failure.
+
 Nonempty defaults are supported for text-like, numeric and select types. Numeric
 defaults must satisfy authored bounds; select values must exist (multi-select uses
 distinct space-separated tokens). Nonempty date/media/spatial defaults are not
@@ -187,9 +193,11 @@ root-absolute counts. The existing paths are retained. Each repeat's labelled
 wrapper has `ref` equal to its `nodeset`; JavaRosa's relative count resolution
 depends on that context. Tests cover separate outer instances, zero counts,
 draft reload and intentionally incorrect paths. Bill's BlueStacks run with Collect
-v2026.3.4 confirms that nested relative counts evaluate per outer instance, so the
-Collect half of note 36 is answered. The verifier has not rerun the optional Enketo
-probe; no C10.2/.3 claim follows.
+v2026.3.4 confirms that nested relative counts evaluate per outer instance. The
+finding 70 candidate also passed Collect with the namespace reset removed, while
+the tracked Enketo probe passes the same generated fixture hashes. Note 36 closure
+still requires independent verification of the exact reviewed source head; no
+C10.2/.3 claim follows.
 
 ## Expression grammar
 

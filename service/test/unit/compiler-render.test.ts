@@ -441,7 +441,8 @@ void test('renderer includes runtime instance ID metadata without compile-time r
     { name: 'q', type: 'text', order: 1, label: 'Question' },
   ]);
   const xml = renderXForm(input, new Map(), []);
-  assert.match(xml, /<data xmlns="" id="synthetic_form" version="1">/);
+  assert.match(xml, /<data id="synthetic_form" version="1">/);
+  assert.doesNotMatch(xml, /<data\b[^>]*\sxmlns=""/);
   assert.match(xml, /xmlns:orx="http:\/\/openrosa.org\/xforms"/);
   assert.match(xml, /<meta>\s+<instanceID\/>\s+<\/meta>/);
   assert.doesNotMatch(xml, /<orx:meta>|<orx:instanceID/);

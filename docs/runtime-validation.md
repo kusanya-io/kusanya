@@ -4,12 +4,13 @@ This optional local runbook covers synthetic repeat and saved-instance regressio
 under [ADR 0015](decisions/0015-client-runtime-regressions.md). It is not a
 Salesforce run, deployment, publication approval or C10 acceptance claim.
 
-**Evidence status:** both tracked engine probes passed locally on 2026-09-16 for
-the former qualified-metadata bytes. On 2026-09-23 Bill authorized a BlueStacks
-Pie64 emulator running Android 9 and Collect v2026.3.4; Claude confirmed nested
-count context and count-reduction behavior and found the qualified `instanceID`
-failure recorded as finding 60. The corrected bytes passed the tracked JavaRosa
-probe; the Enketo tooling remains uninstalled and unapproved.
+**Evidence status:** the first authorized Enketo run reproduced finding 70 against
+the merged null-namespace bytes. The ADR 0028 candidate removes only that namespace
+reset. Its exact generated hashes pass the tracked Enketo and JavaRosa probes and
+ODK Validate 1.20.0. Claude also proved the candidate on Bill's BlueStacks Pie64
+emulator with Android 9 and Collect v2026.3.4: nested counts expanded correctly and
+the finalized submission retained a populated `instanceID`. Independent review of
+the exact source head remains required before finding 70 or note 36 closes.
 
 ## Targets and boundaries
 
@@ -162,7 +163,9 @@ and serialized/reloaded data, not only standalone XPath results. Author Notes
 must remain absent while collector Hint text remains present.
 
 Negative controls must demonstrate that the probes detect a wrong nested count
-path and the previous metadata/ID defects, as applicable to each engine. A
+path and the previous metadata/ID defects, as applicable to each engine. Enketo
+restores the null-namespace reset and must report `Invalid XML`; JavaRosa removes
+the guarded `once()` calculation and must regenerate the identifier on reload. A
 negative control's expected failure is separate from the positive suite's exit
 status. Do not transfer deliberately broken forms to a user's Collect project.
 
@@ -186,9 +189,12 @@ The 2026-09-23 run used Bill's approved BlueStacks Pie64 emulator, Android 9 and
 Collect v2026.3.4. It confirmed per-parent nested counts and retained answered rows
 after reduction. It also produced finding 60: changing a nested count could clear
 the former qualified `orx:instanceID`, while the otherwise identical conventional
-unprefixed metadata retained its UUID. No continuing device access, installation,
-upgrade or deletion is implied. A different client version requires a recorded
-test-matrix change, not an unlabelled substitution.
+unprefixed metadata retained its UUID. Claude later ran the finding 70 candidate on
+the same real Collect boundary: removing `xmlns=""` parsed successfully, nested
+counts expanded during entry and finalization retained a populated instance ID.
+No continuing device access, installation, upgrade or deletion is implied. A
+different client version requires a recorded test-matrix change, not an unlabelled
+substitution.
 
 With that approval, use a dedicated offline synthetic-test project and no real
 collector credentials. Bill controls any USB debugging authorization. Official
@@ -227,24 +233,26 @@ when finished, following [ODK's ADB safety guidance](https://docs.getodk.org/col
 
 ## Evidence record
 
-| Check                           | Result                                                                | Evidence to record                                                                                        |
-| ------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Final source/unit suite         | 216/216 service tests; lint/typecheck passed                          | Includes the metadata and warning regression assertions; no engine test is counted as a service unit test |
-| Tracked Enketo runner           | Former bytes passed 2026-09-16; corrected bytes pending authorization | Optional dependencies remain uninstalled; no new compatibility claim                                      |
-| Tracked JavaRosa runner         | Passed, exit 0 on 2026-09-23                                          | `work/runtime-javarosa-mB21cw/report.json`; nested count changes kept a nonempty stable ID                |
-| Real Collect UI                 | Run 2026-09-23; finding 60 reproduced and corrected shape proved      | BlueStacks Pie64, Android 9, Collect v2026.3.4; full evidence is in the verification log                  |
-| Claude independent verification | Pending normal PR review                                              | Review URL and verdict                                                                                    |
+| Check                           | Result                                                         | Evidence to record                                                                            |
+| ------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Final source/unit suite         | Service 216/216; targeted renderer 10/10 passed                | Includes namespace, metadata and warning regressions; engine tests are not service unit tests |
+| ODK Validate 1.20.0             | Six candidate fixtures accepted; two negative controls refused | Reviewed JAR SHA-256 `92756ea4`; both exact runtime fixtures parse                            |
+| Tracked Enketo runner           | Passed, exit 0, Chromium 153.0.8010.53                         | `work/runtime-enketo-82D6HG/report.json`; null-namespace negative reproduces `Invalid XML`    |
+| Tracked JavaRosa runner         | Passed, exit 0, JavaRosa 6.0.0                                 | `work/runtime-javarosa-g6ukde/report.json`; count changes kept a nonempty stable ID           |
+| Real Collect UI                 | Finding 70 candidate proved after the earlier finding 60 run   | BlueStacks Pie64, Android 9, Collect v2026.3.4; verifier evidence is attached to issue #46    |
+| Claude independent verification | Pending exact-head PR review                                   | Review URL and verdict                                                                        |
 
-Note 36 is answered for Collect and remains dependent on the earlier builder-only
-Enketo evidence until an authorized rerun. No C10 test is claimed: C10.2/.3 also
+Note 36 is answered for Collect and has matching authorized Enketo candidate
+evidence, but remains open until exact-head independent verification. No C10 test
+is claimed: C10.2/.3 also
 require mapping/Task/cardinality behavior, and C10.13 requires real browser/phone
 delivery and Task-link workflow. Keep earlier carried notes and normal Salesforce
 CI approval requirements separate from these probes.
 
 Both tracked engine runs consumed exactly these compiled bytes:
 
-- `nested.xml`: SHA-256 `d26c035155de12b57c23d9a020a3aa5fe071b4cfbcd2c9239d4a5bfa170abf5f`
-- `section.xml`: SHA-256 `38906385e643c4c453c0f2bf5a496586f7d298e65e855de0f8393ba898505e7b`
+- `nested.xml`: SHA-256 `1f040f016e182f2fa9525f46e2c19cd1fc74d843f8422bf2ee5a72c6383c75b3`
+- `section.xml`: SHA-256 `b7fed74296c2f74140b525c9206ce46734ba80620dc35d7ffe486ca86bb70f60`
 
 Reports are local builder evidence, not Claude's verdict. The PR supplies the
 reviewed source commit. Re-run from that exact source after building the service;

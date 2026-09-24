@@ -66,6 +66,12 @@ publication/ingestion policy still needs a decision and tests. Unsupported
 configured options fail explicitly rather than being silently removed. No Collect,
 Enketo or C10 compatibility claim is made from XML generation alone.
 
+ADR 0028 corrects the generated instance namespace after finding 70. The `<data>`
+root inherits the document's default XForms namespace instead of resetting to the
+null namespace, while metadata stays conventional and unprefixed. The same candidate
+initializes in Enketo, passes JavaRosa and ODK Validate, and has separate Collect
+device evidence; exact-head independent verification remains the unit gate.
+
 The [reviewer-only print view](print-view.md) shares the compiler's prepared
 graph and expressions, and adds a strict supplied-mapping summary (ADR 0016).
 It emits static escaped HTML with fixed print CSS and no external resources.

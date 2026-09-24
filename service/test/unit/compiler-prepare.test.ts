@@ -12,13 +12,13 @@ import {
   simpleForm,
 } from '../fixtures/compiler.js';
 
-// Updated for finding 60's conventional unprefixed metadata contract.
+// Updated for findings 60 and 70's conventional metadata and namespace contract.
 // These fixed UTF-8 XML hashes protect against both consumers drifting together.
 const reviewedXmlHashes = {
-  mixed: 'c2e80f3641417435a7d6ffffcfe6bb52ba06acb12c80e7334426a56dcb658b00',
-  nested: 'e5a7445aed35b6c09a3cfce374dbe4f24053252c686662c21e9a8261a273c44d',
-  scalars: 'f2d7d53e03cc980409b274916ba6ae21ac1f255db90d02fadadef51d3f16ebc5',
-  quoted: '0d8520181c046ed70d42c85a9c6dc482cbd5f0c5d9cca567de1962e164419703',
+  mixed: 'f6db291543fab191283c10b2ff295c90830de9df8c90cdae9e18c4279fa5f3cd',
+  nested: '640dff3dfe85c23ee982dbcc0d4b626d5b88f3d47aeb566e055b76c8812b67f3',
+  scalars: '29f4a1ba3fd6bfdcafafe663adf9371ab917ac5809d63f376d47e2d40cb904b4',
+  quoted: 'fc41cf5c8cac426f020d3ca52ce4c18c6c44b91bf70a2d70d0e4d23494ad0d55',
 };
 
 void test('shared preparation preserves reviewed fixture XML bytes and public contract', () => {

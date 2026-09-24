@@ -100,6 +100,11 @@ try {
     await input.blur();
   }
   for (const [kind, xml] of Object.entries(fixtures)) {
+    assert.doesNotMatch(
+      xml,
+      /<data\b[^>]*\sxmlns=""/,
+      `${kind}: instance root must inherit the XForms namespace`,
+    );
     assert.match(
       xml,
       /<meta>\s*<instanceID\/>\s*<\/meta>/,
@@ -212,23 +217,13 @@ try {
   assert.deepEqual(negative.errors, []);
   assert.deepEqual((await snapshot(negative.page, 'nested')).counts, [2, 2]);
   await negative.page.close();
-  const oldMetadata = fixtures.nested.replace(
-    'once(concat(&apos;uuid:&apos;, uuid()))',
-    'concat(&apos;uuid:&apos;, uuid())',
-  );
-  assert.notEqual(oldMetadata, fixtures.nested);
-  negative = await open(oldMetadata);
-  assert.deepEqual(negative.errors, []);
-  const oldId = await snapshot(negative.page, 'nested');
-  assert.equal(oldId.instanceIds.length, 1);
-  await negative.page.close();
-  negative = await open(oldMetadata, oldId.xml);
-  assert.deepEqual(negative.errors, []);
-  const reloadedOldId = await snapshot(negative.page, 'nested');
-  assert.notDeepEqual(
-    reloadedOldId.instanceIds,
-    oldId.instanceIds,
-    'Bare UUID calculation must reproduce instanceID regeneration',
+  const nullNamespace = fixtures.nested.replace('<data ', '<data xmlns="" ');
+  assert.notEqual(nullNamespace, fixtures.nested);
+  negative = await open(nullNamespace);
+  assert.match(
+    negative.errors.join('\n'),
+    /Invalid XML/,
+    'Null-namespace instance must reproduce finding 70',
   );
   await negative.page.close();
   assert.deepEqual(browserErrors, [], 'No uncaught page errors');
@@ -245,7 +240,7 @@ try {
     browser: version,
     fixtures: manifest.files,
     results,
-    negativeControls: ['wrong-count-context', 'bare-instance-id-calculation'],
+    negativeControls: ['wrong-count-context', 'null-instance-namespace'],
     blockedRequests,
     collectUiTested: false,
     acceptanceTestsClaimed: [],
