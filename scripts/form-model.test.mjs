@@ -30,6 +30,8 @@ const objects = {
     'Status__c',
     'XForm__c',
     'XLSForm__c',
+    'XForm_Version__c',
+    'XLSForm_Version__c',
     'Compiled_At__c',
     'Compile_Warnings__c',
     'Published_By__c',
@@ -193,6 +195,12 @@ test('model ownership and file pointers use the documented metadata contracts', 
     assert.equal(tag(xml, 'type'), 'Text');
     assert.equal(tag(xml, 'length'), '18');
     assert.match(tag(xml, 'description'), /ContentDocument/);
+  }
+  for (const field of ['XForm_Version__c', 'XLSForm_Version__c']) {
+    const xml = read(`objects/Form_Version__c/fields/${field}.field-meta.xml`);
+    assert.equal(tag(xml, 'type'), 'Text');
+    assert.equal(tag(xml, 'length'), '18');
+    assert.match(tag(xml, 'description'), /ContentVersion/);
   }
   for (const [object, field, length] of [
     ['Form_Version__c', 'Version_Key__c', '28'],
