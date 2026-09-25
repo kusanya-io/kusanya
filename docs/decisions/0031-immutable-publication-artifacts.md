@@ -43,12 +43,14 @@ non-latest version so a caller cannot publish a stale selection accidentally.
 
 ### Prevent loss of committed artifacts
 
-Small before-delete triggers on `ContentVersion` and `ContentDocument`, plus a
-before-delete trigger on `ContentDocumentLink`, call one system-reading,
-no-DML guard. The guard rejects deletion of a pinned version, deletion of its
-parent document, or removal of either required link. It uses static errors and
-does not reveal file, publication or caller-supplied identities. Unreferenced
-files and links remain governed by ordinary Salesforce behavior.
+Salesforce refuses direct `ContentVersion` deletion before Apex can run, so this
+unit installs no unreachable version-deletion trigger and does not credit one for
+retention. Small before-delete triggers on `ContentDocument` and
+`ContentDocumentLink` call one system-reading, no-DML guard. The guard rejects
+deletion of a pinned version's parent document or removal of either required
+link. It uses static errors and does not reveal file, publication or
+caller-supplied identities. Unreferenced files and links remain governed by
+ordinary Salesforce behavior.
 
 System-mode relationship reads are intentional. File visibility must not let a
 principal bypass retention of a publication record it cannot see. The existing
@@ -58,8 +60,9 @@ published Form Version deletion guard ensures references cannot be removed first
 
 Neither ADR 0027 nor this unit hashes `VersionData`, and `Publication_Digest__c`
 remains the digest of the canonical ADR 0023 package supplied by the caller. The
-new version IDs prevent later drift and the triggers prevent loss; they do not
-prove that the bytes initially uploaded under those IDs matched that package.
+new version IDs prevent later drift; Salesforce's direct-version deletion refusal
+and the document/link guards prevent loss. They do not prove that the bytes
+initially uploaded under those IDs matched that package.
 
 The future authenticated publisher must upload the exact package artifacts,
 download or otherwise verify the exact stored versions against the locally held
@@ -85,10 +88,11 @@ attestation warning remains an explicit requirement for that publisher.
 
 Hosted Apex tests must prove initial commit and replacement, exact no-DML retry,
 wrong object/extension/owner and non-latest refusal, distinct documents, stable
-old-version bytes after a newer version is added, and refusal of pinned version,
-document and link deletion. They must also prove an unpinned document remains
-deletable. Existing publication rollback, access and definition-immutability tests
-remain in force.
+old-version bytes after a newer version is added, guarded refusal of pinned
+document and link deletion, and that an unpinned document remains deletable. A
+platform API probe must separately prove Salesforce's refusal of direct version
+deletion because Apex does not permit that delete DML to compile. Existing
+publication rollback, access and definition-immutability tests remain in force.
 
 This unit changes Salesforce metadata and therefore needs the ordinary protected
 scratch-org gate. It changes no dependency, lockfile, workflow, harness pin,

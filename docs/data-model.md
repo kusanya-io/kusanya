@@ -27,9 +27,10 @@ query/DML loops. The key must not be exported as portable identity.
 
 XForm/XLSForm fields hold linked ContentDocument IDs as text; companion Version
 fields pin the exact immutable ContentVersion IDs. ADR 0031 permits newer document
-versions without changing the pin and refuses deletion or unlinking of committed
+versions without changing the pin. Salesforce refuses direct version deletion;
+Kusanya guards refuse deletion of pinned documents and unlinking of committed
 artifacts. The exact ADR 0023 package digest is stored separately, but neither the
-lifecycle nor the retention guard hashes large file bodies in synchronous Apex.
+lifecycle nor the retention guards hash large file bodies in synchronous Apex.
 The later authenticated publisher must verify the uploaded bytes before calling
 the commit. Automatic version allocation and submission-aware deletion remain
 future work. A manually supplied pointer or status is refused.

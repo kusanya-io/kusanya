@@ -7,8 +7,9 @@
 
 ADR 0031 supersedes this ADR's artifact-identity details: the commit now accepts
 and stores exact `ContentVersion` IDs, derives the `ContentDocument` IDs used for
-links, and protects the pinned versions, documents and links from deletion. This
-ADR's warning that the commit does not hash the file bodies remains in force.
+links, relies on Salesforce's refusal of direct version deletion, and protects
+the pinned documents and links with reachable guards. This ADR's warning that the
+commit does not hash the file bodies remains in force.
 
 ## Context
 

@@ -1,33 +1,12 @@
 /**
- * Responsibility: prevent deletion or unlinking of exact Salesforce File
- * versions pinned by a committed publication. System-mode reads are deliberate:
- * hidden publication records must not permit artifact loss. This class performs
- * no DML and discloses no record or file identity.
+ * Responsibility: prevent deletion or unlinking of Salesforce File documents
+ * pinned by a committed publication. System-mode reads are deliberate: hidden
+ * publication records must not permit artifact loss. This class performs no DML
+ * and discloses no record or file identity. Salesforce itself refuses direct
+ * ContentVersion deletion before Apex runs.
  */
 public without sharing class PublicationArtifactGuard {
     private static final String IMMUTABLE = 'Published artifacts are immutable.';
-
-    public static void protectVersions(List<ContentVersion> deleting) {
-        Set<String> ids = new Set<String>();
-        for (ContentVersion version : deleting) {
-            ids.add(String.valueOf(version.Id));
-        }
-        Set<String> protectedIds = new Set<String>();
-        for (Form_Version__c publication : [
-            SELECT XForm_Version__c, XLSForm_Version__c
-            FROM Form_Version__c
-            WHERE XForm_Version__c IN :ids OR XLSForm_Version__c IN :ids
-        ]) {
-            protectedIds.add(publication.XForm_Version__c);
-            protectedIds.add(publication.XLSForm_Version__c);
-        }
-        protectedIds.remove(null);
-        for (ContentVersion version : deleting) {
-            if (protectedIds.contains(String.valueOf(version.Id))) {
-                version.addError(IMMUTABLE);
-            }
-        }
-    }
 
     public static void protectDocuments(List<ContentDocument> deleting) {
         Set<String> ids = new Set<String>();

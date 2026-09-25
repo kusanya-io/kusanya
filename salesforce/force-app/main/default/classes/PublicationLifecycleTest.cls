@@ -456,12 +456,6 @@ private class PublicationLifecycleTest {
 
             assertFailed(
                 Database.delete(
-                    new ContentVersion(Id = files.get('xml')),
-                    false
-                )
-            );
-            assertFailed(
-                Database.delete(
                     new ContentDocument(Id = files.get('xmlDocument')),
                     false
                 )

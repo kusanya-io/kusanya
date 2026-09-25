@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const source = new URL(
@@ -63,7 +63,7 @@ test('publication commit remains internal, user-mode and transaction bounded', (
   );
 });
 
-test('publication pins exact file versions and protects every retention path', () => {
+test('publication pins exact file versions and protects reachable retention paths', () => {
   const lifecycle = read('classes/PublicationLifecycle.cls');
   assert.match(lifecycle, /FROM ContentVersion/);
   assert.match(
@@ -86,8 +86,14 @@ test('publication pins exact file versions and protects every retention path', (
   const guard = read('classes/PublicationArtifactGuard.cls');
   assert.match(guard, /public without sharing class PublicationArtifactGuard/);
   assert.doesNotMatch(guard, /\b(?:insert|update|upsert|delete|undelete)\b/i);
+  assert.doesNotMatch(guard, /protectVersions/);
+  assert.equal(
+    existsSync(
+      new URL('triggers/PublicationContentVersionRetention.trigger', source),
+    ),
+    false,
+  );
   for (const [trigger, method] of [
-    ['PublicationContentVersionRetention', 'protectVersions'],
     ['PublicationContentDocumentRetention', 'protectDocuments'],
     ['PublicationContentDocumentLinkRetention', 'protectLinks'],
   ]) {
