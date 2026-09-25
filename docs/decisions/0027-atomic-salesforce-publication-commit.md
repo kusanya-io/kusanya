@@ -5,6 +5,11 @@
 - Brief sections: C2, C3.11, C3.16, C4 artifacts and audit, C8, C11 Phase 1
 - Decision owner: Cobitech Solutions
 
+ADR 0031 supersedes this ADR's artifact-identity details: the commit now accepts
+and stores exact `ContentVersion` IDs, derives the `ContentDocument` IDs used for
+links, and protects the pinned versions, documents and links from deletion. This
+ADR's warning that the commit does not hash the file bodies remains in force.
+
 ## Context
 
 ADRs 0022 through 0024 produce and validate a content-addressed publication

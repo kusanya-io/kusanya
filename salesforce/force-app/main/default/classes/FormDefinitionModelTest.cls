@@ -393,11 +393,27 @@ private class FormDefinitionModelTest {
         Assert.areEqual(18, Form_Version__c.XForm__c.getDescribe().getLength());
         Assert.areEqual(
             Schema.DisplayType.String,
+            Form_Version__c.XForm_Version__c.getDescribe().getType()
+        );
+        Assert.areEqual(
+            18,
+            Form_Version__c.XForm_Version__c.getDescribe().getLength()
+        );
+        Assert.areEqual(
+            Schema.DisplayType.String,
             Form_Version__c.XLSForm__c.getDescribe().getType()
         );
         Assert.areEqual(
             18,
             Form_Version__c.XLSForm__c.getDescribe().getLength()
+        );
+        Assert.areEqual(
+            Schema.DisplayType.String,
+            Form_Version__c.XLSForm_Version__c.getDescribe().getType()
+        );
+        Assert.areEqual(
+            18,
+            Form_Version__c.XLSForm_Version__c.getDescribe().getLength()
         );
     }
 

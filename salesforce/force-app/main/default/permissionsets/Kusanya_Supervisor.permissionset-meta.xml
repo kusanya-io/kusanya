@@ -88,7 +88,17 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>false</editable>
+        <field>Form_Version__c.XForm_Version__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
         <field>Form_Version__c.XLSForm__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>Form_Version__c.XLSForm_Version__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>

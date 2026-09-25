@@ -107,6 +107,20 @@ private class PublicationLifecycleTest {
                 Version_Number__c = 1
             );
             insert version;
+            Map<String, Id> staleFiles = createFiles('stale');
+            insert new ContentVersion(
+                ContentDocumentId = staleFiles.get('xmlDocument'),
+                Title = 'stale-newer',
+                PathOnClient = 'stale-newer.xml',
+                VersionData = Blob.valueOf('<newer/>')
+            );
+            assertRefused(
+                version.Id,
+                DIGEST_ONE,
+                staleFiles.get('xml'),
+                staleFiles.get('xlsx'),
+                null
+            );
             Map<String, Id> files = createFiles('valid');
             Id wrongExtension = createFile('wrong.txt', 'not an xlsx');
 
@@ -161,7 +175,7 @@ private class PublicationLifecycleTest {
             Form_Version__c directMetadata = new Form_Version__c(
                 Form__c = form.Id,
                 Version_Number__c = 2,
-                XForm__c = String.valueOf(files.get('xml'))
+                XForm__c = String.valueOf(files.get('xmlDocument'))
             );
             assertFailed(Database.insert(directMetadata, false));
 
@@ -377,6 +391,108 @@ private class PublicationLifecycleTest {
         delete form;
     }
 
+    @IsTest
+    static void pinsExactVersionsAndRefusesArtifactLoss() {
+        User integration;
+        System.runAs(new User(Id = UserInfo.getUserId())) {
+            integration = createUser('retained');
+            assignPermission(integration.Id, 'Kusanya_Integration');
+        }
+        System.runAs(integration) {
+            Form__c form = new Form__c(Name = 'Synthetic retained files');
+            insert form;
+            Form_Version__c version = new Form_Version__c(
+                Form__c = form.Id,
+                Version_Number__c = 1
+            );
+            insert version;
+            Map<String, Id> files = createFiles('retained');
+            Id xmlVersionId = files.get('xml');
+            Id xmlDocumentId = files.get('xmlDocument');
+            PublicationLifecycle.commitPublication(
+                version.Id,
+                DIGEST_ONE,
+                files.get('xml'),
+                files.get('xlsx'),
+                null
+            );
+
+            ContentVersion laterXml = new ContentVersion(
+                ContentDocumentId = xmlDocumentId,
+                Title = 'retained-later',
+                PathOnClient = 'retained-later.xml',
+                VersionData = Blob.valueOf('<changed/>')
+            );
+            insert laterXml;
+            Form_Version__c pinned = [
+                SELECT XForm__c, XForm_Version__c
+                FROM Form_Version__c
+                WHERE Id = :version.Id
+            ];
+            Assert.areEqual(
+                String.valueOf(files.get('xmlDocument')),
+                pinned.XForm__c
+            );
+            Assert.areEqual(
+                String.valueOf(files.get('xml')),
+                pinned.XForm_Version__c
+            );
+            ContentVersion exact = [
+                SELECT IsLatest, VersionData
+                FROM ContentVersion
+                WHERE Id = :xmlVersionId
+            ];
+            Assert.isFalse(exact.IsLatest);
+            Assert.areEqual('<data/>', exact.VersionData.toString());
+
+            PublicationLifecycle.Result retry = PublicationLifecycle.commitPublication(
+                version.Id,
+                DIGEST_ONE,
+                files.get('xml'),
+                files.get('xlsx'),
+                null
+            );
+            Assert.isTrue(retry.alreadyCommitted);
+
+            assertFailed(
+                Database.delete(
+                    new ContentVersion(Id = files.get('xml')),
+                    false
+                )
+            );
+            assertFailed(
+                Database.delete(
+                    new ContentDocument(Id = files.get('xmlDocument')),
+                    false
+                )
+            );
+            ContentDocumentLink pinnedLink = [
+                SELECT Id
+                FROM ContentDocumentLink
+                WHERE
+                    LinkedEntityId = :version.Id
+                    AND ContentDocumentId = :xmlDocumentId
+                LIMIT 1
+            ];
+            assertFailed(Database.delete(pinnedLink, false));
+
+            Id unpinnedVersion = createFile('temporary.xml', '<temporary/>');
+            Id unpinnedDocument = [
+                SELECT ContentDocumentId
+                FROM ContentVersion
+                WHERE Id = :unpinnedVersion
+            ]
+            .ContentDocumentId;
+            Assert.isTrue(
+                Database.delete(
+                        new ContentDocument(Id = unpinnedDocument),
+                        false
+                    )
+                    .isSuccess()
+            );
+        }
+    }
+
     private static void assertPublished(
         Id versionId,
         String digest,
@@ -388,6 +504,8 @@ private class PublicationLifecycleTest {
                 Status__c,
                 XForm__c,
                 XLSForm__c,
+                XForm_Version__c,
+                XLSForm_Version__c,
                 Compiled_At__c,
                 Compile_Warnings__c,
                 Published_By__c,
@@ -397,8 +515,22 @@ private class PublicationLifecycleTest {
             WHERE Id = :versionId
         ];
         Assert.areEqual('Published', saved.Status__c);
-        Assert.areEqual(String.valueOf(files.get('xml')), saved.XForm__c);
-        Assert.areEqual(String.valueOf(files.get('xlsx')), saved.XLSForm__c);
+        Assert.areEqual(
+            String.valueOf(files.get('xmlDocument')),
+            saved.XForm__c
+        );
+        Assert.areEqual(
+            String.valueOf(files.get('xlsxDocument')),
+            saved.XLSForm__c
+        );
+        Assert.areEqual(
+            String.valueOf(files.get('xml')),
+            saved.XForm_Version__c
+        );
+        Assert.areEqual(
+            String.valueOf(files.get('xlsx')),
+            saved.XLSForm_Version__c
+        );
         Assert.areEqual(digest, saved.Publication_Digest__c);
         Assert.areEqual(warnings, saved.Compile_Warnings__c);
         Assert.areEqual(UserInfo.getUserId(), saved.Published_By__c);
@@ -416,16 +548,16 @@ private class PublicationLifecycleTest {
     private static void assertRefused(
         Id versionId,
         String digest,
-        Id xformDocumentId,
-        Id xlsformDocumentId,
+        Id xformVersionId,
+        Id xlsformVersionId,
         String warnings
     ) {
         try {
             PublicationLifecycle.commitPublication(
                 versionId,
                 digest,
-                xformDocumentId,
-                xlsformDocumentId,
+                xformVersionId,
+                xlsformVersionId,
                 warnings
             );
             Assert.fail('Expected a static publication refusal');
@@ -445,9 +577,20 @@ private class PublicationLifecycleTest {
     }
 
     private static Map<String, Id> createFiles(String marker) {
+        Id xml = createFile(marker + '.xml', '<data/>');
+        Id xlsx = createFile(marker + '.xlsx', 'synthetic workbook');
+        Map<Id, ContentVersion> versions = new Map<Id, ContentVersion>(
+            [
+                SELECT ContentDocumentId
+                FROM ContentVersion
+                WHERE Id IN :new Set<Id>{ xml, xlsx }
+            ]
+        );
         return new Map<String, Id>{
-            'xml' => createFile(marker + '.xml', '<data/>'),
-            'xlsx' => createFile(marker + '.xlsx', 'synthetic workbook')
+            'xml' => xml,
+            'xmlDocument' => versions.get(xml).ContentDocumentId,
+            'xlsx' => xlsx,
+            'xlsxDocument' => versions.get(xlsx).ContentDocumentId
         };
     }
 
@@ -458,12 +601,7 @@ private class PublicationLifecycleTest {
             VersionData = Blob.valueOf(body)
         );
         insert version;
-        return [
-            SELECT ContentDocumentId
-            FROM ContentVersion
-            WHERE Id = :version.Id
-        ]
-        .ContentDocumentId;
+        return version.Id;
     }
 
     private static User createUser(String marker) {

@@ -63,6 +63,40 @@ test('publication commit remains internal, user-mode and transaction bounded', (
   );
 });
 
+test('publication pins exact file versions and protects every retention path', () => {
+  const lifecycle = read('classes/PublicationLifecycle.cls');
+  assert.match(lifecycle, /FROM ContentVersion/);
+  assert.match(
+    lifecycle,
+    /xformVersionId\.getSObjectType\(\) != ContentVersion\.SObjectType/,
+  );
+  assert.match(
+    lifecycle,
+    /XForm_Version__c = String\.valueOf\(xformVersionId\)/,
+  );
+  assert.match(
+    lifecycle,
+    /XLSForm_Version__c = String\.valueOf\(xlsformVersionId\)/,
+  );
+  assert.match(
+    lifecycle,
+    /requireLatest && \(!xform\.IsLatest \|\| !xlsform\.IsLatest\)/,
+  );
+
+  const guard = read('classes/PublicationArtifactGuard.cls');
+  assert.match(guard, /public without sharing class PublicationArtifactGuard/);
+  assert.doesNotMatch(guard, /\b(?:insert|update|upsert|delete|undelete)\b/i);
+  for (const [trigger, method] of [
+    ['PublicationContentVersionRetention', 'protectVersions'],
+    ['PublicationContentDocumentRetention', 'protectDocuments'],
+    ['PublicationContentDocumentLinkRetention', 'protectLinks'],
+  ]) {
+    const body = read(`triggers/${trigger}.trigger`);
+    assert.match(body, /before delete/);
+    assert.match(body, new RegExp(`PublicationArtifactGuard\\.${method}`));
+  }
+});
+
 test('every mutable definition trigger invokes the published graph guard', () => {
   for (const trigger of [
     'QuestionIntegrity',

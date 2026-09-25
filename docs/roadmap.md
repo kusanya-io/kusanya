@@ -220,3 +220,12 @@ and no runner. It does not cancel active work, approve or retry a run, alter the
 harness pin, or consume a scratch org. Because `pull_request_target` uses the
 default-branch copy, the first live cancellation is necessarily deferred until a
 later PR synchronize event after this unit merges.
+
+The current artifact-retention unit (ADR 0031) keeps Salesforce Files links by
+ContentDocument while pinning the exact immutable ContentVersion IDs selected by
+the publication commit. Newer document versions cannot move the pin, and guarded
+deletes cannot remove a pinned version, its document or its required link. This
+owns note 69 and resolves its drift/deletion risks, but neither ADR 0027 nor this
+unit hashed the uploaded bytes: the future authenticated publisher must verify the
+exact stored versions before commit. Notes 34 and 39 remain open. No endpoint,
+delivery route, CLI, target write, C10 test or Phase 1 gate is claimed.

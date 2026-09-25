@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>XLSForm__c</fullName>
-    <description>Immutable 18-character ContentDocument ID for the committed XLSX authoring workbook. The publication lifecycle verifies access, ownership, extension and record linkage.</description>
+    <description>Immutable 18-character ContentDocument ID used to link the committed XLSX authoring workbook. XLSForm Version pins the exact immutable ContentVersion.</description>
     <label>XLSForm</label>
     <length>18</length>
     <required>false</required>
