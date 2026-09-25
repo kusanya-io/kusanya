@@ -69,6 +69,14 @@ can discard a run before it consumes a slot; a discarded/skipped job is not a
 passing Apex result. Bill approves only the latest exact head marked READY after
 review. Keep the automatic PR trigger and human environment approval.
 
+ADR 0030 narrows that replacement rule after three observed manual interventions.
+On a same-repository PR synchronize event, a separate default-branch-owned workflow
+may cancel exactly one older run for the same PR only when fresh GitHub API evidence
+shows its protected Apex job is still `waiting`, has zero steps and has no runner.
+It never cancels a current-head retry, dispatch, queued or executing job, completed
+run, ambiguous candidate or run associated with another PR. The global concurrency
+group remains non-cancelling so an active scratch lifecycle is still protected.
+
 Run the complete applicable suite in one fresh org, or one fresh pair when test 14
 requires two tenants. Never allocate an org per test. Pair acquisition requires
 two active and two daily slots; if the second creation fails, immediately clean

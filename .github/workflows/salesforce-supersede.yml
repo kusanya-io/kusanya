@@ -1,0 +1,38 @@
+name: Cancel superseded Salesforce verification
+# This privileged workflow always comes from the default branch. It must never
+# check out or execute pull-request code.
+on:
+  pull_request_target:
+    branches: [main]
+    types: [synchronize]
+permissions: {}
+jobs:
+  cancel:
+    name: Cancel superseded zero-step run
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == github.event.repository.default_branch
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      KUSANYA_SUPERSEDE_REPOSITORY: ${{ github.repository }}
+      KUSANYA_SUPERSEDE_PR_NUMBER: ${{ github.event.pull_request.number }}
+      KUSANYA_SUPERSEDE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      KUSANYA_SUPERSEDE_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Checkout trusted default-branch policy
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+          sparse-checkout: scripts
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Cancel only a superseded run that never started Apex
+        run: node scripts/cancel-superseded-salesforce.mjs

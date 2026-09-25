@@ -115,9 +115,16 @@ A failed authentication run supplies no Apex evidence, and an error class alone
 is not a reason to rotate the secret. See finding 20 in ADR 0006.
 
 The Apex job serializes across all PRs using the CI hub, without cancelling an
-active scratch lifecycle. A replaced pending run has consumed no org; its skipped
-or cancelled job is not passing evidence. A changed head needs fresh approval;
-the older active run cleans up then fails its stale-head check.
+active scratch lifecycle. ADR 0030 adds a separate default-branch-owned
+`pull_request_target` workflow for same-repository `synchronize` events. It may
+cancel one older same-PR run only after two API reads prove that the exact protected
+Apex job remains `waiting`, has zero steps and has no runner. It never checks out
+or executes PR code, receives no Salesforce secret, and refuses current-head
+retries, dispatches, active jobs, other PRs and ambiguity. The non-cancelling global
+concurrency group remains the active-lifecycle guard. A replaced zero-step run has
+consumed no org; its skipped or cancelled job is not passing evidence. A changed
+head needs fresh approval; an older active run cleans up then fails its stale-head
+check.
 Failures, missing coverage, <85% coverage and cleanup errors fail the Apex job. The
 separate, unconditional `Salesforce verification gate` also fails if Apex was
 skipped, cancelled or unsuccessful. Confirm the exact SHA and retain real scratch
@@ -308,6 +315,12 @@ the final fail-closed gate. Windows resolves Bash from the Git for Windows root'
 Resolver fixtures also run on Linux. These tests validate policy and command
 plumbing only; they do not authenticate to Salesforce or replace hosted scratch
 tests.
+
+`scripts/cancel-superseded-salesforce.test.mjs` separately exercises the trusted
+ADR 0030 collector with injected GitHub API responses and inspects the privileged
+workflow shape. The workflow that introduces this file cannot exercise itself:
+`pull_request_target` uses the default-branch copy. Its first later synchronize
+event supplies live operational evidence only after the reviewed unit is merged.
 
 The policy, quota, lifecycle and development-tool tests use injected clients and
 synthetic records. They create no Salesforce orgs and do not validate live quota,

@@ -27,9 +27,10 @@ in PR #40 and its log merged in PR #41. Scoped definition snapshots passed in PR
 #42 and their log merged in PR #43. The atomic Salesforce publication commit passed
 PR #44 and merged as `eebd88d`; log PR #45 merged as `9b44ad3`. The current unit
 corrected finding 70's XForm instance namespace in PR #47, merged as `5879a56`;
-log PR #48 merged as `b9f2f38`. The current unit selects and implements the
-dynamic-repeat cardinality policy under ADR 0029. The builder does not issue its
-own gate verdict.
+log PR #48 merged as `b9f2f38`. The dynamic-repeat cardinality policy passed PR
+#49 and merged as `9bb1afc`; log PR #50 merged as `e7861a1`. The current bounded
+unit implements safe cancellation of superseded, zero-step Salesforce approval
+waits under ADR 0030. The builder does not issue its own gate verdict.
 
 | C11 phase | Deliverables                                                                | C10 acceptance tests                           |
 | --------- | --------------------------------------------------------------------------- | ---------------------------------------------- |
@@ -210,3 +211,12 @@ nodes. Publication package schema 2 pins `submitted-count-v1` in its content
 address. This can answer note 37 at the policy boundary after independent review,
 but XML parsing, durable ingestion, Salesforce target writes and C10.2/.3 remain
 future work.
+
+The current CI-policy unit (ADR 0030) moves superseded-run cancellation into a
+default-branch-owned workflow that never executes PR code. It preserves global
+non-cancelling Apex concurrency and cancels at most one older same-PR run only
+after repeated API proof that the protected job is still waiting with zero steps
+and no runner. It does not cancel active work, approve or retry a run, alter the
+harness pin, or consume a scratch org. Because `pull_request_target` uses the
+default-branch copy, the first live cancellation is necessarily deferred until a
+later PR synchronize event after this unit merges.
