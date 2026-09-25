@@ -287,9 +287,11 @@ test('trusted workflow has only the narrow cancellation capability', () => {
     /pull_request_target:\n    branches: \[main\]\n    types: \[synchronize\]/,
   );
   assert.match(workflow, /^permissions: \{\}$/m);
-  assert.match(
-    workflow,
-    /permissions:\n      actions: write\n      contents: read\n      pull-requests: read/,
+  assert.equal(
+    workflow.match(/^    permissions:\n((?:      [^\n]+\n)+)/m)?.[1],
+    '      actions: write\n' +
+      '      contents: read\n' +
+      '      pull-requests: read\n',
   );
   assert.match(
     workflow,
@@ -299,9 +301,10 @@ test('trusted workflow has only the narrow cancellation capability', () => {
   assert.match(workflow, /sparse-checkout: scripts/);
   assert.doesNotMatch(
     workflow,
-    /pull_request\.head\.sha \}\}\n          persist|secrets\.|salesforce\/|sf org|workflow_dispatch/,
+    /pull_request\.head\.sha \}\}\n          persist|secrets\.|salesforce\/|sf org|workflow_dispatch|^\s+environment:/m,
   );
   assert.equal((workflow.match(/actions: write/g) ?? []).length, 1);
+  assert.equal((workflow.match(/^\s+run:/gm) ?? []).length, 1);
   assert.match(
     workflow,
     /run: node scripts\/cancel-superseded-salesforce\.mjs/,
