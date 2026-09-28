@@ -468,7 +468,7 @@ test('new Apex uses local references, responsibility headers and API 64 without 
   );
 });
 
-test('permission sets grant only scoped definition access and never setup or collector access', () => {
+test('permission sets grant scoped definitions and only integration can publish', () => {
   for (const [name, canWrite, canDelete] of [
     ['Kusanya_Admin', true, true],
     ['Kusanya_Integration', true, false],
@@ -478,8 +478,29 @@ test('permission sets grant only scoped definition access and never setup or col
     assert.ok(tag(xml, 'description')?.trim());
     assert.doesNotMatch(
       xml,
-      /<userPermissions>|<classAccesses>|<applicationVisibilities>|<customPermissions>|<externalDataSourceAccesses>|<flowAccesses>|<license>/,
+      /<userPermissions>|<applicationVisibilities>|<externalDataSourceAccesses>|<flowAccesses>|<license>/,
     );
+    const classAccesses = [
+      ...xml.matchAll(/<classAccesses>([\s\S]*?)<\/classAccesses>/g),
+    ].map((match) => match[1]);
+    const customPermissions = [
+      ...xml.matchAll(/<customPermissions>([\s\S]*?)<\/customPermissions>/g),
+    ].map((match) => match[1]);
+    if (name === 'Kusanya_Integration') {
+      assert.deepEqual(
+        classAccesses.map((grant) => tag(grant, 'apexClass')),
+        ['PublicationCommitResource'],
+      );
+      assert.deepEqual(
+        customPermissions.map((grant) => tag(grant, 'name')),
+        ['Publish_Kusanya'],
+      );
+      assert.equal(tag(classAccesses[0], 'enabled'), 'true');
+      assert.equal(tag(customPermissions[0], 'enabled'), 'true');
+    } else {
+      assert.deepEqual(classAccesses, []);
+      assert.deepEqual(customPermissions, []);
+    }
     const grants = [
       ...xml.matchAll(/<objectPermissions>([\s\S]*?)<\/objectPermissions>/g),
     ].map((match) => match[1]);

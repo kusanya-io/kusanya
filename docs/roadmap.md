@@ -230,3 +230,12 @@ risks, but neither ADR 0027 nor this
 unit hashed the uploaded bytes: the future authenticated publisher must verify the
 exact stored versions before commit. Notes 34 and 39 remain open. No endpoint,
 delivery route, CLI, target write, C10 test or Phase 1 gate is claimed.
+
+The current publication-API unit (ADR 0032) exposes the existing atomic lifecycle
+through one strict, bounded, integration-only Apex REST POST. It adds no upload,
+download, OAuth storage, tenant routing, CLI or delivery behavior. In particular,
+it does not read `VersionData` and cannot attest that uploaded bytes match the
+canonical package, so note 69 remains partly open for the composed authenticated
+publisher. Note 34 advances through a callable refusing commit edge but remains
+open for its connection, target-FLS and composition requirements. No C10 test or
+Phase 1 completion is claimed.

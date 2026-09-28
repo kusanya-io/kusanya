@@ -35,6 +35,13 @@ The later authenticated publisher must verify the uploaded bytes before calling
 the commit. Automatic version allocation and submission-aware deletion remain
 future work. A manually supplied pointer or status is refused.
 
+ADR 0032 exposes that commit through one versioned Apex REST POST. The exact JSON
+envelope accepts the Form Version, package digest, two pinned ContentVersion IDs
+and reviewed warnings; it cannot select a tenant or publishing principal. Only the
+Integration permission set receives both class access and the `Publish_Kusanya`
+custom permission. The endpoint reads no file body, so it does not change the byte-
+attestation limitation above.
+
 ## Question authoring rules
 
 The explicit tree preserves mixed once-only and repeating content:
