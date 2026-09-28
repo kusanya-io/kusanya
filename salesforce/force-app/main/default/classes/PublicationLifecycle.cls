@@ -35,8 +35,8 @@ public with sharing class PublicationLifecycle {
     public static Result commitPublication(
         Id versionId,
         String publicationDigest,
-        Id xformDocumentId,
-        Id xlsformDocumentId,
+        Id xformVersionId,
+        Id xlsformVersionId,
         String compileWarnings
     ) {
         if (compileWarnings == '') {
@@ -45,8 +45,8 @@ public with sharing class PublicationLifecycle {
         validateRequest(
             versionId,
             publicationDigest,
-            xformDocumentId,
-            xlsformDocumentId,
+            xformVersionId,
+            xlsformVersionId,
             compileWarnings
         );
         try {
@@ -71,6 +71,8 @@ public with sharing class PublicationLifecycle {
                     Status__c,
                     XForm__c,
                     XLSForm__c,
+                    XForm_Version__c,
+                    XLSForm_Version__c,
                     Compiled_At__c,
                     Compile_Warnings__c,
                     Published_By__c,
@@ -88,12 +90,16 @@ public with sharing class PublicationLifecycle {
             if (target == null) {
                 refuse();
             }
-            Map<Id, ContentDocument> documents = new Map<Id, ContentDocument>(
+            Map<Id, ContentVersion> artifacts = new Map<Id, ContentVersion>(
                 [
-                    SELECT Id, CreatedById, FileExtension
-                    FROM ContentDocument
-                    WHERE
-                        Id IN :new Set<Id>{ xformDocumentId, xlsformDocumentId }
+                    SELECT
+                        Id,
+                        ContentDocumentId,
+                        CreatedById,
+                        FileExtension,
+                        IsLatest
+                    FROM ContentVersion
+                    WHERE Id IN :new Set<Id>{ xformVersionId, xlsformVersionId }
                     WITH USER_MODE
                 ]
             );
@@ -103,7 +109,17 @@ public with sharing class PublicationLifecycle {
                 WHERE LinkedEntityId = :target.Id
                 WITH USER_MODE
             ];
-            validateDocuments(documents, xformDocumentId, xlsformDocumentId);
+            validateArtifacts(
+                artifacts,
+                xformVersionId,
+                xlsformVersionId,
+                target.Status__c == 'Draft'
+            );
+            Id xformDocumentId = artifacts.get(xformVersionId)
+                .ContentDocumentId;
+            Id xlsformDocumentId = artifacts
+                .get(xlsformVersionId)
+                .ContentDocumentId;
 
             List<Form_Version__c> published = new List<Form_Version__c>();
             for (Form_Version__c version : versions) {
@@ -120,6 +136,8 @@ public with sharing class PublicationLifecycle {
                     !matchesCommit(
                         target,
                         publicationDigest,
+                        xformVersionId,
+                        xlsformVersionId,
                         xformDocumentId,
                         xlsformDocumentId,
                         compileWarnings
@@ -193,6 +211,8 @@ public with sharing class PublicationLifecycle {
                 committed.Status__c = 'Published';
                 committed.XForm__c = String.valueOf(xformDocumentId);
                 committed.XLSForm__c = String.valueOf(xlsformDocumentId);
+                committed.XForm_Version__c = String.valueOf(xformVersionId);
+                committed.XLSForm_Version__c = String.valueOf(xlsformVersionId);
                 committed.Compiled_At__c = committedAt;
                 committed.Compile_Warnings__c = compileWarnings;
                 committed.Published_By__c = UserInfo.getUserId();
@@ -205,6 +225,8 @@ public with sharing class PublicationLifecycle {
                         Status__c = 'Published',
                         XForm__c = committed.XForm__c,
                         XLSForm__c = committed.XLSForm__c,
+                        XForm_Version__c = committed.XForm_Version__c,
+                        XLSForm_Version__c = committed.XLSForm_Version__c,
                         Compiled_At__c = committedAt,
                         Compile_Warnings__c = compileWarnings,
                         Published_By__c = UserInfo.getUserId(),
@@ -329,8 +351,8 @@ public with sharing class PublicationLifecycle {
     private static void validateRequest(
         Id versionId,
         String publicationDigest,
-        Id xformDocumentId,
-        Id xlsformDocumentId,
+        Id xformVersionId,
+        Id xlsformVersionId,
         String compileWarnings
     ) {
         if (
@@ -338,11 +360,11 @@ public with sharing class PublicationLifecycle {
             versionId.getSObjectType() != Form_Version__c.SObjectType ||
             publicationDigest == null ||
             !SHA256.matcher(publicationDigest).matches() ||
-            xformDocumentId == null ||
-            xlsformDocumentId == null ||
-            xformDocumentId == xlsformDocumentId ||
-            xformDocumentId.getSObjectType() != ContentDocument.SObjectType ||
-            xlsformDocumentId.getSObjectType() != ContentDocument.SObjectType ||
+            xformVersionId == null ||
+            xlsformVersionId == null ||
+            xformVersionId == xlsformVersionId ||
+            xformVersionId.getSObjectType() != ContentVersion.SObjectType ||
+            xlsformVersionId.getSObjectType() != ContentVersion.SObjectType ||
             (compileWarnings != null &&
             compileWarnings.length() > 32768)
         ) {
@@ -350,22 +372,25 @@ public with sharing class PublicationLifecycle {
         }
     }
 
-    private static void validateDocuments(
-        Map<Id, ContentDocument> documents,
-        Id xformDocumentId,
-        Id xlsformDocumentId
+    private static void validateArtifacts(
+        Map<Id, ContentVersion> artifacts,
+        Id xformVersionId,
+        Id xlsformVersionId,
+        Boolean requireLatest
     ) {
-        ContentDocument xform = documents.get(xformDocumentId);
-        ContentDocument xlsform = documents.get(xlsformDocumentId);
+        ContentVersion xform = artifacts.get(xformVersionId);
+        ContentVersion xlsform = artifacts.get(xlsformVersionId);
         if (
             xform == null ||
             xlsform == null ||
+            xform.ContentDocumentId == xlsform.ContentDocumentId ||
             xform.CreatedById != UserInfo.getUserId() ||
             xlsform.CreatedById != UserInfo.getUserId() ||
             xform.FileExtension == null ||
             xform.FileExtension.toLowerCase() != 'xml' ||
             xlsform.FileExtension == null ||
-            xlsform.FileExtension.toLowerCase() != 'xlsx'
+            xlsform.FileExtension.toLowerCase() != 'xlsx' ||
+            (requireLatest && (!xform.IsLatest || !xlsform.IsLatest))
         ) {
             refuse();
         }
@@ -374,6 +399,8 @@ public with sharing class PublicationLifecycle {
     private static Boolean matchesCommit(
         Form_Version__c version,
         String publicationDigest,
+        Id xformVersionId,
+        Id xlsformVersionId,
         Id xformDocumentId,
         Id xlsformDocumentId,
         String compileWarnings
@@ -381,6 +408,8 @@ public with sharing class PublicationLifecycle {
         return version.Publication_Digest__c == publicationDigest &&
             version.XForm__c == String.valueOf(xformDocumentId) &&
             version.XLSForm__c == String.valueOf(xlsformDocumentId) &&
+            version.XForm_Version__c == String.valueOf(xformVersionId) &&
+            version.XLSForm_Version__c == String.valueOf(xlsformVersionId) &&
             version.Compile_Warnings__c == compileWarnings &&
             version.Compiled_At__c != null &&
             version.Published_At__c != null &&
@@ -404,6 +433,8 @@ public with sharing class PublicationLifecycle {
     private static Boolean hasPublicationMetadata(Form_Version__c version) {
         return version.XForm__c != null ||
             version.XLSForm__c != null ||
+            version.XForm_Version__c != null ||
+            version.XLSForm_Version__c != null ||
             version.Compiled_At__c != null ||
             version.Compile_Warnings__c != null ||
             version.Published_By__c != null ||
@@ -417,6 +448,8 @@ public with sharing class PublicationLifecycle {
     ) {
         return before.XForm__c != after.XForm__c ||
             before.XLSForm__c != after.XLSForm__c ||
+            before.XForm_Version__c != after.XForm_Version__c ||
+            before.XLSForm_Version__c != after.XLSForm_Version__c ||
             before.Compiled_At__c != after.Compiled_At__c ||
             before.Compile_Warnings__c != after.Compile_Warnings__c ||
             before.Published_By__c != after.Published_By__c ||
@@ -433,6 +466,8 @@ public with sharing class PublicationLifecycle {
             actual.Status__c == expected.Status__c &&
             actual.XForm__c == expected.XForm__c &&
             actual.XLSForm__c == expected.XLSForm__c &&
+            actual.XForm_Version__c == expected.XForm_Version__c &&
+            actual.XLSForm_Version__c == expected.XLSForm_Version__c &&
             actual.Compiled_At__c == expected.Compiled_At__c &&
             actual.Compile_Warnings__c == expected.Compile_Warnings__c &&
             actual.Published_By__c == expected.Published_By__c &&

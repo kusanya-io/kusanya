@@ -6,17 +6,17 @@ C4 model, a publishing implementation or a claim of deployed/namespaced behavior
 See ADRs 0009/0010/0013 for schema choices and ADR 0008 for Bill's unnamespaced-development
 approval. `salesforce/sfdx-project.json` still has an empty namespace.
 
-| Object             | Fields and role                                                                                                                                                                          | Access / relationships                                                                                                          |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `Folder__c`        | Name, Description                                                                                                                                                                        | Private owned root; deleting it clears a form's folder lookup.                                                                  |
-| `Form__c`          | Name, Status, Description, Folder, Default_Target_Object, Current_Version, Language, Country, Allow_Ad_Hoc_Submissions, GPS_Capture, Close_Message                                       | Private owned root; Current_Version must belong to this form.                                                                   |
-| `Form_Version__c`  | Form, Version_Number, Status, XForm, XLSForm, Publication_Digest, Compiled_At, Compile_Warnings, Published_By, Published_At, Change_Log, derived Version_Key                             | Non-reparentable master-detail to Form; inherits sharing and deletion. Auto-number Name.                                        |
-| `Question__c`      | All C4 question fields: tree/identity, labels, Hint, Author_Notes, types/flags, expressions/constraints, repeat/media/prefill/lineage settings; derived Question_Key                     | Non-reparentable detail of Form Version; same-version Parent lookup, with Apex protection for direct deletes.                   |
-| `Choice_List__c`   | Name, Description, optional Owner_Question                                                                                                                                               | Private owned root; reusable when owner is null, otherwise immutable inline ownership by a select question.                     |
-| `Choice__c`        | Choice_List, Value, Label, Order, Filter_Value, Score, derived Choice_Key                                                                                                                | Non-reparentable detail of Choice List; exact Value unique within its list.                                                     |
-| `Skip_Rule__c`     | Question, Source_Question, Operator, Value, Value_To, Join, Action                                                                                                                       | Non-reparentable detail of target Question; distinct, same-version source with restricted deletion.                             |
-| `Mapping__c`       | Form_Version, Target_Object, Record_Type, Kind, Repeat_Question, Parent_Mapping, Parent_Lookup_Field, Matching_Field, Upsert_External_Id_Field, Collector_Field, Submission_Field, Order | Non-reparentable detail of Form Version; same-version acyclic parent graph; repeat kind requires a repeat Question.             |
-| `Field_Mapping__c` | Mapping, Question, Target_Field, Transform, Constant_Value, Match_Status, Match_Detail; Source_Kind and derived Target_Key                                                               | Non-reparentable detail of Mapping; same-version question or explicit constant; case-insensitive target uniqueness per mapping. |
+| Object             | Fields and role                                                                                                                                                                                           | Access / relationships                                                                                                          |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `Folder__c`        | Name, Description                                                                                                                                                                                         | Private owned root; deleting it clears a form's folder lookup.                                                                  |
+| `Form__c`          | Name, Status, Description, Folder, Default_Target_Object, Current_Version, Language, Country, Allow_Ad_Hoc_Submissions, GPS_Capture, Close_Message                                                        | Private owned root; Current_Version must belong to this form.                                                                   |
+| `Form_Version__c`  | Form, Version_Number, Status, XForm/XLSForm document IDs, exact XForm/XLSForm version IDs, Publication_Digest, Compiled_At, Compile_Warnings, Published_By, Published_At, Change_Log, derived Version_Key | Non-reparentable master-detail to Form; inherits sharing and deletion. Auto-number Name.                                        |
+| `Question__c`      | All C4 question fields: tree/identity, labels, Hint, Author_Notes, types/flags, expressions/constraints, repeat/media/prefill/lineage settings; derived Question_Key                                      | Non-reparentable detail of Form Version; same-version Parent lookup, with Apex protection for direct deletes.                   |
+| `Choice_List__c`   | Name, Description, optional Owner_Question                                                                                                                                                                | Private owned root; reusable when owner is null, otherwise immutable inline ownership by a select question.                     |
+| `Choice__c`        | Choice_List, Value, Label, Order, Filter_Value, Score, derived Choice_Key                                                                                                                                 | Non-reparentable detail of Choice List; exact Value unique within its list.                                                     |
+| `Skip_Rule__c`     | Question, Source_Question, Operator, Value, Value_To, Join, Action                                                                                                                                        | Non-reparentable detail of target Question; distinct, same-version source with restricted deletion.                             |
+| `Mapping__c`       | Form_Version, Target_Object, Record_Type, Kind, Repeat_Question, Parent_Mapping, Parent_Lookup_Field, Matching_Field, Upsert_External_Id_Field, Collector_Field, Submission_Field, Order                  | Non-reparentable detail of Form Version; same-version acyclic parent graph; repeat kind requires a repeat Question.             |
+| `Field_Mapping__c` | Mapping, Question, Target_Field, Transform, Constant_Value, Match_Status, Match_Detail; Source_Kind and derived Target_Key                                                                                | Non-reparentable detail of Mapping; same-version question or explicit constant; case-insensitive target uniqueness per mapping. |
 
 The table omits custom-field `__c` suffixes for readability. Every object, custom
 field and record-name field has a description in source. Form/version status
@@ -25,13 +25,15 @@ must be positive integers and unique within a form. A before-write trigger deriv
 the unique key from the Form ID and version number, replacing supplied keys without
 query/DML loops. The key must not be exported as portable identity.
 
-XForm/XLSForm fields hold committed ContentDocument IDs as text, with the exact
-ADR 0023 package digest stored separately. ADR 0027's internal lifecycle verifies
-caller-visible file ownership, extensions and links, then atomically advances the
-statuses and current pointer. It cannot hash large file bodies in synchronous Apex;
-the later authenticated publisher must validate and upload the exact bytes before
-calling it. Automatic version allocation, file retention and submission-aware
-deletion remain future work. A manually supplied pointer or status is refused.
+XForm/XLSForm fields hold linked ContentDocument IDs as text; companion Version
+fields pin the exact immutable ContentVersion IDs. ADR 0031 permits newer document
+versions without changing the pin. Salesforce refuses direct version deletion;
+Kusanya guards refuse deletion of pinned documents and unlinking of committed
+artifacts. The exact ADR 0023 package digest is stored separately, but neither the
+lifecycle nor the retention guards hash large file bodies in synchronous Apex.
+The later authenticated publisher must verify the uploaded bytes before calling
+the commit. Automatic version allocation and submission-aware deletion remain
+future work. A manually supplied pointer or status is refused.
 
 ## Question authoring rules
 

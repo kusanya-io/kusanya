@@ -5,8 +5,11 @@ Phase 1 slice added Folder, Form and Form Version with version identity/validati
 The subsequent units added the complete definition graph and its bounded portable
 snapshot reader. ADR 0027 adds an internal, user-mode publication commit that binds
 two caller-owned Salesforce Files and the canonical package digest atomically,
-then freezes the published source graph. It exposes no endpoint and does not choose
-OAuth credentials, upload artifacts, execute mappings or claim C10. See
+then freezes the published source graph. ADR 0031 additionally pins the exact
+ContentVersion IDs. Salesforce itself refuses direct version deletion before Apex;
+Kusanya guards block deletion of pinned documents and unlinking of committed
+artifacts. It does not hash the uploaded bytes, expose an endpoint, choose OAuth
+credentials, upload artifacts, execute mappings or claim C10. See
 [the data model](../docs/data-model.md) and ADRs 0009/0010/0013 for exact limitations.
 
 Question tree updates validate the entire affected version and protect partial-DML
