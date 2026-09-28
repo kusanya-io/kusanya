@@ -1,6 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
-    <description>Scoped integration object and field grants for form, question, choice, skip-rule and mapping definitions only. Does not assign users, bypass sharing, grant target-object access, grant setup privileges or provide collector Salesforce access.</description>
+    <description>Scoped integration grants for form-definition access and the guarded publication commit boundary. Does not assign users, bypass sharing, grant target-object access, grant setup privileges or provide collector Salesforce access.</description>
+    <classAccesses>
+        <apexClass>PublicationCommitResource</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <customPermissions>
+        <enabled>true</enabled>
+        <name>Publish_Kusanya</name>
+    </customPermissions>
     <fieldPermissions>
         <editable>true</editable>
         <field>Folder__c.Description__c</field>

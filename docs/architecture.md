@@ -181,6 +181,19 @@ Published/Superseded definition graph is immutable. This is not an endpoint or
 artifact upload, retention or delivery implementation: the future authenticated
 publisher must still validate and upload the exact bytes before calling it.
 
+ADR 0031 extends that lifecycle with exact ContentVersion pins while retaining
+ContentDocument links. Newer file versions cannot move a published pin; Salesforce
+refuses direct version deletion and Kusanya guards the pinned documents and links.
+The lifecycle still does not hash VersionData, so the digest cannot attest the
+initial uploaded bytes without a later service-side read-back comparison.
+
+ADR 0032 exposes the internal lifecycle through one bounded, integration-only Apex
+REST POST. A streaming decoder requires an exact schema-versioned envelope, the
+Integration permission set alone holds both class access and the explicit publish
+custom permission, and static no-cache responses disclose no record/file identity
+or provider detail. This is only a commit edge: it accepts no tenant selector or
+credential and performs no upload, read-back attestation, delivery or target write.
+
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure
 `createSalesforceNames(prefix)` service helper qualifies explicitly Kusanya-owned

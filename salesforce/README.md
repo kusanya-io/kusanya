@@ -12,6 +12,13 @@ artifacts. It does not hash the uploaded bytes, expose an endpoint, choose OAuth
 credentials, upload artifacts, execute mappings or claim C10. See
 [the data model](../docs/data-model.md) and ADRs 0009/0010/0013 for exact limitations.
 
+ADR 0032 adds the narrow endpoint that ADR 0031 intentionally deferred:
+`POST /services/apexrest/v1/publications/commit`. It is available only to the
+Integration permission set, strictly decodes a bounded schema-versioned request,
+and delegates once to the existing lifecycle. It does not accept credentials or a
+tenant selector, upload files, read `VersionData`, or turn the package digest into
+byte attestation.
+
 Question tree updates validate the entire affected version and protect partial-DML
 outcomes. Detach children before changing container roles or reversing parent edges.
 Keep once-only questions as siblings of a repeat, not its children; keep author
