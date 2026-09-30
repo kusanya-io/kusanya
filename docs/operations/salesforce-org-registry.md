@@ -15,5 +15,16 @@ allocation. They must not share a Salesforce user or authorization entry. Scratc
 orgs are disposable and tracked by the ownership tags and cleanup evidence defined
 in ADR 0006; they are not cataloged as permanent orgs here.
 
+The hosted CI principal uses the `Minimum Access - Salesforce` profile and the
+dedicated `Kusanya_CI_Dev_Hub` permission set. Its system-permission scope is API
+Enabled, View Setup and Configuration, and View Roles and Role Hierarchy. The two
+setup permissions are read-only: the Limits REST resource used by the pinned
+harness requires View Setup and Configuration, and Salesforce requires View Roles
+and Role Hierarchy as its dependency. Object scope is Read, Create, Edit and Delete
+on `ScratchOrgInfo`, plus Read, Edit and Delete on `ActiveScratchOrg`, without View
+All or Modify All. The CI principal continues to see only its own scratch-org
+records. ADR 0033 records why the two currently unused `ScratchOrgInfo` mutation
+grants remain candidates for a separately tested tightening.
+
 Update this table whenever an org, role, principal type, credential location or
 owner changes. Record the change in an ADR when it changes a trust boundary.

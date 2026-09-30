@@ -33,9 +33,27 @@ protected GitHub `salesforce-ci` environment. Use a spare full Salesforce licenc
 with the `Minimum Access - Salesforce` profile and a dedicated permission set that
 grants only:
 
-- API Enabled;
+- API Enabled, View Setup and Configuration, and View Roles and Role Hierarchy;
 - Read, Create, Edit and Delete on `ScratchOrgInfo`; and
 - Read, Edit and Delete on `ActiveScratchOrg`.
+
+The pinned harness starts with a read of the Dev Hub Limits REST resource. That
+resource requires View Setup and Configuration, and Salesforce enforces View Roles
+and Role Hierarchy as a dependency of View Setup and Configuration. A metadata
+deployment that attempted to add View Setup alone reported success without enabling
+the permission; a direct update exposed the `ViewSetup` dependency on `ViewRoles`.
+Both permissions are read-only setup visibility. They do not grant broader record
+visibility: after they were enabled, the CI principal still saw only the one
+`ScratchOrgInfo` record that it created while the verifier saw all 52 records.
+
+The current `ScratchOrgInfo` Edit and Delete grants are retained for this recovery
+head because the corrected permission set has been exercised successfully with
+that exact scope. The harness currently creates and reads `ScratchOrgInfo` and
+deletes `ActiveScratchOrg`; it does not directly edit or delete
+`ScratchOrgInfo`. Removing those two grants is a least-privilege candidate, but it
+must be tested through the complete pinned lifecycle rather than inferred from the
+command list, and this unit preserves the final daily scratch-org slot for its
+exact-head hosted acceptance run.
 
 Do not grant packaging, namespace, customer-org, product-data or administrator
 permissions. A globally unique Salesforce username is an identifier, not a demand
@@ -85,8 +103,18 @@ dedicated principal is Salesforce user `005bm00000YXZrRAAX` with the
 `Kusanya_CI_Dev_Hub` (`0PSbm00000YwE0bGAF`). The protected GitHub environment
 secret was replaced on that date, and both the dedicated CI alias and the
 existing verifier alias remained independently connected to the same Dev Hub.
-The exact-head hosted run and its independent ownership/cleanup review remain
-the acceptance proof for this proposed decision.
+
+The first hosted run authenticated as the dedicated principal but failed at
+`quota-read` before scratch-org creation because the initial permission set lacked
+View Setup and Configuration and View Roles and Role Hierarchy. Claude acted as an
+authorized operator to apply those two permissions directly in the org after the
+unsuccessful metadata deployment, so their present contents are operator-applied
+rather than independent-review evidence. Acting as the CI principal, the operator
+then read the quota, created a scratch org whose
+`ScratchOrgInfo.CreatedById` was `005bm00000YXZrRAAX`, queried and deleted its
+`ActiveScratchOrg`, and confirmed `ScratchOrgInfo` reached `Deleted` with a null
+error and zero active owned orgs. The new exact-head hosted run and its independent
+ownership/cleanup review remain the acceptance proof for this proposed decision.
 
 The migration is accepted only when an independent reviewer confirms all of the
 following without exposing credentials:
@@ -94,8 +122,10 @@ following without exposing credentials:
 1. the CI and verifier user IDs differ while the intentional Dev Hub org ID is the
    same;
 2. the CI principal has exactly the approved profile and permission-set scope;
-3. the protected GitHub environment secret was replaced without a repository,
-   issue, pull-request, Actions-log or transcript disclosure;
+3. the protected GitHub environment secret contains the final dedicated-principal
+   credential without repository, issue, pull-request or Actions-log disclosure;
+   an intermediate credential exposed only to the private operator transcript was
+   superseded and its OAuth approval revoked before verification;
 4. the verifier authorization works before and after CI migration;
 5. one approved exact-head hosted run authenticates as the new principal, creates
    one owned scratch org, passes the complete Apex gate and deletes that org; and
