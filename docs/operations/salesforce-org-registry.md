@@ -5,10 +5,10 @@ records ownership and credential locations without storing authentication
 material. Never add usernames, email addresses, passwords, tokens, Salesforce
 authorization URLs, consumer secrets or private keys.
 
-| Role                                             | Stable org ID        | Org type                                   | Principal                         | Credential location                                             | Owner | Status            | Last verified |
-| ------------------------------------------------ | -------------------- | ------------------------------------------ | --------------------------------- | --------------------------------------------------------------- | ----- | ----------------- | ------------- |
-| Development and independent verification Dev Hub | `00Dbm00000yeiz3EAA` | Developer Edition Dev Hub                  | Verifier-only Salesforce user     | Verifier private CLI store                                      | Bill  | Active            | 2026-09-30    |
-| Hosted CI Dev Hub                                | `00Dbm00000yeiz3EAA` | Same Developer Edition Dev Hub by ADR 0033 | Dedicated CI-only Salesforce user | GitHub `salesforce-ci` environment secret `SF_DEV_HUB_AUTH_URL` | Bill  | Migration pending | 2026-09-30    |
+| Role                                             | Stable org ID        | Org type                                   | Principal                         | Credential location                                             | Owner | Status                       | Last verified |
+| ------------------------------------------------ | -------------------- | ------------------------------------------ | --------------------------------- | --------------------------------------------------------------- | ----- | ---------------------------- | ------------- |
+| Development and independent verification Dev Hub | `00Dbm00000yeiz3EAA` | Developer Edition Dev Hub                  | Verifier-only Salesforce user     | Verifier private CLI store                                      | Bill  | Active                       | 2026-09-30    |
+| Hosted CI Dev Hub                                | `00Dbm00000yeiz3EAA` | Same Developer Edition Dev Hub by ADR 0033 | Dedicated CI-only Salesforce user | GitHub `salesforce-ci` environment secret `SF_DEV_HUB_AUTH_URL` | Bill  | Active; hosted proof pending | 2026-09-30    |
 
 The two roles intentionally share an org and therefore share its scratch-org
 allocation. They must not share a Salesforce user or authorization entry. Scratch

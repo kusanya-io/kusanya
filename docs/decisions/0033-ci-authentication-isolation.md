@@ -1,6 +1,6 @@
 # ADR 0033: Isolate hosted CI authentication in the existing Dev Hub
 
-- Status: Proposed; operational migration awaiting independent verification
+- Status: Proposed; migration complete, hosted proof awaiting independent verification
 - Date: 2026-09-30
 - Brief sections: C8, C11 Phase 1, C13; verification protocol
 - Decision owner: Cobitech Solutions
@@ -78,6 +78,15 @@ capacity becomes the constraint, a separately approved higher-capacity Dev Hub o
 second hub can be evaluated without reversing this identity separation.
 
 ## Verification and rollout
+
+The operator completed the identity and secret migration on 2026-09-30. The
+dedicated principal is Salesforce user `005bm00000YXZrRAAX` with the
+`Minimum Access - Salesforce` profile and permission set
+`Kusanya_CI_Dev_Hub` (`0PSbm00000YwE0bGAF`). The protected GitHub environment
+secret was replaced on that date, and both the dedicated CI alias and the
+existing verifier alias remained independently connected to the same Dev Hub.
+The exact-head hosted run and its independent ownership/cleanup review remain
+the acceptance proof for this proposed decision.
 
 The migration is accepted only when an independent reviewer confirms all of the
 following without exposing credentials:
