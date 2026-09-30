@@ -239,3 +239,12 @@ canonical package, so note 69 remains partly open for the composed authenticated
 publisher. Note 34 advances through a callable refusing commit edge but remains
 open for its connection, target-FLS and composition requirements. No C10 test or
 Phase 1 completion is claimed.
+
+The current CI-operations unit (ADR 0033) replaces the unprovisioned second-Dev-Hub
+plan with a dedicated least-privilege CI user and independent authorization inside
+the existing Kusanya Dev Hub. It closes note 77's identity, token-rotation and
+logout coupling only after live migration proof; CI and the verifier still share
+the Developer Edition scratch-org allocation. It adds a non-secret org registry
+and changes no workflow, harness, pin or product code. Notes 34, 39 and 69 remain
+open, note 75 remains informational, and no C10 or Phase 1 completion claim is
+made.
