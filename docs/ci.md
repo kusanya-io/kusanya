@@ -52,11 +52,13 @@ The builder never approves its own run or merges its own PR.
    Bill must approve manually and the builder must never approve its own run.
 2. Set selected deployment branches to `main` and `refs/pull/*/merge`. GitHub matches
    these against the event's ref; a main-only restriction prevents PR runs.
-3. Provision the approved CI-only Dev Hub, verify its ownership and scratch
-   allocations, then add `SF_DEV_HUB_AUTH_URL` only as an **environment secret**
-   through a private operator session. Do not use the builder/verifier hub for
-   steady-state CI. The new hub and secret migration are separate authorized
-   operator steps, not effects of this code change.
+3. Provision the ADR 0033 dedicated CI-only principal in the existing Kusanya Dev
+   Hub, verify its least-privilege access and distinct Salesforce user ID, then add
+   `SF_DEV_HUB_AUTH_URL` only as an **environment secret** through a private
+   operator session. CI and the verifier intentionally share the hub's allocation
+   but must not share a Salesforce user or authorization entry. The user and secret
+   migration are separate authorized operator steps, not effects of this code
+   change.
    Never paste it into chat, issues, PR comments, logs or a repository file. Do not
    use a customer org credential or a repository-wide secret. Add the secret only
    after the environment protections are configured.
@@ -229,10 +231,13 @@ authoritative ended-run evidence for the requested role before explicitly applyi
 cleanup. A pending/unknown creation result requires private reconciliation of its
 exact logged tag; this PR does not automate that operator investigation.
 
-The dedicated CI hub is approved but not provisioned by this PR. Until migration,
-CI and Claude coordinate the shared hub using live allocations and reserve recovery
-capacity. The original 11 September slot estimates were withdrawn in issue #5 note 16. Phase 0 CI and independent runs are complete; this hardening work consumes no
-builder org. Check actual limits before each authorized fresh run.
+ADR 0033 replaces the unprovisioned second-hub plan with a dedicated CI principal
+inside the existing Kusanya Dev Hub. Until that identity and secret migration is
+independently verified, CI and Claude still share the legacy principal as well as
+the hub. After migration they share only the hub's allocation and must continue to
+coordinate live capacity and reserve recovery capacity. The original 11 September
+slot estimates were withdrawn in issue #5 note 16. Check actual limits before each
+authorized fresh run.
 
 ### Timeout recovery and truthful failures (issue #5)
 
