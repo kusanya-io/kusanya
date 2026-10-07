@@ -5,6 +5,11 @@
 - Brief sections: C2, C3.16, C4 sharing and permissions, C8, C11 Phase 1
 - Decision owner: Cobitech Solutions
 
+ADR 0034 now supplies the separately reviewed external boundary anticipated here.
+`DefinitionSnapshotReader` remains an internal user-mode service; the strict
+integration-only REST resource authorizes, bounds and delegates one read without
+changing the reader's sharing, FLS, translation or refusal contracts.
+
 ## Context
 
 The publication package accepts strict portable form and mapping inputs, but no

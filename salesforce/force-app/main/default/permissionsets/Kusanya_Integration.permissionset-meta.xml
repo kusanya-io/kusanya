@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
-    <description>Scoped integration grants for form-definition access and the guarded publication commit boundary. Does not assign users, bypass sharing, grant target-object access, grant setup privileges or provide collector Salesforce access.</description>
+    <description>Scoped integration grants for the guarded definition-read and publication-commit boundaries. Does not assign users, bypass sharing, grant target-object access, grant setup privileges or provide collector Salesforce access.</description>
+    <classAccesses>
+        <apexClass>DefinitionSnapshotResource</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
     <classAccesses>
         <apexClass>PublicationCommitResource</apexClass>
         <enabled>true</enabled>
