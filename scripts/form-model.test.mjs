@@ -489,7 +489,7 @@ test('permission sets grant scoped definitions and only integration can publish'
     if (name === 'Kusanya_Integration') {
       assert.deepEqual(
         classAccesses.map((grant) => tag(grant, 'apexClass')),
-        ['PublicationCommitResource'],
+        ['DefinitionSnapshotResource', 'PublicationCommitResource'],
       );
       assert.deepEqual(
         customPermissions.map((grant) => tag(grant, 'name')),

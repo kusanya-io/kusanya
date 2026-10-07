@@ -248,3 +248,12 @@ the Developer Edition scratch-org allocation. It adds a non-secret org registry
 and changes no workflow, harness, pin or product code. Notes 34, 39 and 69 remain
 open, note 75 remains informational, and no C10 or Phase 1 completion claim is
 made.
+
+The current definition-API unit (ADR 0034) exposes the reviewed ADR 0026 snapshot
+reader through one strict, bounded, integration-only Apex REST POST. It returns
+only the portable definition and mapping bundle, keeps user-mode sharing and FLS
+effective, and grants class access only to Integration. It adds no OAuth storage,
+tenant routing, target Describe, compilation, artifact upload or attestation,
+commit composition, delivery route or CLI. Note 34 advances through the external
+definition-read edge; notes 39 and 69 remain open, and no C10 or Phase 1 completion
+claim is made.
