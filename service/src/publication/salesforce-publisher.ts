@@ -486,30 +486,35 @@ export async function publishSalesforceDefinition(
   requestCount += artifacts.requestCount;
   if (!artifacts.ok) return refusal([artifacts.diagnostic], requestCount);
 
-  try {
-    const committed = decodeCommit(
-      await post(
-        '/v1/publications/commit',
-        JSON.stringify({
-          schemaVersion: 1,
-          formVersionId,
-          publicationDigest: packaged.packageSha256,
-          xformVersionId: artifacts.xformVersionId,
-          xlsformVersionId: artifacts.xlsformVersionId,
-          compileWarnings: warnings,
-        }),
-        maxCommitBytes,
-        'PUBLICATION_PUBLISHER_COMMIT',
-      ),
-      packaged.packageSha256,
-    );
-    return Object.freeze({
-      ok: true,
-      publicationDigest: packaged.packageSha256,
-      alreadyCommitted: committed,
-      requestCount,
-    });
-  } catch {
-    return publisherRefusal('PUBLICATION_PUBLISHER_COMMIT', requestCount);
+  const commitBody = JSON.stringify({
+    schemaVersion: 1,
+    formVersionId,
+    publicationDigest: packaged.packageSha256,
+    xformVersionId: artifacts.xformVersionId,
+    xlsformVersionId: artifacts.xlsformVersionId,
+    compileWarnings: warnings,
+  });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const committed = decodeCommit(
+        await post(
+          '/v1/publications/commit',
+          commitBody,
+          maxCommitBytes,
+          'PUBLICATION_PUBLISHER_COMMIT',
+        ),
+        packaged.packageSha256,
+      );
+      return Object.freeze({
+        ok: true,
+        publicationDigest: packaged.packageSha256,
+        alreadyCommitted: committed,
+        requestCount,
+      });
+    } catch {
+      if (attempt === 1)
+        return publisherRefusal('PUBLICATION_PUBLISHER_COMMIT', requestCount);
+    }
   }
+  return publisherRefusal('PUBLICATION_PUBLISHER_COMMIT', requestCount);
 }

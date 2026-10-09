@@ -43,6 +43,9 @@ The operation performs these steps in order:
 No later stage runs after an earlier refusal. The operation returns success only
 when the commit response repeats the exact package digest. A retry that reaches an
 already committed publication preserves the endpoint's `alreadyCommitted` result.
+The commit POST is attempted at most twice inside the same publication attempt.
+The second request, if needed, reuses the byte-identical body and therefore the
+same attested ContentVersion IDs; it never recompiles or uploads replacement files.
 The token capability is invoked afresh for every Salesforce request. The caller is
 responsible for binding it to one org and one integration principal for the whole
 attempt; swapping principals would violate this contract and, because Files are
@@ -59,11 +62,12 @@ diagnostics and the request count on refusal. Provider bodies, tokens, origins,
 Salesforce IDs and definition values never appear in failures.
 
 A commit refusal after successful artifact attestation can leave two unlinked,
-private Files. The commit outcome may be uncertain, so this unit does not delete
-them: a retry with the same source definition deterministically rebuilds the same
-package and the later reconciliation/retention unit must distinguish committed
-artifacts from abandoned uploads. Claiming transactional rollback across REST
-calls would be false.
+private Files. The first uncertain response is retried with the exact same commit
+body so a completed first request can return `alreadyCommitted`; if both responses
+remain uncertain, this unit does not delete the files because the commit may have
+succeeded. A later reconciliation/retention unit must distinguish committed
+artifacts from abandoned uploads. Claiming transactional rollback across REST calls
+would be false.
 
 ## Consequences and verification
 
@@ -72,7 +76,8 @@ fresh token use per request; exact commit linkage to the attested versions and
 digest; zero-I/O hostile-input refusal; no artifact upload after definition,
 Describe, package or validator refusal; no commit after attestation failure;
 mismatch cleanup; commit refusal without a success claim; shared token deadlines;
-bounded strict responses; request counts, immutability and non-disclosure.
+bounded strict responses; a lost first commit response retried with byte-identical
+IDs and body and no second upload; request counts, immutability and non-disclosure.
 
 Independent verification must run the composed operation in a fresh org as a
 non-administrator Integration principal against a cross-owner definition and a
@@ -80,8 +85,9 @@ target object containing at least one field hidden from that principal. It must
 prove that the hidden field is absent from Describe, a mapping to it refuses before
 artifact upload, a permitted mapping publishes successfully, both committed
 ContentVersion IDs are owned and readable by the same principal, stored bytes equal
-the local package, and an exact retry reports `alreadyCommitted` without changing
-the committed artifact identities.
+the local package, and a deliberately lost first commit response makes the internal
+retry report `alreadyCommitted` without changing the committed artifact identities
+or uploading a second pair.
 
 This unit makes note 69's storage evidence mandatory immediately before commit and
 advances note 34 through publisher composition and restricted-principal target-FLS

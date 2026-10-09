@@ -95,9 +95,14 @@ function requestBody(init: RequestInit): string {
 
 function successfulFetch(
   observed: ObservedRequest[],
-  options: { commitStatus?: number; mismatch?: boolean } = {},
+  options: {
+    commitStatus?: number;
+    loseFirstCommitResponse?: boolean;
+    mismatch?: boolean;
+  } = {},
 ): (input: string | URL | Request, init?: RequestInit) => Promise<Response> {
   let uploaded: [Uint8Array, Uint8Array] | undefined;
+  let commitCalls = 0;
   return async (input, init = {}) => {
     const url = requestUrl(input);
     observed.push({ url, init });
@@ -154,13 +159,17 @@ function successfulFetch(
     if (url.includes('/sobjects/ContentDocument/') && init.method === 'DELETE')
       return new Response(null, { status: 204 });
     if (url.endsWith('/services/apexrest/v1/publications/commit')) {
+      commitCalls++;
       const body = JSON.parse(requestBody(init)) as {
         publicationDigest: string;
       };
+      if (options.loseFirstCommitResponse && commitCalls === 1)
+        throw new Error('private lost response');
       return jsonResponse(
         {
           schemaVersion: 1,
-          alreadyCommitted: false,
+          alreadyCommitted:
+            options.loseFirstCommitResponse === true && commitCalls === 2,
           publicationDigest: body.publicationDigest,
         },
         options.commitStatus ?? 200,
@@ -446,12 +455,35 @@ void test('fails closed on commit refusal without claiming publication', async (
     diagnostics: [
       { code: 'PUBLICATION_PUBLISHER_COMMIT', location: 'publisher' },
     ],
-    requestCount: 7,
+    requestCount: 8,
   });
   assert.equal(
     observed.filter(({ init }) => init.method === 'DELETE').length,
     0,
   );
+});
+
+void test('retries an uncertain commit once with the identical attested identities', async () => {
+  const observed: ObservedRequest[] = [];
+  const result = await publishSalesforceDefinition(
+    configuration(),
+    { formVersionId },
+    acceptXForm,
+    successfulFetch(observed, { loseFirstCommitResponse: true }),
+  );
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.alreadyCommitted, true);
+  assert.equal(result.requestCount, 8);
+  const uploads = observed.filter(({ url }) =>
+    url.endsWith('/composite/sobjects'),
+  );
+  const commits = observed.filter(({ url }) =>
+    url.endsWith('/v1/publications/commit'),
+  );
+  assert.equal(uploads.length, 1);
+  assert.equal(commits.length, 2);
+  assert.equal(requestBody(commits[0]!.init), requestBody(commits[1]!.init));
 });
 
 void test('refuses a commit response that does not repeat the package digest', async () => {
@@ -476,7 +508,7 @@ void test('refuses a commit response that does not repeat the package digest', a
     diagnostics: [
       { code: 'PUBLICATION_PUBLISHER_COMMIT', location: 'publisher' },
     ],
-    requestCount: 7,
+    requestCount: 8,
   });
 });
 
