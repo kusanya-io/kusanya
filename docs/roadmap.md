@@ -257,3 +257,12 @@ tenant routing, target Describe, compilation, artifact upload or attestation,
 commit composition, delivery route or CLI. Note 34 advances through the external
 definition-read edge; notes 39 and 69 remain open, and no C10 or Phase 1 completion
 claim is made.
+
+The current artifact-attestation unit (ADR 0035) consumes a verified ADR 0023
+package, uploads its XForm and XLSForm as one all-or-none Salesforce Files request,
+reads back both exact immutable versions and returns their IDs only after byte-for-
+byte equality. It owns note 69's remaining initial-byte obligation at the durable-
+storage boundary. It does not select or persist tenant OAuth, load a definition,
+run Describe/preflight, invoke the commit API, deliver artifacts or expose a CLI.
+Note 34 remains open for authenticated publisher composition and restricted-user
+target FLS; note 39 remains open, and no C10 or Phase 1 completion claim is made.
