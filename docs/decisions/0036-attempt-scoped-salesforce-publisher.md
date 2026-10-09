@@ -52,6 +52,16 @@ attempt; swapping principals would violate this contract and, because Files are
 private to their uploader, can make the commit refuse. This explicitly carries
 note 83 into composition.
 
+The publishing principal must also hold record-level write access to the selected
+Form Version. `Kusanya_Integration` can read cross-owner definitions through the
+scoped View All Records grants in ADR 0026, but `Form__c` is private and its
+master-detail Form Versions are controlled by the parent. View All Records does not
+grant update access, and `modifyAllRecords` deliberately remains false. A definition
+owned by another principal can therefore be read, compiled and attested yet refuse
+at the final user-mode update unless it has been shared for write. This unit does
+not add sharing rules, groups, roles or Apex managed sharing and does not weaken
+that refusal.
+
 All direct REST responses require status 200, JSON media type, fatal UTF-8 and
 bounded streaming bodies. Requests disable ambient credentials and caching and
 refuse redirects. Definition responses are capped at 5,000,000 bytes and commit
@@ -80,24 +90,32 @@ bounded strict responses; a lost first commit response retried with byte-identic
 IDs and body and no second upload; request counts, immutability and non-disclosure.
 
 Independent verification must run the composed operation in a fresh org as a
-non-administrator Integration principal against a cross-owner definition and a
-target object containing at least one field hidden from that principal. It must
-prove that the hidden field is absent from Describe, a mapping to it refuses before
-artifact upload, a permitted mapping publishes successfully, both committed
-ContentVersion IDs are owned and readable by the same principal, stored bytes equal
-the local package, and a deliberately lost first commit response makes the internal
-retry report `alreadyCommitted` without changing the committed artifact identities
-or uploading a second pair.
+non-administrator Integration principal. A cross-owner definition proves that the
+ADR 0034 read succeeds and that a target field hidden from that principal is absent
+from Describe and refuses before artifact upload. It must not be treated as a
+successful-publication fixture unless the principal also has record-level write
+access to that Form Version. Successful publication must instead use a definition
+owned by the Integration principal or explicitly shared to it for write, and prove
+that both committed ContentVersion IDs are owned and readable by that same
+principal, stored bytes equal the local package, and a deliberately lost first
+commit response makes the internal retry report `alreadyCommitted` without changing
+the committed artifact identities or uploading a second pair. A cross-owner commit
+without write access must refuse without changing the Form Version; the resulting
+unlinked private Files remain subject to the reconciliation obligation above.
 
 This unit makes note 69's storage evidence mandatory immediately before commit and
-advances note 34 through publisher composition and restricted-principal target-FLS
-proof. Note 34 remains open for tenant connection selection, encrypted credential
-persistence and rotation, and the publish CLI. Note 39 remains open for gated,
-uncached delivery. No dependency, lockfile, workflow, harness, Salesforce metadata,
-delivery route, ingestion path, C10 acceptance test or Phase 1 completion claim is
-included.
+answers it for the same-principal path that can reach commit; it does not claim a
+cross-owner path can commit without write sharing. It advances note 34 through
+publisher composition and restricted-principal target-FLS proof. Note 34 remains
+open for tenant connection selection, encrypted credential persistence and
+rotation, the publish CLI, and the product decision that grants a publishing
+principal scoped record-level write access to administrator-authored definitions.
+Note 39 remains open for gated, uncached delivery. No dependency, lockfile,
+workflow, harness, Salesforce metadata, sharing configuration, delivery route,
+ingestion path, C10 acceptance test or Phase 1 completion claim is included.
 
 ## Revisit when
 
 Adding tenant connection storage, CLI publication, reconciliation of uncertain or
-abandoned uploads, artifact retention, or publisher API exposure.
+abandoned uploads, artifact retention, publisher API exposure, or scoped sharing
+for administrator-authored definitions.

@@ -272,9 +272,12 @@ read, fresh integration-principal Describe, package and ODK validation, exact-by
 artifact attestation and immutable publication commit under one attempt-scoped
 Salesforce connection and shared deadline. It makes note 69's attestation evidence
 mandatory immediately before commit and carries note 83's same-principal Files
-constraint into the executable boundary. It deliberately does not select tenants,
+constraint into the executable boundary. Scoped View All Records permits a
+cross-owner definition read but not the final Form Version update: success requires
+the Integration principal to own that definition or receive record-level write
+access, and this unit adds no sharing. It deliberately does not select tenants,
 store or rotate credentials, expose the publish CLI, reconcile uncertain uploads,
 deliver artifacts or ingest submissions. Note 34 advances through composition and
 restricted-principal target-FLS verification but remains open for the tenant
-connection and CLI; note 39 remains open, and no C10 or Phase 1 completion claim is
-made.
+connection, CLI and scoped publisher write-access decision; note 39 remains open,
+and no C10 or Phase 1 completion claim is made.
