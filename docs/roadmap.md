@@ -266,3 +266,15 @@ storage boundary. It does not select or persist tenant OAuth, load a definition,
 run Describe/preflight, invoke the commit API, deliver artifacts or expose a CLI.
 Note 34 remains open for authenticated publisher composition and restricted-user
 target FLS; note 39 remains open, and no C10 or Phase 1 completion claim is made.
+
+The current publisher-composition unit (ADR 0036) orders the strict definition
+read, fresh integration-principal Describe, package and ODK validation, exact-byte
+artifact attestation and immutable publication commit under one attempt-scoped
+Salesforce connection and shared deadline. It makes note 69's attestation evidence
+mandatory immediately before commit and carries note 83's same-principal Files
+constraint into the executable boundary. It deliberately does not select tenants,
+store or rotate credentials, expose the publish CLI, reconcile uncertain uploads,
+deliver artifacts or ingest submissions. Note 34 advances through composition and
+restricted-principal target-FLS verification but remains open for the tenant
+connection and CLI; note 39 remains open, and no C10 or Phase 1 completion claim is
+made.
