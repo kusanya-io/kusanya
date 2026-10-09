@@ -6,6 +6,10 @@
 - Decision owner: Cobitech Solutions
 - Extends: ADR 0027; owns note 69
 
+ADR 0035 now supplies the bounded upload-and-readback operation required here. It
+returns exact version IDs only after their stored bytes match the canonical package
+artifacts; publisher composition must preserve that ordering before ADR 0032 commit.
+
 ## Context
 
 ADR 0027 atomically records a package digest and links two caller-owned Salesforce
