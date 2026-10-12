@@ -209,9 +209,9 @@ test('model ownership and file pointers use the documented metadata contracts', 
   assert.equal(tag(publisher, 'deleteConstraint'), 'SetNull');
   assert.equal(tag(publisher, 'required'), 'false');
   const reason = read(
-    'objects/Form__c/sharingReasons/Publisher_Access.sharingReason-meta.xml',
+    'objects/Form__c/sharingReasons/Publisher_Access__c.sharingReason-meta.xml',
   );
-  assert.equal(tag(reason, 'fullName'), 'Publisher_Access');
+  assert.equal(tag(reason, 'fullName'), 'Publisher_Access__c');
   assert.equal(tag(reason, 'label'), 'Publisher Access');
   for (const [object, field, length] of [
     ['Form_Version__c', 'Version_Key__c', '28'],

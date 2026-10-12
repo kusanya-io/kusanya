@@ -30,6 +30,9 @@ selection but cannot appoint or replace the publisher. Selecting a user does not
 create or assign a user, permission set, collector, group, queue or credential. The
 selected user must separately hold `Kusanya_Integration`, including the object,
 field, class and `Publish_Kusanya` grants already required by ADRs 0026, 0032 and 0034.
+If the selected User is inactive, Salesforce refuses the share and the initiating
+Form write rolls back. If the User lacks `Kusanya_Integration`, the share alone
+cannot pass the existing object, field, class and custom-permission checks.
 
 Maintain one `Form__Share` row with Edit access and the packaged
 `Publisher_Access__c` Apex sharing reason when the selected publisher is not the
@@ -47,6 +50,9 @@ Owner changed. Each invocation uses one query and at most one delete plus one
 insert, bulked across up to 200 Forms. Clearing or replacing Publisher deletes every
 old share for this reason before applying the new selection. Other manual or rule
 shares are untouched. A share failure rolls the initiating Form transaction back.
+The selected publisher is also refused if it attempts to change Form ownership,
+preventing it from converting temporary shared access into durable owner access
+before an administrator clears or replaces the selection.
 
 Do not add Modify All Records, View All Data, setup permissions, automatic
 permission-set assignment, group membership, a REST endpoint or a tenant selector.
@@ -69,7 +75,8 @@ distinct principals to prove all of the following:
 - replacing and clearing Publisher revoke the previous user's inherited Form
   Version write access without affecting definition-wide read access;
 - owner transfer suppresses a redundant owner share and recreates it when the
-  selected publisher is no longer the owner; and
+  selected publisher is no longer the owner, while the selected publisher cannot
+  itself transfer ownership; and
 - 200 Forms reconcile in one share query and one share insert, while an unrelated
   Form edit performs no share query or DML.
 

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <SharingReason xmlns="http://soap.sforce.com/2006/04/metadata">
-    <fullName>Publisher_Access</fullName>
+    <fullName>Publisher_Access__c</fullName>
     <label>Publisher Access</label>
 </SharingReason>

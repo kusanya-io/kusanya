@@ -110,6 +110,43 @@ private class PublisherRecordAccessTest {
     }
 
     @IsTest
+    static void publisherCannotConvertShareIntoOwnership() {
+        User publisher;
+        System.runAs(new User(Id = UserInfo.getUserId())) {
+            publisher = createUser('owner');
+            assignPermission(publisher.Id, 'Kusanya_Integration');
+        }
+        Form__c form = new Form__c(
+            Name = 'Ownership boundary',
+            Publisher__c = publisher.Id
+        );
+        insert form;
+        assertShare(form.Id, publisher.Id);
+
+        System.runAs(publisher) {
+            Database.SaveResult result = Database.update(
+                new Form__c(Id = form.Id, OwnerId = publisher.Id),
+                false
+            );
+            Assert.isFalse(result.isSuccess());
+            Assert.isTrue(
+                result.getErrors()[0]
+                    .getMessage()
+                    .contains('selected publisher cannot transfer ownership')
+            );
+        }
+
+        Form__c unchanged = [
+            SELECT OwnerId, Publisher__c
+            FROM Form__c
+            WHERE Id = :form.Id
+        ];
+        Assert.areEqual(UserInfo.getUserId(), unchanged.OwnerId);
+        Assert.areEqual(publisher.Id, unchanged.Publisher__c);
+        assertShare(form.Id, publisher.Id);
+    }
+
+    @IsTest
     static void bulkReconciliationUsesOneShareBatchAndIgnoresOtherEdits() {
         User publisher;
         System.runAs(new User(Id = UserInfo.getUserId())) {

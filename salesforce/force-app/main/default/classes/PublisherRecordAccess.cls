@@ -1,10 +1,29 @@
 /**
  * Responsibility: maintain exactly one scoped Edit share from a Form to its
- * explicitly selected Publisher. This trigger-only system boundary never chooses
- * a publisher, grants object/FLS/custom-permission access or creates a user.
- * It reconciles only publisher/owner changes in one query and at most two DML.
+ * explicitly selected Publisher and prevent that principal from retaining access
+ * through ownership. This trigger-only system boundary never chooses a publisher,
+ * grants object/FLS/custom-permission access or creates a user. It reconciles only
+ * publisher/owner changes in one query and at most two DML.
  */
 public without sharing class PublisherRecordAccess {
+    private static final String OWNER_TRANSFER_REFUSED = 'The selected publisher cannot transfer ownership of this Form.';
+
+    public static void validateOwnerTransfers(
+        List<Form__c> current,
+        Map<Id, Form__c> previous
+    ) {
+        Id principal = UserInfo.getUserId();
+        for (Form__c form : current) {
+            Form__c before = previous.get(form.Id);
+            if (
+                form.OwnerId != before.OwnerId &&
+                before.Publisher__c == principal
+            ) {
+                form.OwnerId.addError(OWNER_TRANSFER_REFUSED);
+            }
+        }
+    }
+
     public static void reconcile(
         List<Form__c> current,
         Map<Id, Form__c> previous

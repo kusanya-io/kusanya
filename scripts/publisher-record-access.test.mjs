@@ -19,9 +19,9 @@ test('publisher selection is an admin-owned User lookup with a durable sharing r
   assert.match(tag(field, 'description'), /Kusanya Integration permission set/);
 
   const reason = read(
-    'objects/Form__c/sharingReasons/Publisher_Access.sharingReason-meta.xml',
+    'objects/Form__c/sharingReasons/Publisher_Access__c.sharingReason-meta.xml',
   );
-  assert.equal(tag(reason, 'fullName'), 'Publisher_Access');
+  assert.equal(tag(reason, 'fullName'), 'Publisher_Access__c');
   assert.equal(tag(reason, 'label'), 'Publisher Access');
 
   for (const [name, editable] of [
@@ -51,9 +51,10 @@ test('trigger reconciles only publisher and owner changes through the scoped rea
   const trigger = read('triggers/FormPublisherAccess.trigger');
   assert.match(
     trigger,
-    /after insert,[\s\S]*after update,[\s\S]*after undelete/,
+    /before update,[\s\S]*after insert,[\s\S]*after update,[\s\S]*after undelete/,
   );
-  assert.doesNotMatch(trigger, /before |after delete/);
+  assert.doesNotMatch(trigger, /before insert|before delete|after delete/);
+  assert.match(trigger, /PublisherRecordAccess\.validateOwnerTransfers/);
   assert.match(trigger, /PublisherRecordAccess\.reconcile/);
   assert.equal(
     tag(read('triggers/FormPublisherAccess.trigger-meta.xml'), 'apiVersion'),
@@ -64,6 +65,8 @@ test('trigger reconciles only publisher and owner changes through the scoped rea
   assert.match(handler, /public without sharing class PublisherRecordAccess/);
   assert.match(handler, /Publisher__c != before\.Publisher__c/);
   assert.match(handler, /OwnerId != before\.OwnerId/);
+  assert.match(handler, /before\.Publisher__c == principal/);
+  assert.match(handler, /form\.OwnerId\.addError/);
   assert.match(handler, /Schema\.Form__Share\.RowCause\.Publisher_Access__c/);
   assert.match(handler, /AccessLevel = 'Edit'/);
   assert.match(handler, /Publisher__c != form\.OwnerId/);
@@ -91,6 +94,7 @@ test('Apex regression covers refusal, shared commit, replacement, revocation and
   assert.match(apex, /assertShare\(form\.Id, publisher\.Id\)/);
   assert.match(apex, /assertCannotUpdate\(first/);
   assert.match(apex, /assertCannotUpdate\(second/);
+  assert.match(apex, /publisherCannotConvertShareIntoOwnership/);
   assert.match(apex, /for \(Integer index = 0; index < 200; index\+\+\)/);
   assert.match(apex, /queriesBefore \+ 1/);
   assert.match(apex, /dmlBefore \+ 2/);
