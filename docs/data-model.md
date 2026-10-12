@@ -9,7 +9,7 @@ approval. `salesforce/sfdx-project.json` still has an empty namespace.
 | Object             | Fields and role                                                                                                                                                                                           | Access / relationships                                                                                                          |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `Folder__c`        | Name, Description                                                                                                                                                                                         | Private owned root; deleting it clears a form's folder lookup.                                                                  |
-| `Form__c`          | Name, Status, Description, Folder, Default_Target_Object, Current_Version, Language, Country, Allow_Ad_Hoc_Submissions, GPS_Capture, Close_Message                                                        | Private owned root; Current_Version must belong to this form.                                                                   |
+| `Form__c`          | Name, Status, Description, Folder, Default_Target_Object, Current_Version, Language, Country, Allow_Ad_Hoc_Submissions, GPS_Capture, Close_Message, Publisher                                             | Private owned root; Current_Version must belong to this form. Publisher selects one scoped integration principal.               |
 | `Form_Version__c`  | Form, Version_Number, Status, XForm/XLSForm document IDs, exact XForm/XLSForm version IDs, Publication_Digest, Compiled_At, Compile_Warnings, Published_By, Published_At, Change_Log, derived Version_Key | Non-reparentable master-detail to Form; inherits sharing and deletion. Auto-number Name.                                        |
 | `Question__c`      | All C4 question fields: tree/identity, labels, Hint, Author_Notes, types/flags, expressions/constraints, repeat/media/prefill/lineage settings; derived Question_Key                                      | Non-reparentable detail of Form Version; same-version Parent lookup, with Apex protection for direct deletes.                   |
 | `Choice_List__c`   | Name, Description, optional Owner_Question                                                                                                                                                                | Private owned root; reusable when owner is null, otherwise immutable inline ownership by a select question.                     |
@@ -41,6 +41,18 @@ and reviewed warnings; it cannot select a tenant or publishing principal. Only t
 Integration permission set receives both class access and the `Publish_Kusanya`
 custom permission. The endpoint reads no file body, so it does not change the byte-
 attestation limitation above.
+
+ADR 0037 adds the administrator-owned Publisher lookup on Form. When the selected
+publisher is not the owner, one `Form__Share` row grants Edit using the packaged
+`Publisher_Access__c` reason; controlled-by-parent Form Versions inherit that
+record access. Clearing or replacing Publisher removes only shares carrying that
+reason. Owner changes are reconciled so an owner has no redundant share and a
+selected publisher who ceases to own the Form regains the explicit share. The
+field and share grant no object/FLS/class/custom-permission access by themselves:
+the selected user still needs `Kusanya_Integration`. Integration and Supervisor
+can read but cannot edit Publisher, every permission set keeps
+`modifyAllRecords=false`, and no user, permission assignment, group or queue is
+created.
 
 ## Question authoring rules
 
@@ -184,11 +196,17 @@ are read-only. Required/master-detail fields omit FLS entries. These permissions
 do not assign users, create collectors, grant customer-target access or allow a
 Supervisor to edit definitions.
 
-Private ownership still prevents integration/supervisor reads of another user's
-definitions by default (Claude note 24). ADRs 0011/0013 select a future nine-object
-View All Records allowlist and its effective-access tests. This PR grants none of
-it. Implement and verify that read policy before any Phase 2 definition reader;
-read-all does not authorize editing administrator-owned definitions.
+The definition-wide read grant is deliberately distinct from ADR 0037's one-Form
+write grant. Only Admin can select Publisher. The package-maintained custom share
+then supplies the record-level Edit prerequisite for the existing user-mode
+publication lifecycle; it does not make Integration the owner and does not grant
+write access to any other Form.
+
+Private ownership would prevent cross-owner definition reads, but ADR 0026's
+nine-object View All Records allowlist now supplies that read boundary and note 24
+is closed. Read-all still does not authorize editing administrator-owned
+definitions; only the selected ADR 0037 publisher receives the per-Form write
+share.
 
 Synthetic `FormDefinitionModelTest`, `QuestionDefinitionModelTest`,
 `QuestionDeletionTest`, `ChoiceAndSkipRuleModelTest`, `MappingDefinitionModelTest`,

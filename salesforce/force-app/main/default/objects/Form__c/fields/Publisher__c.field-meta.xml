@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Publisher__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>Integration user explicitly selected to receive Edit access to this Form and its controlled-by-parent definition versions. The user still requires the Kusanya Integration permission set; this field creates no user or collector identity.</description>
+    <label>Publisher</label>
+    <referenceTo>User</referenceTo>
+    <relationshipLabel>Forms Published</relationshipLabel>
+    <relationshipName>Forms_Published</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

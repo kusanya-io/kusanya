@@ -23,6 +23,7 @@ const objects = {
     'Allow_Ad_Hoc_Submissions__c',
     'GPS_Capture__c',
     'Close_Message__c',
+    'Publisher__c',
   ],
   Form_Version__c: [
     'Form__c',
@@ -202,6 +203,16 @@ test('model ownership and file pointers use the documented metadata contracts', 
     assert.equal(tag(xml, 'length'), '18');
     assert.match(tag(xml, 'description'), /ContentVersion/);
   }
+  const publisher = fieldXml('Form__c', 'Publisher__c');
+  assert.equal(tag(publisher, 'type'), 'Lookup');
+  assert.equal(tag(publisher, 'referenceTo'), 'User');
+  assert.equal(tag(publisher, 'deleteConstraint'), 'SetNull');
+  assert.equal(tag(publisher, 'required'), 'false');
+  const reason = read(
+    'objects/Form__c/sharingReasons/Publisher_Access.sharingReason-meta.xml',
+  );
+  assert.equal(tag(reason, 'fullName'), 'Publisher_Access');
+  assert.equal(tag(reason, 'label'), 'Publisher Access');
   for (const [object, field, length] of [
     ['Form_Version__c', 'Version_Key__c', '28'],
     ['Question__c', 'Question_Key__c', '100'],
@@ -411,6 +422,7 @@ test('new Apex uses local references, responsibility headers and API 64 without 
     'FieldMappingDefinitionModelTest',
     'PublicationLifecycle',
     'PublishedDefinitionGuard',
+    'PublisherRecordAccess',
   ]) {
     const cls = read(`classes/${name}.cls`);
     assert.match(cls, /Responsibility:/);
@@ -433,6 +445,7 @@ test('new Apex uses local references, responsibility headers and API 64 without 
     'SkipRuleIntegrity',
     'MappingDefinition',
     'FieldMappingDefinition',
+    'FormPublisherAccess',
   ]) {
     const trigger = read(`triggers/${name}.trigger`);
     assert.match(trigger, /Responsibility:/);
@@ -544,7 +557,12 @@ test('permission sets grant scoped definitions and only integration can publish'
       assert.equal(tag(grant, 'readable'), 'true');
       assert.equal(
         tag(grant, 'editable'),
-        String(canWrite && !derivedKeys.has(tag(grant, 'field'))),
+        String(
+          canWrite &&
+            !derivedKeys.has(tag(grant, 'field')) &&
+            (tag(grant, 'field') !== 'Form__c.Publisher__c' ||
+              name === 'Kusanya_Admin'),
+        ),
       );
     }
   }

@@ -6,6 +6,10 @@
 - Decision owner: Cobitech Solutions
 - Extends: ADRs 0019-0023, 0026, 0032, 0034 and 0035
 
+ADR 0037 now supplies the explicit per-Form Edit share deliberately excluded from
+this composition unit. Administrator-owned definitions can use that scoped route
+without changing the single-principal publisher or granting Modify All Records.
+
 ## Context
 
 Kusanya has separately reviewed boundaries for loading a portable Salesforce

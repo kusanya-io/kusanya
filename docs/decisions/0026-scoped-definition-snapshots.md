@@ -10,6 +10,10 @@ ADR 0034 now supplies the separately reviewed external boundary anticipated here
 integration-only REST resource authorizes, bounds and delegates one read without
 changing the reader's sharing, FLS, translation or refusal contracts.
 
+ADR 0037 separately supplies one explicit per-Form publisher Edit share. The
+definition-wide View All Records grants here remain read-only and
+`modifyAllRecords=false`; scoped publication access does not alter snapshot scope.
+
 ## Context
 
 The publication package accepts strict portable form and mapping inputs, but no

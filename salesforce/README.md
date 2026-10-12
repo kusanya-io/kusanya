@@ -19,6 +19,13 @@ and delegates once to the existing lifecycle. It does not accept credentials or 
 tenant selector, upload files, read `VersionData`, or turn the package digest into
 byte attestation.
 
+ADR 0037 adds one explicit publisher selection per Form. Only Admin can edit the
+Publisher lookup. A trigger maintains one reason-scoped Edit share for that user,
+which supplies record access to the Form's controlled-by-parent versions without
+Modify All Records, ownership transfer, groups or permission assignment. The user
+still requires `Kusanya_Integration`; clearing or replacing Publisher revokes only
+the package-owned share.
+
 Question tree updates validate the entire affected version and protect partial-DML
 outcomes. Detach children before changing container roles or reversing parent edges.
 Keep once-only questions as siblings of a repeat, not its children; keep author
@@ -49,11 +56,10 @@ configuration, not validated target access; transforms and stamps are not execut
 See ADR 0013 for partial-write staging, direct deletion and compiler responsibilities.
 
 The unassigned Admin/Integration/Supervisor permission sets cover nine definition
-objects while preserving ordinary sharing and no View All grants. They do not yet
-allow cross-owner definition reads. ADR 0011 records the decision and required
-future reviewed implementation/effective-access tests before a Phase 2 reader
-(Claude note 24); ADR 0013 explicitly extends that future allowlist and tests to
-the two mapping objects without implementing the grants.
+objects. Integration and Supervisor have View All Records on that exact allowlist
+for the reviewed snapshot reader, with Modify All Records still false. Only Admin
+can edit a Form's Publisher selection; the selected user receives one explicit
+record share but no permission assignment or setup privilege.
 
 ## Iterative development only
 
