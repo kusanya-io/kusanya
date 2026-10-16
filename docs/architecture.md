@@ -194,6 +194,20 @@ custom permission, and static no-cache responses disclose no record/file identit
 or provider detail. This is only a commit edge: it accepts no tenant selector or
 credential and performs no upload, read-back attestation, delivery or target write.
 
+ADRs 0034 through 0036 add the strict definition REST edge, exact-byte Salesforce
+Files attestation and one attempt-scoped service publisher that composes definition
+read, fresh Describe, package validation, upload/readback and commit as the same
+Integration principal. A cross-owner definition remains readable but cannot reach
+the user-mode commit without record-level write access on its private Form parent.
+
+ADR 0037 supplies that prerequisite without Modify All Records. An Admin selects
+one Publisher on one Form, and a trigger maintains one custom-reason Edit share for
+that user; the controlled-by-parent versions inherit the access. Replacement,
+clearing and owner transfer reconcile only that package-owned share. The selection
+does not create a user, assign permissions or choose tenant credentials, so the
+publisher still requires `Kusanya_Integration` and the attempt-scoped connection
+contract remains unchanged.
+
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure
 `createSalesforceNames(prefix)` service helper qualifies explicitly Kusanya-owned

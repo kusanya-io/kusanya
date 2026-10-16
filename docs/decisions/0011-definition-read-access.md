@@ -5,6 +5,10 @@
 - Brief sections: C2, C4 sharing and permissions, C8, C11 Phase 2, C12
 - Decision owner: Cobitech Solutions
 
+ADR 0037 later adds one explicit, revocable Edit share from a Form to its selected
+publisher. It does not widen this definition-read allowlist or change the retained
+`modifyAllRecords=false` decision.
+
 ## Context
 
 Claude's PR #8 note 24 identifies a real gap: private Form/Folder/Choice List roots

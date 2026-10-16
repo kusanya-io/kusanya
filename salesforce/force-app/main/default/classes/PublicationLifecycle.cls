@@ -487,7 +487,8 @@ public with sharing class PublicationLifecycle {
             before.Allow_Ad_Hoc_Submissions__c ==
             after.Allow_Ad_Hoc_Submissions__c &&
             before.GPS_Capture__c == after.GPS_Capture__c &&
-            before.Close_Message__c == after.Close_Message__c;
+            before.Close_Message__c == after.Close_Message__c &&
+            before.Publisher__c == after.Publisher__c;
     }
 
     private static void refuse() {

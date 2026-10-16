@@ -87,9 +87,9 @@ automatic per-artifact JavaRosa validation remain required before corresponding
 runtime/publish claims. No CI or harness change is included; notes 29/31/35 remain
 separate reviewed tooling/workflow work.
 
-Next units must complete the authenticated publisher/CLI composition, artifact
-delivery and retention, executable ingestion of the package-pinned repeat-count
-policy, and general edited-XLSForm import.
+Next units must complete tenant connection and CLI publication, artifact delivery
+and retention, executable ingestion of the package-pinned repeat-count policy, and
+general edited-XLSForm import.
 No model unit claims C10 tests 10/12. Do not mark Phase 1 complete from model tests.
 
 The runtime-regression unit (ADR 0015) adds optional Enketo 9.0.1/JavaRosa 6.0.0
@@ -281,3 +281,15 @@ deliver artifacts or ingest submissions. Note 34 advances through composition an
 restricted-principal target-FLS verification but remains open for the tenant
 connection, CLI and scoped publisher write-access decision; note 39 remains open,
 and no C10 or Phase 1 completion claim is made.
+
+The current scoped publisher-access unit (ADR 0037) adds one Admin-selected
+Publisher lookup per private Form and maintains one custom-reason Edit share to
+that user. The controlled-by-parent Form Version inherits the access required by
+the existing user-mode commit, while every permission set retains
+`modifyAllRecords=false`. Replacement, clearing and owner transfer reconcile only
+the package-owned share; no user, permission assignment, group, queue, endpoint,
+credential, workflow or harness change is included. This closes note 85's
+shared-for-write route only after independent live verification. Note 34 remains
+open for tenant connection selection, encrypted credential persistence and
+rotation, and the publish CLI; note 39 remains open, and no C10 or Phase 1
+completion claim is made.
