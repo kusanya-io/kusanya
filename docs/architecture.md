@@ -208,6 +208,15 @@ does not create a user, assign permissions or choose tenant credentials, so the
 publisher still requires `Kusanya_Integration` and the attempt-scoped connection
 contract remains unchanged.
 
+ADR 0038 adds the first service-side product persistence boundary: one normalized
+Salesforce org connection per tenant UUID, with authorization/instance origins,
+namespace configuration and an AES-256-GCM refresh-token envelope in PostgreSQL.
+The envelope is authenticated to both tenant and org and uses a deployment-secret
+keyring so rows can be rewrapped under a new active key without changing the
+Salesforce credential version. Checksum-pinned migrations run explicitly, never at
+HTTP startup. No OAuth route, token exchange, tenant-facing endpoint or publish CLI
+is present yet; callers cannot select a connection from an untrusted header.
+
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure
 `createSalesforceNames(prefix)` service helper qualifies explicitly Kusanya-owned

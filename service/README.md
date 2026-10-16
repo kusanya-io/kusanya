@@ -5,6 +5,13 @@ and PostgreSQL 17. Tenant authentication, OpenRosa, submission storage, Salesfor
 mapping and the durable queue belong to later phases. No collector Salesforce
 account is created or required. See the architecture and ADRs in `../docs/`.
 
+ADR 0038 adds a service-internal tenant connection vault and the first product
+table. It stores one normalized Salesforce org binding per tenant and only an
+AES-256-GCM encrypted refresh-token envelope. Encryption keys remain deployment
+secrets and support active-key rewrap; a connection exposes plaintext only through
+an internal token capability. There is still no OAuth callback, access-token
+refresh adapter, tenant HTTP route or publish CLI.
+
 Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.
 It has no HTTP route, Salesforce access or publishing authority. See
 [the input contract, unsupported features and offline ODK validation runbook](../docs/compiler.md)
@@ -43,6 +50,15 @@ npm run lint
 npm run typecheck
 npm test
 ```
+
+After `npm run build`, apply the checksum-pinned schema to a disposable or approved
+service database as a separate one-shot operation:
+
+```sh
+npm run migrate
+```
+
+The service never migrates implicitly during HTTP startup.
 
 The unit suite checks invalid configuration, credential-safe errors, liveness during
 database failure, readiness recovery, pool shutdown, HEAD probes and absent business
@@ -86,6 +102,14 @@ CA. `DATABASE_TIMEOUT_MS` defaults to 3000 (maximum 30000); `DATABASE_POOL_MAX`
 defaults to 10 (maximum 100). `PORT` defaults to 3000 and `LOG_LEVEL` to info.
 Configuration errors name settings without printing their values. Deployed HTTP
 requires the environment's approved TLS ingress.
+
+`TENANT_CREDENTIAL_ACTIVE_KEY_ID` names the key used for new encryption.
+`TENANT_CREDENTIAL_KEYS` is a comma-separated keyring of `key-id:base64-key`
+entries, each a canonical base64 32-byte key, injected from the environment's
+secret store. Keep the prior key during rotation, rewrap every connection, verify
+no row still names it, then remove it. These settings are consumed by the internal
+vault, not accepted from requests, and no key belongs in PostgreSQL or `.env` under
+version control.
 
 ## Salesforce namespace configuration
 
@@ -156,5 +180,6 @@ the nonroot `node` user; runtime contains neither tests nor development dependen
 
 Development/staging belong on `cobitech-edge`; production belongs on Azure (C12a).
 These commands build images or run disposable tests; they do not provision a hosting
-environment. Compose, migrations, storage drivers and restore procedures are future
-reviewed work before deployment or ingestion is enabled.
+environment. Compose, storage drivers and restore procedures remain future reviewed
+work before deployment or ingestion is enabled. The migration runner exists, but
+no deployment automation invokes it yet.
