@@ -43,10 +43,11 @@ Values such as `MyNs__`, `my_ns__` and `Evil__` are rejected before storage with
 `ADMINISTRATOR_SESSION_INPUT`.
 
 The database repeats the namespace constraint. Migration `0004` creates the tenant
-table, refuses inconsistent legacy actor rows, backfills consistent rows and then
-removes the duplicated tenant properties from actor bindings. A bad namespace,
-duplicate org ownership or inconsistent tenant tuple rolls the migration back under
-the existing migration transaction rather than choosing a winner.
+table, refuses inconsistent legacy actor rows, collapses identical per-actor tuples
+with `SELECT DISTINCT` into one tenant row, and then removes the duplicated tenant
+properties from actor bindings. A bad namespace, duplicate org ownership or
+inconsistent tenant tuple rolls the migration back under the existing migration
+transaction rather than choosing a winner.
 
 ### Serialize provisioning without partial rows
 

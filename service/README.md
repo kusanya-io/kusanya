@@ -69,6 +69,23 @@ npm run migrate
 
 The service never migrates implicitly during HTTP startup.
 
+Before applying migration `0004_administrator_tenants` to a database created by PR
+#77, check the legacy bindings for namespace values that the current canonical rule
+will refuse:
+
+```sql
+SELECT actor_id, tenant_id, namespace_prefix
+FROM tenant_administrator_bindings
+WHERE namespace_prefix !~ '^(|[a-z][a-z0-9]{0,14}__)$';
+```
+
+If this returns rows, stop the deployment. Confirm the intended canonical prefix
+with the tenant administrator, back up the database, and correct every binding for
+that tenant together under the approved audited change process before rerunning the
+migration. Do not guess, lowercase or otherwise normalize it automatically. The
+migration deliberately fails closed and rolls back if a legacy namespace is invalid,
+if actors for one tenant disagree, or if two tenants claim one Salesforce org.
+
 The unit suite checks invalid configuration, credential-safe errors, liveness during
 database failure, readiness recovery, pool shutdown, HEAD probes and absent business
 routes. It also checks oversized bodies (413), malformed JSON (400), unsupported

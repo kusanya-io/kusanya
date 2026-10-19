@@ -124,16 +124,9 @@ const migrations = Object.freeze([
       tenant_id, expected_salesforce_org_id,
       authorization_origin, namespace_prefix
     )
-    SELECT tenant_id, expected_salesforce_org_id,
+    SELECT DISTINCT tenant_id, expected_salesforce_org_id,
            authorization_origin, namespace_prefix
-    FROM tenant_administrator_bindings
-    ON CONFLICT (tenant_id) DO UPDATE SET tenant_id = EXCLUDED.tenant_id
-    WHERE tenant_administrator_tenants.expected_salesforce_org_id =
-            EXCLUDED.expected_salesforce_org_id
-      AND tenant_administrator_tenants.authorization_origin =
-            EXCLUDED.authorization_origin
-      AND tenant_administrator_tenants.namespace_prefix =
-            EXCLUDED.namespace_prefix;
+    FROM tenant_administrator_bindings;
     ALTER TABLE tenant_administrator_bindings
       ADD CONSTRAINT tenant_administrator_bindings_tenant
       FOREIGN KEY (tenant_id)
@@ -154,7 +147,22 @@ export class MigrationError extends Error {
 const checksum = (sql: string): string =>
   createHash('sha256').update(sql, 'utf8').digest('hex');
 
-export async function applyMigrations(pool: Pool): Promise<void> {
+export type MigrationTarget =
+  | '0001_tenant_connections'
+  | '0002_tenant_oauth_transactions'
+  | '0003_administrator_sessions'
+  | '0004_administrator_tenants';
+
+/** Apply the checked plan through an optional exact target for upgrade verification. */
+export async function applyMigrations(
+  pool: Pool,
+  through?: MigrationTarget,
+): Promise<void> {
+  const targetIndex =
+    through === undefined
+      ? migrations.length - 1
+      : migrations.findIndex((migration) => migration.id === through);
+  if (targetIndex < 0) throw new MigrationError();
   const client = await pool.connect().catch(() => {
     throw new MigrationError();
   });
@@ -168,7 +176,7 @@ export async function applyMigrations(pool: Pool): Promise<void> {
       checksum char(64) NOT NULL,
       applied_at timestamptz NOT NULL DEFAULT clock_timestamp()
     )`);
-    for (const migration of migrations) {
+    for (const migration of migrations.slice(0, targetIndex + 1)) {
       const digest = checksum(migration.sql);
       const existing = await client.query<{ checksum: string }>(
         `SELECT checksum

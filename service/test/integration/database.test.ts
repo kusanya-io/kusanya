@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHmac, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { createServer } from 'node:net';
+import { Pool } from 'pg';
 import { createApp } from '../../src/app.js';
 import { readConfig } from '../../src/config.js';
 import { createDatabase, createPostgresPool } from '../../src/database.js';
@@ -558,6 +559,128 @@ void test(
         )
       ).rowCount,
       0,
+    );
+  },
+);
+
+void test(
+  'migration 0004 collapses multiple consistent legacy administrators into one tenant',
+  {
+    timeout: 15000,
+    skip:
+      !databaseUrl && !databaseRequired
+        ? 'Set DATABASE_URL to a disposable PostgreSQL 17 database'
+        : false,
+  },
+  async (context) => {
+    assert.ok(
+      databaseUrl,
+      'DATABASE_URL is required when REQUIRE_DATABASE_TESTS=true',
+    );
+    const config = readConfig({
+      ...process.env,
+      NODE_ENV: 'test',
+      DATABASE_URL: databaseUrl,
+    });
+    const controlPool = createPostgresPool(config, () => {});
+    const schema = `migration_upgrade_${randomUUID().replaceAll('-', '')}`;
+    assert.match(schema, /^[a-z0-9_]+$/);
+    await controlPool.query(`CREATE SCHEMA ${schema}`);
+    const legacyPool = new Pool({
+      connectionString: config.databaseUrl,
+      ssl: config.databaseSsl ? { rejectUnauthorized: true } : false,
+      options: `-c search_path=${schema}`,
+      max: 2,
+      connectionTimeoutMillis: config.databaseTimeoutMs,
+      query_timeout: config.databaseTimeoutMs,
+      statement_timeout: config.databaseTimeoutMs,
+      application_name: 'kusanya-migration-upgrade-test',
+    });
+    context.after(async () => {
+      await legacyPool.end();
+      try {
+        await controlPool.query(`DROP SCHEMA ${schema} CASCADE`);
+      } finally {
+        await controlPool.end();
+      }
+    });
+
+    await applyMigrations(legacyPool, '0003_administrator_sessions');
+    const tenantId = randomUUID();
+    const actorIds = [
+      `administrator:${randomUUID()}`,
+      `administrator:${randomUUID()}`,
+    ];
+    const orgId = normalizeSalesforceOrgId(
+      `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+    );
+    await legacyPool.query(
+      `INSERT INTO tenant_administrator_bindings (
+         actor_id, tenant_id, expected_salesforce_org_id,
+         authorization_origin, namespace_prefix
+       ) VALUES
+         ($1, $3::uuid, $4, $5, $6),
+         ($2, $3::uuid, $4, $5, $6)`,
+      [
+        actorIds[0],
+        actorIds[1],
+        tenantId,
+        orgId,
+        'https://login.salesforce.com',
+        'ksny__',
+      ],
+    );
+
+    await applyMigrations(legacyPool);
+    await applyMigrations(legacyPool);
+    assert.deepEqual(
+      (
+        await legacyPool.query<{
+          tenant_id: string;
+          expected_salesforce_org_id: string;
+          authorization_origin: string;
+          namespace_prefix: string;
+        }>(
+          `SELECT tenant_id::text, expected_salesforce_org_id,
+                  authorization_origin, namespace_prefix
+           FROM tenant_administrator_tenants`,
+        )
+      ).rows,
+      [
+        {
+          tenant_id: tenantId,
+          expected_salesforce_org_id: orgId,
+          authorization_origin: 'https://login.salesforce.com',
+          namespace_prefix: 'ksny__',
+        },
+      ],
+    );
+    assert.deepEqual(
+      (
+        await legacyPool.query<{ actor_id: string; tenant_id: string }>(
+          `SELECT actor_id, tenant_id::text
+           FROM tenant_administrator_bindings
+           ORDER BY actor_id`,
+        )
+      ).rows,
+      actorIds
+        .toSorted()
+        .map((actor_id) => ({ actor_id, tenant_id: tenantId })),
+    );
+    assert.deepEqual(
+      (
+        await legacyPool.query<{ migration_id: string }>(
+          `SELECT migration_id
+           FROM kusanya_schema_migrations
+           ORDER BY migration_id`,
+        )
+      ).rows.map((row) => row.migration_id),
+      [
+        '0001_tenant_connections',
+        '0002_tenant_oauth_transactions',
+        '0003_administrator_sessions',
+        '0004_administrator_tenants',
+      ],
     );
   },
 );
