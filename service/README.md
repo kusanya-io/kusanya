@@ -14,8 +14,9 @@ attempt-scoped access-token capability. Refreshes for one tenant are serialized 
 a PostgreSQL row lock across replicas, a rotated refresh token is encrypted and
 committed before access is exposed, and the returned org and instance must match the
 stored binding. A local rejecting deadline releases that row lock even if an injected
-transport ignores its abort signal. There is still no OAuth callback, trusted tenant HTTP route, final
-publisher composition or publish CLI.
+transport ignores its abort signal. ADR 0040 adds the internal one-time OAuth start
+and callback protocol, without exposing an HTTP route. Trusted administrator HTTP
+authentication, final publisher composition and the publish CLI remain.
 
 Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.
 It has no HTTP route, Salesforce access or publishing authority. See
@@ -116,6 +117,15 @@ secret store. Keep the prior key during rotation, rewrap every connection, verif
 no row still names it, then remove it. These settings are consumed by the internal
 vault, not accepted from requests, and no key belongs in PostgreSQL or `.env` under
 version control.
+
+The internal ADR 0040 authorization boundary creates a short-lived Salesforce
+authorization URL and completes its callback without exposing an HTTP route. It
+stores only a state digest and trusted tenant/org metadata in
+`tenant_oauth_transactions`; the PKCE verifier is derived under a deployment secret.
+The callback consumes state once before exchanging the code and only then writes the
+encrypted refresh token through `TenantConnectionStore`. The future authenticated
+administrator route must supply the trusted tenant and expected org and must not
+accept either from request headers or callback parameters.
 
 ## Salesforce namespace configuration
 
