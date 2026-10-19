@@ -511,5 +511,52 @@ void test(
       ).rowCount,
       0,
     );
+
+    const expiredStart = await beginTenantSalesforceAuthorization(
+      transactionStore,
+      {
+        trustedTenantId: rejectedTenantId,
+        expectedSalesforceOrgId: orgId,
+        authorizationOrigin: 'https://login.salesforce.com',
+        namespacePrefix: '',
+      },
+      oauthConfiguration,
+    );
+    const expiredState = new URL(
+      expiredStart.authorizationUrl,
+    ).searchParams.get('state');
+    assert.ok(expiredState);
+    await pool.query(
+      `UPDATE tenant_oauth_transactions
+       SET created_at = clock_timestamp() - interval '2 hours',
+           expires_at = clock_timestamp() - interval '1 hour'
+       WHERE tenant_id = $1::uuid`,
+      [rejectedTenantId],
+    );
+    let expiredExchanges = 0;
+    await assert.rejects(
+      completeTenantSalesforceAuthorization(
+        transactionStore,
+        connectionStore,
+        { state: expiredState, code: 'expired-authorization-code' },
+        oauthConfiguration,
+        async () => {
+          expiredExchanges++;
+          return new Response('{}');
+        },
+      ),
+      { message: 'TENANT_OAUTH_STATE' },
+    );
+    assert.equal(expiredExchanges, 0);
+    assert.equal(
+      (
+        await pool.query(
+          `SELECT 1 FROM tenant_oauth_transactions
+           WHERE tenant_id = $1::uuid`,
+          [rejectedTenantId],
+        )
+      ).rowCount,
+      0,
+    );
   },
 );

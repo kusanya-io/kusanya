@@ -64,6 +64,8 @@ export type TenantAuthorizationCallback =
 export interface TenantAuthorizationResult {
   readonly tenantId: string;
   readonly salesforceOrgId: string;
+  /** Salesforce user that granted the tenant connection; retained for audit composition. */
+  readonly salesforceUserId: string;
   readonly instanceOrigin: string;
   readonly namespacePrefix: string;
   readonly credentialVersion: number;
@@ -355,11 +357,16 @@ export class TenantOAuthTransactionStore {
     let result;
     try {
       result = await this.database.query<OAuthTransactionRow>(
-        `DELETE FROM tenant_oauth_transactions
-         WHERE state_digest = $1
-           AND expires_at > clock_timestamp()
-         RETURNING tenant_id, expected_salesforce_org_id,
-                   authorization_origin, namespace_prefix`,
+        `WITH consumed AS (
+           DELETE FROM tenant_oauth_transactions
+           WHERE state_digest = $1
+           RETURNING tenant_id, expected_salesforce_org_id,
+                     authorization_origin, namespace_prefix, expires_at
+         )
+         SELECT tenant_id, expected_salesforce_org_id,
+                authorization_origin, namespace_prefix
+         FROM consumed
+         WHERE expires_at > clock_timestamp()`,
         [digest],
       );
     } catch {
@@ -501,7 +508,11 @@ function tokenResponse(
   value: unknown,
   expected: OAuthTransaction,
   clientSecret: string,
-): { instanceOrigin: string; refreshToken: string } {
+): {
+  instanceOrigin: string;
+  refreshToken: string;
+  salesforceUserId: string;
+} {
   const body = providerRecord(value);
   const allowed = new Set([
     'access_token',
@@ -519,6 +530,17 @@ function tokenResponse(
   providerToken(body.access_token);
   const refreshToken = providerToken(body.refresh_token);
   if (body.token_type !== 'Bearer') fail('TENANT_OAUTH_PROVIDER');
+  if (typeof body.scope !== 'string') fail('TENANT_OAUTH_PROVIDER');
+  const scopes = body.scope.split(' ');
+  if (
+    scopes.length !== 2 ||
+    new Set(scopes).size !== 2 ||
+    !scopes.includes('api') ||
+    !scopes.includes('refresh_token')
+  )
+    fail('TENANT_OAUTH_PROVIDER');
+  if (body.token_format !== undefined && body.token_format !== 'jwt')
+    fail('TENANT_OAUTH_PROVIDER');
   const instanceOrigin = providerOrigin(body.instance_url);
   const identityValue = body.id;
   const issuedAt = body.issued_at;
@@ -557,8 +579,6 @@ function tokenResponse(
   } catch {
     fail('TENANT_OAUTH_PROVIDER');
   }
-  if (responseOrgId !== expected.expectedSalesforceOrgId)
-    fail('TENANT_OAUTH_BINDING');
   let suppliedSignature: Buffer;
   try {
     suppliedSignature = Buffer.from(signature, 'base64');
@@ -574,7 +594,13 @@ function tokenResponse(
     !timingSafeEqual(suppliedSignature, expectedSignature)
   )
     fail('TENANT_OAUTH_PROVIDER');
-  return { instanceOrigin, refreshToken };
+  if (responseOrgId !== expected.expectedSalesforceOrgId)
+    fail('TENANT_OAUTH_BINDING');
+  return {
+    instanceOrigin,
+    refreshToken,
+    salesforceUserId: segments[3]!,
+  };
 }
 
 async function exchangeAuthorizationCode(
@@ -583,7 +609,11 @@ async function exchangeAuthorizationCode(
   code: string,
   decoded: DecodedConfiguration,
   fetchImplementation: FetchImplementation,
-): Promise<{ instanceOrigin: string; refreshToken: string }> {
+): Promise<{
+  instanceOrigin: string;
+  refreshToken: string;
+  salesforceUserId: string;
+}> {
   const controller = new AbortController();
   const timeout = new Promise<never>((_, reject) => {
     controller.signal.addEventListener(
@@ -696,6 +726,7 @@ export async function completeTenantSalesforceAuthorization(
     return Object.freeze({
       tenantId: connection.tenantId,
       salesforceOrgId: connection.salesforceOrgId,
+      salesforceUserId: exchanged.salesforceUserId,
       instanceOrigin: connection.instanceOrigin,
       namespacePrefix: connection.namespacePrefix,
       credentialVersion: connection.credentialVersion,

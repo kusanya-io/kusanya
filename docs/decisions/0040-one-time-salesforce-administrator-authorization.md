@@ -77,6 +77,10 @@ one encrypted insert or same-org replacement. Wrong-org grants are refused. A to
 exchange followed by a database failure may require Salesforce reauthorization, but
 cannot leave a partial new row; an existing connection remains governed by the
 store's atomic statement. Returned metadata contains no access or refresh token.
+ADR 0041 tightens this by verifying the response signature before reporting an
+expected-org mismatch, requiring the requested scope and supported optional token
+format, and returning the validated authorizing Salesforce user ID for later audit
+composition.
 
 ## Consequences and verification
 
@@ -86,10 +90,13 @@ signature and expected-org binding, malformed/hostile input refusal without gett
 execution, fixed secret-free errors, fetch-independent timeout and a late transport
 that cannot persist. A disposable PostgreSQL 17 test must prove one winner across
 two real concurrent consumes, encrypted-only durable refresh storage, replay refusal,
-and no connection after a partial grant.
+and no connection after a partial grant. ADR 0041 also deletes a matching expired
+transaction while still refusing it, rather than retaining the bounded row until the
+tenant's next authorization start.
 
 This advances note 34 through the authorization and callback protocol but does not
-close it. Trusted administrator HTTP authentication and tenant provisioning,
+close it. ADR 0041 adds an unmounted, dependency-injected HTTP adapter and browser
+binding, while concrete administrator HTTP authentication and tenant provisioning,
 deployment secret wiring, privileged disconnect/rebind, final publisher composition
 and the publish CLI remain. No public callback route is safe until the service owns
 its external origin, trusted administrator session and CSRF boundary. No live

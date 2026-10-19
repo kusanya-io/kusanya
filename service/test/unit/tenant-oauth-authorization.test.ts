@@ -58,7 +58,7 @@ function memoryStore() {
         });
         return { rowCount: 1, rows: [] };
       }
-      if (/^\s*DELETE/.test(text)) {
+      if (/DELETE FROM tenant_oauth_transactions/.test(text)) {
         const digest = String(values[0]);
         const row = rows.get(digest);
         if (row === undefined) return { rowCount: 0, rows: [] };
@@ -256,6 +256,7 @@ void test('exchanges once, verifies the signed org identity and saves only the f
   assert.deepEqual(result, {
     tenantId,
     salesforceOrgId: orgId,
+    salesforceUserId: userId,
     instanceOrigin: 'https://tenant.my.salesforce.com',
     namespacePrefix: 'ksny__',
     credentialVersion: 1,
@@ -350,6 +351,52 @@ void test('refuses wrong-org, bad-signature and partial grants without a half-wr
     assert.equal(saves, 0);
     assert.equal(memory.rows.size, 0);
   }
+});
+
+void test('authenticates provider identity before reporting an org mismatch and enforces response grants', async () => {
+  const wrongIdentity = `https://login.salesforce.com/id/${otherOrgId}/${userId}`;
+  const cases = [
+    {
+      response: signedResponse({
+        id: wrongIdentity,
+        signature: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+      }),
+      code: 'TENANT_OAUTH_PROVIDER',
+    },
+    {
+      response: signedResponse({ scope: 'api' }),
+      code: 'TENANT_OAUTH_PROVIDER',
+    },
+    {
+      response: signedResponse({ token_format: 'opaque' }),
+      code: 'TENANT_OAUTH_PROVIDER',
+    },
+  ];
+  for (const item of cases) {
+    const memory = memoryStore();
+    const { state } = await started(memory.store);
+    await assert.rejects(
+      completeTenantSalesforceAuthorization(
+        memory.store,
+        connectionStore(() => assert.fail('must not save')),
+        { state, code: 'synthetic-authorization-code' },
+        configuration,
+        async () => item.response,
+      ),
+      { message: item.code },
+    );
+  }
+  const memory = memoryStore();
+  const { state } = await started(memory.store);
+  const accepted = await completeTenantSalesforceAuthorization(
+    memory.store,
+    connectionStore(() => {}),
+    { state, code: 'synthetic-authorization-code' },
+    configuration,
+    async () =>
+      signedResponse({ scope: 'refresh_token api', token_format: 'jwt' }),
+  );
+  assert.equal(accepted.salesforceUserId, userId);
 });
 
 void test('refuses malformed and oversized provider responses after consuming state', async () => {
@@ -522,12 +569,20 @@ void test('rejects hostile inputs and accessors before storage or network use', 
 });
 
 void test('transaction store distinguishes absence from malformed or failed storage', async () => {
+  let consumeSql = '';
   const absent = new TenantOAuthTransactionStore({
-    async query() {
+    async query(text) {
+      consumeSql = text;
       return { rowCount: 0, rows: [] };
     },
   });
   assert.equal(await absent.consume('a'.repeat(64)), undefined);
+  assert.match(consumeSql, /DELETE FROM tenant_oauth_transactions/);
+  assert.doesNotMatch(
+    consumeSql,
+    /WHERE state_digest = \$1\s+AND expires_at\s*>/,
+  );
+  assert.match(consumeSql, /WHERE expires_at > clock_timestamp\(\)/);
   await assert.rejects(absent.consume('not-a-digest'), {
     message: 'TENANT_OAUTH_INPUT',
   });
