@@ -107,17 +107,17 @@ This is database serialization evidence, not a live Salesforce OAuth grant. No
 customer credential, Salesforce scratch org or client-app change is required.
 
 This advances note 34 through refresh transport, rotation-aware persistence and an
-internal trusted-tenant contract. It does not close note 34: the authenticated
-administrator authorization/callback, PKCE state, deployment client configuration,
-connection/disconnect lifecycle, final publisher composition and CLI remain. Note 39
-remains open. No C10 acceptance test, publish-ready state or Phase 1 completion is
-claimed.
+internal trusted-tenant contract. ADR 0040 later adds the one-time administrator
+authorization and PKCE callback protocol. Note 34 remains open for trusted HTTP
+authentication, deployment client configuration, connection/disconnect lifecycle,
+final publisher composition and CLI. Note 39 remains open. No C10 acceptance test,
+publish-ready state or Phase 1 completion is claimed.
 
 Verifier note 88 is answered by the local rejecting race and the real-database
 lock-release test. Deadline enforcement no longer depends on injected fetch behavior.
 
 ## Revisit when
 
-Composing the authenticated OAuth callback, wiring deployment client secrets,
-binding the session to `publishSalesforceDefinition`, adding disconnect/reconnect and
-reauthorization UX, or implementing the publish CLI.
+Exposing the callback through trusted administrator authentication, wiring deployment
+client secrets, binding the session to `publishSalesforceDefinition`, adding
+disconnect/reconnect and reauthorization UX, or implementing the publish CLI.

@@ -218,9 +218,13 @@ HTTP startup. ADR 0039 adds the internal attempt-scoped session boundary. It sel
 only a trusted tenant UUID, serializes refreshes across replicas with a PostgreSQL
 row lock, binds the response to the stored org and instance, persists a rotated token
 before exposing a non-enumerated in-memory access-token capability, and reuses that
-access token only for the attempt. There is still no OAuth callback, trusted HTTP
-tenant authentication, tenant-facing endpoint, publisher composition or publish CLI;
-callers cannot select a connection from an untrusted header.
+access token only for the attempt. ADR 0040 adds an internal one-time authorization
+start and callback: only a state digest and trusted tenant/org binding reach
+PostgreSQL, PKCE is derived under a deployment secret, state is consumed before the
+bounded exchange, and the signed Salesforce identity must match the expected org.
+There is still no trusted HTTP tenant authentication, tenant-facing endpoint,
+publisher composition or publish CLI; callers cannot select a connection from an
+untrusted header.
 
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure

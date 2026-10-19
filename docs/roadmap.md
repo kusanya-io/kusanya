@@ -308,3 +308,15 @@ client-app metadata, trusted HTTP authentication, final
 publisher binding or publish CLI is added. Note 34 advances but remains open for
 those boundaries and CLI composition; note 39 remains open, and no C10 or Phase 1
 completion claim is made.
+
+The administrator-authorization unit (ADR 0040) adds an internal authorization-code
+start and one-time callback with S256 PKCE. PostgreSQL holds only a state digest and
+the trusted tenant/org binding; the verifier is derived under a deployment secret.
+The callback atomically consumes unexpired state before its bounded token exchange,
+verifies Salesforce's signed identity and exact expected `00D` org, and persists only
+the encrypted refresh token through ADR 0038. Failures require a fresh grant and
+cannot leave a partial new connection. No public route is exposed because trusted
+administrator HTTP authentication and tenant provisioning are not implemented.
+Deployment secret wiring, disconnect/rebind, final publisher composition and the
+publish CLI remain under note 34; note 39 remains open, and no C10 or Phase 1
+completion claim is made.

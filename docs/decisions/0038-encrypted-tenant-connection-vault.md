@@ -106,14 +106,15 @@ other tenant absent.
 
 This unit advances note 34 through durable encrypted credential storage and a
 decided OAuth grant. ADR 0039 later adds internal tenant selection and refresh-token
-exchange/rotation. Administrator OAuth routes, transient state and PKCE storage,
-trusted HTTP authentication, final publisher composition and CLI publication remain.
+exchange/rotation; ADR 0040 later adds the one-time state and PKCE callback protocol.
+Trusted HTTP authentication, final publisher composition and CLI publication remain.
 Note 39 remains open. This unit adds no HTTP product endpoint,
 Salesforce metadata, connected/external client app, workflow, harness, policy,
 Enketo/Collect behavior, submission data or C10.14 claim. It is not a Phase 1 gate.
 
 ## Revisit when
 
-The OAuth callback is implemented, a privileged disconnect/rebind workflow is
-designed, Azure Key Vault or another managed key service replaces environment-injected keys, or tenant
-row volume requires a resumable key-rotation job.
+The OAuth callback is exposed through trusted administrator authentication, a
+privileged disconnect/rebind workflow is designed, Azure Key Vault or another
+managed key service replaces environment-injected keys, or tenant row volume
+requires a resumable key-rotation job.

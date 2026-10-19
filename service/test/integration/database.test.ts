@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { createServer } from 'node:net';
 import { createApp } from '../../src/app.js';
@@ -13,6 +13,11 @@ import {
   type QueryExecutor,
 } from '../../src/tenant/connection-store.js';
 import { createTenantSalesforceSession } from '../../src/tenant/salesforce-session.js';
+import {
+  beginTenantSalesforceAuthorization,
+  completeTenantSalesforceAuthorization,
+  TenantOAuthTransactionStore,
+} from '../../src/tenant/oauth-authorization.js';
 const databaseUrl = process.env.DATABASE_URL;
 const databaseRequired = process.env.REQUIRE_DATABASE_TESTS === 'true';
 void test(
@@ -312,5 +317,199 @@ void test(
     assert.deepEqual(response.json(), { status: 'unavailable' });
     const live = await app.inject('/healthz');
     assert.equal(live.statusCode, 200);
+  },
+);
+
+void test(
+  'OAuth state is single-use and a complete signed grant is the only durable connection',
+  {
+    timeout: 15000,
+    skip:
+      !databaseUrl && !databaseRequired
+        ? 'Set DATABASE_URL to a disposable PostgreSQL 17 database'
+        : false,
+  },
+  async (context) => {
+    assert.ok(
+      databaseUrl,
+      'DATABASE_URL is required when REQUIRE_DATABASE_TESTS=true',
+    );
+    const config = readConfig({
+      ...process.env,
+      NODE_ENV: 'test',
+      DATABASE_URL: databaseUrl,
+    });
+    const pool = createPostgresPool(config, () => {});
+    const tenantId = randomUUID();
+    const rejectedTenantId = randomUUID();
+    context.after(async () => {
+      try {
+        await pool.query(
+          `DELETE FROM tenant_oauth_transactions
+           WHERE tenant_id IN ($1::uuid, $2::uuid)`,
+          [tenantId, rejectedTenantId],
+        );
+        await pool.query(
+          `DELETE FROM tenant_connections
+           WHERE tenant_id IN ($1::uuid, $2::uuid)`,
+          [tenantId, rejectedTenantId],
+        );
+      } finally {
+        await pool.end();
+      }
+    });
+    await applyMigrations(pool);
+    const queryExecutor: QueryExecutor = {
+      async query<Row>(text: string, values: unknown[] = []) {
+        const result = await pool.query(text, values);
+        return { rows: result.rows as Row[], rowCount: result.rowCount };
+      },
+      async connect() {
+        const client = await pool.connect();
+        return {
+          async query<Row>(text: string, values: unknown[] = []) {
+            const result = await client.query(text, values);
+            return { rows: result.rows as Row[], rowCount: result.rowCount };
+          },
+          release() {
+            client.release();
+          },
+        };
+      },
+    };
+    const transactionStore = new TenantOAuthTransactionStore(queryExecutor);
+    const connectionStore = new TenantConnectionStore(
+      queryExecutor,
+      createTenantCredentialVault({
+        activeKeyId: 'oauth-integration',
+        keys: {
+          'oauth-integration': Buffer.alloc(32, 61).toString('base64'),
+        },
+      }),
+    );
+    const stateSecret = Buffer.alloc(32, 71).toString('base64');
+    const oauthConfiguration = {
+      clientId: 'integration-client-id',
+      clientSecret: 'integration-client-secret',
+      redirectUri: 'https://service.example/oauth/salesforce/callback',
+      stateSecret,
+      timeoutMs: 1_000,
+      transactionTtlSeconds: 300,
+    } as const;
+    const orgStem = `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+    const orgId = normalizeSalesforceOrgId(orgStem);
+    const start = await beginTenantSalesforceAuthorization(
+      transactionStore,
+      {
+        trustedTenantId: tenantId,
+        expectedSalesforceOrgId: orgId,
+        authorizationOrigin: 'https://login.salesforce.com',
+        namespacePrefix: '',
+      },
+      oauthConfiguration,
+    );
+    const state = new URL(start.authorizationUrl).searchParams.get('state');
+    assert.ok(state);
+    const rawTransaction = await pool.query(
+      `SELECT * FROM tenant_oauth_transactions WHERE tenant_id = $1::uuid`,
+      [tenantId],
+    );
+    assert.equal(rawTransaction.rowCount, 1);
+    assert.doesNotMatch(JSON.stringify(rawTransaction.rows), new RegExp(state));
+    assert.doesNotMatch(
+      JSON.stringify(rawTransaction.rows),
+      /integration-client-secret|code_verifier/,
+    );
+
+    let exchanges = 0;
+    const identity = `https://login.salesforce.com/id/${orgId}/005000000000001`;
+    const issuedAt = '1790000000000';
+    const signature = createHmac('sha256', oauthConfiguration.clientSecret)
+      .update(identity + issuedAt)
+      .digest('base64');
+    const finish = () =>
+      completeTenantSalesforceAuthorization(
+        transactionStore,
+        connectionStore,
+        { state, code: 'integration-authorization-code' },
+        oauthConfiguration,
+        async () => {
+          exchanges++;
+          return new Response(
+            JSON.stringify({
+              access_token: 'integration-access-token',
+              refresh_token: 'integration-refresh-token',
+              signature,
+              scope: 'api refresh_token',
+              instance_url: 'https://tenant.my.salesforce.com',
+              id: identity,
+              token_type: 'Bearer',
+              issued_at: issuedAt,
+            }),
+            {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            },
+          );
+        },
+      );
+    const outcomes = await Promise.allSettled([finish(), finish()]);
+    assert.equal(
+      outcomes.filter((outcome) => outcome.status === 'fulfilled').length,
+      1,
+    );
+    assert.equal(exchanges, 1);
+    const connection = await connectionStore.load(tenantId);
+    assert.equal(connection?.salesforceOrgId, orgId);
+    assert.equal(connection?.getRefreshToken(), 'integration-refresh-token');
+    const rawConnection = await pool.query(
+      `SELECT * FROM tenant_connections WHERE tenant_id = $1::uuid`,
+      [tenantId],
+    );
+    assert.equal(rawConnection.rowCount, 1);
+    assert.doesNotMatch(
+      JSON.stringify(rawConnection.rows),
+      /integration-(?:refresh|access)-token/,
+    );
+
+    const rejectedStart = await beginTenantSalesforceAuthorization(
+      transactionStore,
+      {
+        trustedTenantId: rejectedTenantId,
+        expectedSalesforceOrgId: orgId,
+        authorizationOrigin: 'https://login.salesforce.com',
+        namespacePrefix: '',
+      },
+      oauthConfiguration,
+    );
+    const rejectedState = new URL(
+      rejectedStart.authorizationUrl,
+    ).searchParams.get('state');
+    assert.ok(rejectedState);
+    await assert.rejects(
+      completeTenantSalesforceAuthorization(
+        transactionStore,
+        connectionStore,
+        { state: rejectedState, code: 'rejected-authorization-code' },
+        oauthConfiguration,
+        async () =>
+          new Response('{}', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+      { message: 'TENANT_OAUTH_PROVIDER' },
+    );
+    assert.equal(await connectionStore.load(rejectedTenantId), undefined);
+    assert.equal(
+      (
+        await pool.query(
+          `SELECT 1 FROM tenant_oauth_transactions
+           WHERE tenant_id = $1::uuid`,
+          [rejectedTenantId],
+        )
+      ).rowCount,
+      0,
+    );
   },
 );

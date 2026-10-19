@@ -42,6 +42,26 @@ const migrations = Object.freeze([
         CHECK (credential_version >= 1)
     )`,
   }),
+  Object.freeze({
+    id: '0002_tenant_oauth_transactions',
+    sql: `CREATE TABLE tenant_oauth_transactions (
+      state_digest char(64) PRIMARY KEY,
+      tenant_id uuid NOT NULL UNIQUE,
+      expected_salesforce_org_id varchar(18) NOT NULL,
+      authorization_origin varchar(2048) NOT NULL,
+      namespace_prefix varchar(64) NOT NULL DEFAULT '',
+      expires_at timestamptz NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      CONSTRAINT tenant_oauth_transactions_state_digest_shape
+        CHECK (state_digest ~ '^[0-9a-f]{64}$'),
+      CONSTRAINT tenant_oauth_transactions_org_id_shape
+        CHECK (expected_salesforce_org_id ~ '^00D[A-Za-z0-9]{15}$'),
+      CONSTRAINT tenant_oauth_transactions_authorization_origin_length
+        CHECK (length(authorization_origin) BETWEEN 1 AND 2048),
+      CONSTRAINT tenant_oauth_transactions_expiry_order
+        CHECK (expires_at > created_at)
+    )`,
+  }),
 ]);
 
 export class MigrationError extends Error {
