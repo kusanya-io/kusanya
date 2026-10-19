@@ -16,9 +16,10 @@ committed before access is exposed, and the returned org and instance must match
 stored binding. A local rejecting deadline releases that row lock even if an injected
 transport ignores its abort signal. ADR 0040 adds the internal one-time OAuth start
 and callback protocol. ADR 0041 adds an unmounted HTTP adapter with an injected
-trusted-session contract, same-origin CSRF and browser-bound callback state. Concrete
-administrator session issuance and tenant provisioning, final publisher composition
-and the publish CLI remain.
+trusted-session contract, same-origin CSRF and browser-bound callback state. ADR 0042
+adds the internal opaque session issuer, live revocation and immutable actor-to-tenant
+provisioning. A concrete external identity verifier, approved provisioning workflow,
+deployment wiring, final publisher composition and the publish CLI remain.
 
 Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.
 It has no HTTP route, Salesforce access or publishing authority. See
@@ -123,21 +124,29 @@ version control.
 The internal ADR 0040 authorization boundary creates a short-lived Salesforce
 authorization URL and completes its callback. ADR 0041 adds an unmounted HTTP route
 adapter that can be registered only with a concrete trusted administrator-session
-verifier. It
-stores only a state digest and trusted tenant/org metadata in
+verifier. It stores only a state digest and trusted tenant/org metadata in
 `tenant_oauth_transactions`; the PKCE verifier is derived under a deployment secret.
 The callback consumes state once before exchanging the code and only then writes the
 encrypted refresh token through `TenantConnectionStore`. The adapter accepts neither
 tenant nor expected org from request headers, bodies, queries or callbacks. Start is
 a same-origin, session-authenticated POST with session-bound CSRF; callback completion
-requires an HMAC browser-binding cookie and returns no connection metadata. Real
-Salesforce provider descriptions are discarded at the HTTP edge.
+requires an HMAC browser binding to the exact still-active initiating session and
+returns no connection metadata. Real Salesforce provider descriptions are discarded
+at the HTTP edge.
 
-`main.ts` does not register these routes yet. The administrator identity/session
-issuer and tenant-provisioning workflow remain required before deployment; the
-health-only OpenAPI description therefore remains accurate. A future composition
-must also persist an audit tying its trusted actor to the validated Salesforce `005`
-user returned by the authorization boundary.
+`AdministratorSessionStore` issues fresh random sessions only after a stable trusted
+actor has an exact provisioned tenant/org/origin/namespace binding. It stores only a
+SHA-256 session digest, keeps one live session per actor, derives CSRF under a
+deployment secret and checks PostgreSQL on every request so logout, operator
+revocation, replacement and expiry are immediate. Provisioning refuses any silent
+binding change.
+
+`main.ts` does not register these routes yet. The external administrator identity
+verifier, approved provisioning workflow, cookie/login composition and deployment
+secret wiring remain required; the health-only OpenAPI description therefore stays
+accurate. A future composition must also persist an audit tying its trusted actor to
+the validated Salesforce `005` user returned by the authorization boundary and must
+preserve the service's query/cookie-safe logging policy.
 
 ## Salesforce namespace configuration
 

@@ -10,6 +10,7 @@ import {
   type TenantOAuthTransactionStore,
 } from './oauth-authorization.js';
 import type { TenantConnectionStore } from './connection-store.js';
+import type { TrustedAdministratorContext } from './administrator-session.js';
 
 const startPath = '/api/admin/salesforce/authorization';
 const callbackPath = '/api/admin/salesforce/callback';
@@ -21,15 +22,6 @@ const statePattern = /^[A-Za-z0-9_-]{43}$/;
 const digestPattern = /^[0-9a-f]{64}$/;
 
 class AdministratorRouteInputError extends Error {}
-
-export interface TrustedAdministratorContext {
-  readonly actorId: string;
-  readonly tenantId: string;
-  readonly expectedSalesforceOrgId: string;
-  readonly authorizationOrigin: string;
-  readonly namespacePrefix: string;
-  readonly csrfToken: string;
-}
 
 export interface TenantOAuthRouteDependencies {
   /** Verifies the opaque server-issued session and returns its immutable binding. */
@@ -144,10 +136,16 @@ function safeEqual(left: string, right: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-function stateBinding(secret: Buffer, state: string): string {
+function stateBinding(
+  secret: Buffer,
+  state: string,
+  administratorSession: string,
+): string {
   return createHmac('sha256', secret)
     .update('kusanya:tenant-oauth-browser:v1\0', 'utf8')
     .update(state, 'ascii')
+    .update('\0', 'ascii')
+    .update(administratorSession, 'ascii')
     .digest('hex');
 }
 
@@ -291,7 +289,7 @@ export function registerTenantOAuthRoutes(
         'Set-Cookie',
         browserCookie(
           bindingCookie,
-          stateBinding(secret, state),
+          stateBinding(secret, state, session),
           dependencies.oauthConfiguration.transactionTtlSeconds,
         ),
       );
@@ -316,7 +314,15 @@ export function registerTenantOAuthRoutes(
     try {
       const input = callbackInput(request.query);
       const suppliedBinding = cookieValue(request, bindingCookie);
-      const expectedBinding = stateBinding(secret, input.state);
+      const session = cookieValue(request, administratorCookie);
+      if (session === undefined || !opaquePattern.test(session))
+        return reply.code(401).send({ error: 'Authentication required' });
+      try {
+        decodeContext(await dependencies.authenticateAdministrator(session));
+      } catch {
+        return reply.code(401).send({ error: 'Authentication required' });
+      }
+      const expectedBinding = stateBinding(secret, input.state, session);
       if (
         suppliedBinding === undefined ||
         !digestPattern.test(suppliedBinding) ||

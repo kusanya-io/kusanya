@@ -13,6 +13,7 @@ import {
   type QueryExecutor,
 } from '../../src/tenant/connection-store.js';
 import { createTenantSalesforceSession } from '../../src/tenant/salesforce-session.js';
+import { AdministratorSessionStore } from '../../src/tenant/administrator-session.js';
 import {
   beginTenantSalesforceAuthorization,
   completeTenantSalesforceAuthorization,
@@ -75,7 +76,7 @@ void test(
     const otherTenantId = randomUUID();
     context.after(async () => {
       try {
-        await pool.query(
+        await pool.query<{ count: number }>(
           'DELETE FROM tenant_connections WHERE tenant_id IN ($1::uuid, $2::uuid)',
           [tenantId, otherTenantId],
         );
@@ -557,6 +558,159 @@ void test(
         )
       ).rowCount,
       0,
+    );
+  },
+);
+
+void test(
+  'administrator sessions are opaque, replaceable, immediately revocable and immutably provisioned',
+  {
+    timeout: 15000,
+    skip:
+      !databaseUrl && !databaseRequired
+        ? 'Set DATABASE_URL to a disposable PostgreSQL 17 database'
+        : false,
+  },
+  async (context) => {
+    assert.ok(
+      databaseUrl,
+      'DATABASE_URL is required when REQUIRE_DATABASE_TESTS=true',
+    );
+    const config = readConfig({
+      ...process.env,
+      NODE_ENV: 'test',
+      DATABASE_URL: databaseUrl,
+    });
+    const pool = createPostgresPool(config, () => {});
+    const tenantId = randomUUID();
+    const otherTenantId = randomUUID();
+    const actorId = `administrator:${randomUUID()}`;
+    context.after(async () => {
+      try {
+        await pool.query(
+          'DELETE FROM tenant_administrator_bindings WHERE actor_id = $1',
+          [actorId],
+        );
+      } finally {
+        await pool.end();
+      }
+    });
+    await applyMigrations(pool);
+    await applyMigrations(pool);
+    const queryExecutor: QueryExecutor = {
+      async query<Row>(text: string, values: unknown[] = []) {
+        const result = await pool.query(text, values);
+        return { rows: result.rows as Row[], rowCount: result.rowCount };
+      },
+    };
+    const store = new AdministratorSessionStore(queryExecutor);
+    const sessionConfiguration = Object.freeze({
+      sessionSecret: Buffer.alloc(32, 83).toString('base64'),
+      ttlSeconds: 900,
+    });
+    const orgStem = `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+    const orgId = normalizeSalesforceOrgId(orgStem);
+    const provisioned = Object.freeze({
+      actorId,
+      tenantId,
+      expectedSalesforceOrgId: orgStem,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: '',
+    });
+    await store.provision(provisioned);
+    await store.provision({
+      ...provisioned,
+      expectedSalesforceOrgId: orgId,
+    });
+    await assert.rejects(
+      store.provision({ ...provisioned, tenantId: otherTenantId }),
+      { message: 'ADMINISTRATOR_SESSION_CONFLICT' },
+    );
+
+    const first = await store.issue(actorId, sessionConfiguration);
+    const rawFirst = await pool.query(
+      `SELECT b.*, s.*
+       FROM tenant_administrator_bindings b
+       JOIN administrator_sessions s ON s.actor_id = b.actor_id
+       WHERE b.actor_id = $1`,
+      [actorId],
+    );
+    assert.equal(rawFirst.rowCount, 1);
+    assert.doesNotMatch(
+      JSON.stringify(rawFirst.rows),
+      new RegExp(`${first.opaqueSession}|${first.csrfToken}`),
+    );
+    assert.deepEqual(
+      await store.authenticate(first.opaqueSession, sessionConfiguration),
+      {
+        actorId,
+        tenantId,
+        expectedSalesforceOrgId: orgId,
+        authorizationOrigin: 'https://login.salesforce.com',
+        namespacePrefix: '',
+        csrfToken: first.csrfToken,
+      },
+    );
+
+    const issued = await Promise.all([
+      store.issue(actorId, sessionConfiguration),
+      store.issue(actorId, sessionConfiguration),
+    ]);
+    assert.equal(
+      (
+        await pool.query<{ count: number }>(
+          'SELECT count(*)::integer AS count FROM administrator_sessions WHERE actor_id = $1',
+          [actorId],
+        )
+      ).rows[0]?.count,
+      1,
+    );
+    assert.equal(
+      await store.authenticate(first.opaqueSession, sessionConfiguration),
+      undefined,
+    );
+    const concurrentResults = await Promise.all(
+      issued.map((item) =>
+        store.authenticate(item.opaqueSession, sessionConfiguration),
+      ),
+    );
+    assert.equal(concurrentResults.filter(Boolean).length, 1);
+    const current = issued[concurrentResults[0] === undefined ? 1 : 0];
+    assert.equal(await store.revoke(current.opaqueSession), true);
+    assert.equal(
+      await store.authenticate(current.opaqueSession, sessionConfiguration),
+      undefined,
+    );
+
+    const expiring = await store.issue(actorId, sessionConfiguration);
+    await pool.query(
+      `UPDATE administrator_sessions
+       SET created_at = clock_timestamp() - interval '2 hours',
+           expires_at = clock_timestamp() - interval '1 hour'
+       WHERE actor_id = $1`,
+      [actorId],
+    );
+    assert.equal(
+      await store.authenticate(expiring.opaqueSession, sessionConfiguration),
+      undefined,
+    );
+    assert.equal(
+      (
+        await pool.query<{ count: number }>(
+          'SELECT count(*)::integer AS count FROM administrator_sessions WHERE actor_id = $1',
+          [actorId],
+        )
+      ).rows[0]?.count,
+      0,
+    );
+    assert.equal(
+      (
+        await pool.query<{ tenant_id: string }>(
+          'SELECT tenant_id::text AS tenant_id FROM tenant_administrator_bindings WHERE actor_id = $1',
+          [actorId],
+        )
+      ).rows[0]?.tenant_id,
+      tenantId,
     );
   },
 );

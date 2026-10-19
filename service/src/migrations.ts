@@ -62,6 +62,34 @@ const migrations = Object.freeze([
         CHECK (expires_at > created_at)
     )`,
   }),
+  Object.freeze({
+    id: '0003_administrator_sessions',
+    sql: `CREATE TABLE tenant_administrator_bindings (
+      actor_id varchar(128) PRIMARY KEY,
+      tenant_id uuid NOT NULL,
+      expected_salesforce_org_id varchar(18) NOT NULL,
+      authorization_origin varchar(2048) NOT NULL,
+      namespace_prefix varchar(64) NOT NULL DEFAULT '',
+      created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      CONSTRAINT tenant_administrator_bindings_actor_shape
+        CHECK (actor_id ~ '^[A-Za-z0-9:_-]{1,128}$'),
+      CONSTRAINT tenant_administrator_bindings_org_id_shape
+        CHECK (expected_salesforce_org_id ~ '^00D[A-Za-z0-9]{15}$'),
+      CONSTRAINT tenant_administrator_bindings_origin_length
+        CHECK (length(authorization_origin) BETWEEN 1 AND 2048)
+    );
+    CREATE TABLE administrator_sessions (
+      session_digest char(64) PRIMARY KEY,
+      actor_id varchar(128) NOT NULL UNIQUE
+        REFERENCES tenant_administrator_bindings(actor_id) ON DELETE CASCADE,
+      expires_at timestamptz NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      CONSTRAINT administrator_sessions_digest_shape
+        CHECK (session_digest ~ '^[0-9a-f]{64}$'),
+      CONSTRAINT administrator_sessions_expiry_order
+        CHECK (expires_at > created_at)
+    )`,
+  }),
 ]);
 
 export class MigrationError extends Error {

@@ -55,11 +55,13 @@ The state itself remains only in Salesforce's redirect URL and its SHA-256 diges
 remains in PostgreSQL.
 
 The callback requires the returned state and cookie digest to match in constant
-time before the core consumes state or contacts Salesforce. It does not require the
-administrator session cookie, because a top-level provider redirect is authenticated
-by the one-time state plus browser binding. The binding cookie is expired on every
-callback response. Duplicate cookies, duplicate query values, unrecognized keys,
-cross-browser states and malformed values fail closed.
+time before the core consumes state or contacts Salesforce. ADR 0042 strengthens
+the binding to cover the exact initiating administrator session and requires that
+session to remain live at callback time. Logout, operator revocation or login-time
+session replacement therefore prevents an outstanding grant from completing. The
+binding cookie is expired on every callback response. Duplicate cookies, duplicate
+query values, unrecognized keys, cross-browser or cross-session states and malformed
+values fail closed.
 
 Salesforce `error_description` is accepted only alongside a provider `error` at the
 HTTP edge, shape-bounded, then discarded. It is never logged, reflected or forwarded
@@ -94,13 +96,14 @@ normalization, fixed response bodies and callback state consumption. Core tests 
 signature-before-binding, scope/token-format enforcement and authorizing-user return.
 A PostgreSQL integration test proves an expired transaction is refused and deleted.
 
-This advances note 34 through a reviewable HTTP adapter but does not close it. The
-concrete administrator identity/session issuer, tenant provisioning, deployment
-secret wiring, privileged disconnect/rebind, final publisher composition and publish
-CLI remain. The adapter is intentionally absent from the running app and OpenAPI
-until the first two are implemented. No live Salesforce grant, metadata, package,
-scratch org, C10 acceptance test, publish-ready state or Phase 1 completion is
-claimed.
+This advances note 34 through a reviewable HTTP adapter but does not close it. ADR
+0042 supplies the internal session issuer and immutable provisioning store, but a
+concrete identity verifier and approved provisioning operator, deployment secret
+wiring, audit persistence, privileged disconnect/rebind, final publisher composition
+and publish CLI remain. The adapter is intentionally absent from the running app and
+OpenAPI until those mounting requirements are implemented. No live Salesforce grant,
+metadata, package, scratch org, C10 acceptance test, publish-ready state or Phase 1
+completion is claimed.
 
 ## Revisit when
 

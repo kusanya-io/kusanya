@@ -23,6 +23,7 @@ const orgId = '00D000000000001EAA';
 const forgedOrgId = '00D000000000002EAA';
 const userId = '005000000000001';
 const csrfToken = 'c'.repeat(43);
+const administratorSession = 's'.repeat(43);
 const stateSecret = Buffer.alloc(32, 51);
 const oauthConfiguration: TenantOAuthConfiguration = Object.freeze({
   clientId: 'synthetic-client-id',
@@ -141,11 +142,18 @@ function createRouteApp(
 
 function startHeaders(extra: Record<string, string> = {}) {
   return {
-    cookie: '__Host-kusanya_admin_session=' + 's'.repeat(43),
+    cookie: '__Host-kusanya_admin_session=' + administratorSession,
     origin: 'https://service.example',
     'x-csrf-token': csrfToken,
     ...extra,
   };
+}
+
+function callbackCookie(
+  bindingCookieValue: string,
+  session = administratorSession,
+) {
+  return `${bindingCookieValue}; __Host-kusanya_admin_session=${session}`;
 }
 
 void test('starts from only the verified session binding and ignores forged tenant headers', async (context) => {
@@ -173,7 +181,7 @@ void test('starts from only the verified session binding and ignores forged tena
     }),
   });
   assert.equal(response.statusCode, 303);
-  assert.deepEqual(sessions, ['s'.repeat(43)]);
+  assert.deepEqual(sessions, [administratorSession]);
   assert.equal(memory.rows.size, 1);
   const row = [...memory.rows.values()][0]!;
   assert.equal(row.tenant_id, tenantId);
@@ -260,7 +268,9 @@ void test('binds the callback to the initiating browser and stores no callback m
   const wrongBrowser = await app.inject({
     method: 'GET',
     url: `${tenantOAuthRoutePaths.callback}?state=${state}&code=synthetic-code`,
-    headers: { cookie: `__Host-kusanya_oauth_binding=${'0'.repeat(64)}` },
+    headers: {
+      cookie: callbackCookie(`__Host-kusanya_oauth_binding=${'0'.repeat(64)}`),
+    },
   });
   assert.equal(wrongBrowser.statusCode, 400);
   assert.equal(saved.length, 0);
@@ -268,7 +278,7 @@ void test('binds the callback to the initiating browser and stores no callback m
     method: 'GET',
     url: `${tenantOAuthRoutePaths.callback}?state=${state}&code=synthetic-code`,
     headers: {
-      cookie,
+      cookie: callbackCookie(cookie),
       'x-tenant-id': forgedTenantId,
       'x-salesforce-org-id': forgedOrgId,
     },
@@ -283,6 +293,74 @@ void test('binds the callback to the initiating browser and stores no callback m
     '__Host-kusanya_oauth_binding=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax',
   );
   assert.doesNotMatch(response.body, /synthetic-code|token|secret|005/);
+});
+
+void test('requires the exact initiating administrator session at callback time', async (context) => {
+  let fetches = 0;
+  const { app, memory } = createRouteApp({
+    fetchImplementation: async () => {
+      fetches++;
+      return signedResponse();
+    },
+  });
+  context.after(() => app.close());
+  const start = await app.inject({
+    method: 'POST',
+    url: tenantOAuthRoutePaths.start,
+    headers: startHeaders(),
+  });
+  const state = new URL(start.headers.location!).searchParams.get('state')!;
+  const binding = String(start.headers['set-cookie']).split(';', 1)[0]!;
+  const replacementSession = 'r'.repeat(43);
+  const response = await app.inject({
+    method: 'GET',
+    url: `${tenantOAuthRoutePaths.callback}?state=${state}&code=synthetic-code`,
+    headers: { cookie: callbackCookie(binding, replacementSession) },
+  });
+  assert.equal(response.statusCode, 400);
+  assert.deepEqual(response.json(), { error: 'Authorization failed' });
+  assert.equal(fetches, 0);
+  assert.equal(memory.rows.size, 1);
+});
+
+void test('revocation between start and callback immediately prevents completion', async (context) => {
+  let active = true;
+  let fetches = 0;
+  const { app, memory } = createRouteApp({
+    authenticateAdministrator: async () => {
+      if (!active) return undefined;
+      return {
+        actorId: 'administrator:synthetic',
+        tenantId,
+        expectedSalesforceOrgId: orgId,
+        authorizationOrigin: 'https://login.salesforce.com',
+        namespacePrefix: 'ksny__',
+        csrfToken,
+      };
+    },
+    fetchImplementation: async () => {
+      fetches++;
+      return signedResponse();
+    },
+  });
+  context.after(() => app.close());
+  const start = await app.inject({
+    method: 'POST',
+    url: tenantOAuthRoutePaths.start,
+    headers: startHeaders(),
+  });
+  const state = new URL(start.headers.location!).searchParams.get('state')!;
+  const binding = String(start.headers['set-cookie']).split(';', 1)[0]!;
+  active = false;
+  const response = await app.inject({
+    method: 'GET',
+    url: `${tenantOAuthRoutePaths.callback}?state=${state}&code=synthetic-code`,
+    headers: { cookie: callbackCookie(binding) },
+  });
+  assert.equal(response.statusCode, 401);
+  assert.deepEqual(response.json(), { error: 'Authentication required' });
+  assert.equal(fetches, 0);
+  assert.equal(memory.rows.size, 1);
 });
 
 void test('normalizes provider descriptions at the edge and consumes their one-time state', async (context) => {
@@ -307,7 +385,7 @@ void test('normalizes provider descriptions at the edge and consumes their one-t
     url:
       `${tenantOAuthRoutePaths.callback}?state=${state}` +
       `&error=access_denied&error_description=${encodeURIComponent(secretDescription)}`,
-    headers: { cookie },
+    headers: { cookie: callbackCookie(cookie) },
   });
   assert.equal(response.statusCode, 400);
   assert.deepEqual(response.json(), { error: 'Authorization failed' });
