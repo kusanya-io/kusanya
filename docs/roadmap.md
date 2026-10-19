@@ -320,3 +320,13 @@ administrator HTTP authentication and tenant provisioning are not implemented.
 Deployment secret wiring, disconnect/rebind, final publisher composition and the
 publish CLI remain under note 34; note 39 remains open, and no C10 or Phase 1
 completion claim is made.
+
+The trusted-administrator route contract (ADR 0041) adds a Fastify adapter without
+mounting it. An injected verifier turns only an opaque host cookie into the immutable
+actor/tenant/org context; exact-origin CSRF protects start, and a separate HMAC
+cookie binds callback state to the initiating browser. Forged tenant headers cannot
+select a connection. The signed provider response now authenticates before org
+comparison, validates its grant metadata, returns the checked Salesforce user for
+future audit, and deletes matching expired state. Concrete identity/session issuance,
+tenant provisioning, audit persistence and secret wiring are still prerequisites to
+mounting the routes. Note 34 therefore remains open, as does note 39.

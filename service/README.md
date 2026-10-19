@@ -15,8 +15,10 @@ a PostgreSQL row lock across replicas, a rotated refresh token is encrypted and
 committed before access is exposed, and the returned org and instance must match the
 stored binding. A local rejecting deadline releases that row lock even if an injected
 transport ignores its abort signal. ADR 0040 adds the internal one-time OAuth start
-and callback protocol, without exposing an HTTP route. Trusted administrator HTTP
-authentication, final publisher composition and the publish CLI remain.
+and callback protocol. ADR 0041 adds an unmounted HTTP adapter with an injected
+trusted-session contract, same-origin CSRF and browser-bound callback state. Concrete
+administrator session issuance and tenant provisioning, final publisher composition
+and the publish CLI remain.
 
 Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.
 It has no HTTP route, Salesforce access or publishing authority. See
@@ -119,13 +121,23 @@ vault, not accepted from requests, and no key belongs in PostgreSQL or `.env` un
 version control.
 
 The internal ADR 0040 authorization boundary creates a short-lived Salesforce
-authorization URL and completes its callback without exposing an HTTP route. It
+authorization URL and completes its callback. ADR 0041 adds an unmounted HTTP route
+adapter that can be registered only with a concrete trusted administrator-session
+verifier. It
 stores only a state digest and trusted tenant/org metadata in
 `tenant_oauth_transactions`; the PKCE verifier is derived under a deployment secret.
 The callback consumes state once before exchanging the code and only then writes the
-encrypted refresh token through `TenantConnectionStore`. The future authenticated
-administrator route must supply the trusted tenant and expected org and must not
-accept either from request headers or callback parameters.
+encrypted refresh token through `TenantConnectionStore`. The adapter accepts neither
+tenant nor expected org from request headers, bodies, queries or callbacks. Start is
+a same-origin, session-authenticated POST with session-bound CSRF; callback completion
+requires an HMAC browser-binding cookie and returns no connection metadata. Real
+Salesforce provider descriptions are discarded at the HTTP edge.
+
+`main.ts` does not register these routes yet. The administrator identity/session
+issuer and tenant-provisioning workflow remain required before deployment; the
+health-only OpenAPI description therefore remains accurate. A future composition
+must also persist an audit tying its trusted actor to the validated Salesforce `005`
+user returned by the authorization boundary.
 
 ## Salesforce namespace configuration
 

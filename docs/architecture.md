@@ -222,9 +222,14 @@ access token only for the attempt. ADR 0040 adds an internal one-time authorizat
 start and callback: only a state digest and trusted tenant/org binding reach
 PostgreSQL, PKCE is derived under a deployment secret, state is consumed before the
 bounded exchange, and the signed Salesforce identity must match the expected org.
-There is still no trusted HTTP tenant authentication, tenant-facing endpoint,
-publisher composition or publish CLI; callers cannot select a connection from an
-untrusted header.
+ADR 0041 adds an unmounted Fastify adapter around that protocol. Its injected
+administrator verifier receives only an opaque host cookie and returns the immutable
+tenant/org binding; a same-origin CSRF check protects start and a separate HMAC
+cookie binds callback state to the initiating browser. Request headers, bodies,
+queries and provider values cannot select the tenant. The concrete identity/session
+issuer and tenant-provisioning workflow are still absent, so `main.ts` does not mount
+the adapter and the deployed API remains health-only. Publisher composition and the
+publish CLI also remain.
 
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure
