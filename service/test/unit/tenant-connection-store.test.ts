@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   normalizeSalesforceOrgId,
+  TenantConnectionError,
   TenantConnectionStore,
+  type QueryConnection,
   type QueryExecutor,
   type QueryResult,
 } from '../../src/tenant/connection-store.js';
@@ -23,6 +25,23 @@ const input = Object.freeze({
   namespacePrefix: '',
   refreshToken: 'synthetic-refresh-token',
 });
+
+function connectionRow(token: string, credentialVersion: number) {
+  const encrypted = vault.seal({ tenantId, salesforceOrgId: orgId }, token);
+  return {
+    tenant_id: tenantId,
+    salesforce_org_id: orgId,
+    authorization_origin: input.authorizationOrigin,
+    instance_origin: input.instanceOrigin,
+    namespace_prefix: input.namespacePrefix,
+    credential_schema_version: encrypted.schemaVersion,
+    credential_key_id: encrypted.keyId,
+    credential_nonce: encrypted.nonce,
+    credential_ciphertext: encrypted.ciphertext,
+    credential_tag: encrypted.tag,
+    credential_version: credentialVersion,
+  };
+}
 
 void test('Salesforce org IDs normalize to one checked case-safe identity', () => {
   assert.equal(orgId.length, 18);
@@ -120,10 +139,103 @@ void test('connection inputs reject untrusted origins, namespaces and object sha
     { ...input, instanceOrigin: 'https://example.com' },
     { ...input, instanceOrigin: 'https://tenant.my.salesforce.com/path' },
     { ...input, namespacePrefix: 'ksny' },
+    { ...input, refreshToken: '' },
+    { ...input, refreshToken: 'line\nbreak' },
     { ...input, extra: true },
   ])
     await assert.rejects(store.save(invalid), {
       message: 'TENANT_CONNECTION_INPUT',
     });
   assert.equal(calls, 0);
+  await assert.rejects(
+    store.save({ ...input, refreshToken: 'bad token' }),
+    (error: unknown) =>
+      error instanceof TenantConnectionError &&
+      error.code === 'TENANT_CONNECTION_INPUT',
+  );
+});
+
+void test('refresh lock pins one transaction and persists rotation before commit', async () => {
+  const queries: string[] = [];
+  let released = false;
+  const client: QueryConnection = {
+    async query<Row>(text: string) {
+      queries.push(text.trim().split(/\s+/, 1)[0]!);
+      if (/^SELECT/.test(text.trim()))
+        return {
+          rowCount: 1,
+          rows: [connectionRow('old-synthetic-token', 4) as Row],
+        } satisfies QueryResult<Row>;
+      if (/^UPDATE/.test(text.trim()))
+        return {
+          rowCount: 1,
+          rows: [connectionRow('new-synthetic-token', 5) as Row],
+        } satisfies QueryResult<Row>;
+      return { rowCount: null, rows: [] } satisfies QueryResult<Row>;
+    },
+    release() {
+      released = true;
+    },
+  };
+  const store = new TenantConnectionStore(
+    {
+      async query() {
+        throw new Error('unpooled query not expected');
+      },
+      async connect() {
+        return client;
+      },
+    },
+    vault,
+  );
+  const result = await store.withRefreshLock(tenantId, async (selected) => {
+    assert.equal(selected.getRefreshToken(), 'old-synthetic-token');
+    return {
+      value: 'access-result',
+      rotatedRefreshToken: 'new-synthetic-token',
+    };
+  });
+  assert.deepEqual(queries, ['BEGIN', 'SELECT', 'UPDATE', 'COMMIT']);
+  assert.equal(result?.value, 'access-result');
+  assert.equal(result?.connection.credentialVersion, 5);
+  assert.equal(result?.connection.getRefreshToken(), 'new-synthetic-token');
+  assert.equal(released, true);
+});
+
+void test('refresh lock rolls back and preserves operation errors', async () => {
+  const queries: string[] = [];
+  let released = false;
+  const client: QueryConnection = {
+    async query<Row>(text: string) {
+      queries.push(text.trim().split(/\s+/, 1)[0]!);
+      if (/^SELECT/.test(text.trim()))
+        return {
+          rowCount: 1,
+          rows: [connectionRow('old-synthetic-token', 4) as Row],
+        } satisfies QueryResult<Row>;
+      return { rowCount: null, rows: [] } satisfies QueryResult<Row>;
+    },
+    release() {
+      released = true;
+    },
+  };
+  const store = new TenantConnectionStore(
+    {
+      async query() {
+        throw new Error('unpooled query not expected');
+      },
+      async connect() {
+        return client;
+      },
+    },
+    vault,
+  );
+  await assert.rejects(
+    store.withRefreshLock(tenantId, async () => {
+      throw new Error('operation classification');
+    }),
+    /operation classification/,
+  );
+  assert.deepEqual(queries, ['BEGIN', 'SELECT', 'ROLLBACK']);
+  assert.equal(released, true);
 });

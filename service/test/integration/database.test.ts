@@ -88,6 +88,21 @@ void test(
           rowCount: result.rowCount,
         };
       },
+      async connect() {
+        const client = await pool.connect();
+        return {
+          async query<Row>(text: string, values: unknown[] = []) {
+            const result = await client.query(text, values);
+            return {
+              rows: result.rows as Row[],
+              rowCount: result.rowCount,
+            };
+          },
+          release() {
+            client.release();
+          },
+        };
+      },
     };
     const orgStem = `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`;
     const orgId = normalizeSalesforceOrgId(orgStem);
@@ -168,6 +183,50 @@ void test(
     assert.equal(replaced.credentialVersion, 2);
     assert.equal(replaced.namespacePrefix, 'ksny__');
     assert.equal(replaced.getRefreshToken(), 'second-synthetic-refresh-token');
+
+    let releaseFirst!: () => void;
+    const firstMayFinish = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let firstEntered!: () => void;
+    const firstHasLock = new Promise<void>((resolve) => {
+      firstEntered = resolve;
+    });
+    let secondEntered = false;
+    const firstRefresh = currentStore.withRefreshLock(
+      tenantId,
+      async (selected) => {
+        assert.equal(selected.credentialVersion, 2);
+        assert.equal(
+          selected.getRefreshToken(),
+          'second-synthetic-refresh-token',
+        );
+        firstEntered();
+        await firstMayFinish;
+        return {
+          value: 'first',
+          rotatedRefreshToken: 'third-synthetic-refresh-token',
+        };
+      },
+    );
+    await firstHasLock;
+    const secondRefresh = currentStore.withRefreshLock(
+      tenantId,
+      async (selected) => {
+        secondEntered = true;
+        assert.equal(selected.credentialVersion, 3);
+        assert.equal(
+          selected.getRefreshToken(),
+          'third-synthetic-refresh-token',
+        );
+        return { value: 'second' };
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(secondEntered, false);
+    releaseFirst();
+    assert.equal((await firstRefresh)?.connection.credentialVersion, 3);
+    assert.equal((await secondRefresh)?.value, 'second');
 
     await assert.rejects(
       currentStore.save({

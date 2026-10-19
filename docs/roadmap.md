@@ -294,13 +294,15 @@ open for tenant connection selection, encrypted credential persistence and
 rotation, and the publish CLI; note 39 remains open, and no C10 or Phase 1
 completion claim is made.
 
-The current tenant-connection vault unit (ADR 0038) decides the future Salesforce
+The tenant-connection vault unit (ADR 0038) decides the future Salesforce
 administrator connection grant as authorization code with PKCE and persists one
 normalized org binding per tenant. Refresh tokens are AES-256-GCM encrypted under a
 deployment-secret keyring, authenticated to tenant and org, replaceable for
 Salesforce token rotation and rewrappable for service-key rotation. PostgreSQL
-migrations are transactional, checksum-pinned and explicit. No OAuth route, token
-exchange/refresh adapter, client-app metadata, trusted request tenant selector or
-publish CLI is added. Note 34 advances but remains open for those boundaries and
-CLI composition; note 39 remains open, and no C10 or Phase 1 completion claim is
-made.
+migrations are transactional, checksum-pinned and explicit. ADR 0039 adds an
+internal trusted-tenant session and bounded refresh exchange, including PostgreSQL
+serialization across replicas and conditional persistence of Salesforce-rotated
+tokens. No OAuth callback, client-app metadata, trusted HTTP authentication, final
+publisher binding or publish CLI is added. Note 34 advances but remains open for
+those boundaries and CLI composition; note 39 remains open, and no C10 or Phase 1
+completion claim is made.

@@ -81,8 +81,8 @@ Salesforce refresh-token rotation replaces the credential atomically and does.
 
 The returned connection object exposes the secret only through a non-enumerated
 `getRefreshToken` capability. Serialization of the connection or encrypted envelope
-cannot include plaintext. A later refresh adapter must consume the capability
-inside its bounded token request and must not log or cache the returned string.
+cannot include plaintext. ADR 0039 consumes the capability inside one bounded,
+PostgreSQL-serialized token request and does not log or cache the returned string.
 
 ### Apply checksum-pinned migrations explicitly
 
@@ -105,15 +105,15 @@ credential-version change, reject a second tenant for the same org and leave the
 other tenant absent.
 
 This unit advances note 34 through durable encrypted credential storage and a
-decided OAuth grant. It does not close note 34: administrator OAuth routes, transient
-state and PKCE storage, token exchange/refresh, trusted tenant selection and CLI
-publication remain. Note 39 remains open. It adds no HTTP product endpoint,
+decided OAuth grant. ADR 0039 later adds internal tenant selection and refresh-token
+exchange/rotation. Administrator OAuth routes, transient state and PKCE storage,
+trusted HTTP authentication, final publisher composition and CLI publication remain.
+Note 39 remains open. This unit adds no HTTP product endpoint,
 Salesforce metadata, connected/external client app, workflow, harness, policy,
 Enketo/Collect behavior, submission data or C10.14 claim. It is not a Phase 1 gate.
 
 ## Revisit when
 
-The OAuth callback and refresh adapter are implemented, Salesforce refresh-token
-rotation is enabled, a privileged disconnect/rebind workflow is designed, Azure Key
-Vault or another managed key service replaces environment-injected keys, or tenant
+The OAuth callback is implemented, a privileged disconnect/rebind workflow is
+designed, Azure Key Vault or another managed key service replaces environment-injected keys, or tenant
 row volume requires a resumable key-rotation job.

@@ -9,6 +9,8 @@ import type {
 const tenantIdPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const salesforceIdPattern = /^00D[A-Za-z0-9]{12}(?:[A-Za-z0-9]{3})?$/;
+const tokenPattern = /^[\x21-\x7e]+$/;
+const maximumCredentialLength = 4096;
 
 export type TenantConnectionFailureCode =
   | 'TENANT_CONNECTION_INPUT'
@@ -49,6 +51,21 @@ export interface QueryResult<Row> {
 
 export interface QueryExecutor {
   query<Row>(text: string, values?: unknown[]): Promise<QueryResult<Row>>;
+  connect?(): Promise<QueryConnection>;
+}
+
+export interface QueryConnection extends QueryExecutor {
+  release(): void;
+}
+
+export interface TenantRefreshResult<Value> {
+  readonly value: Value;
+  readonly rotatedRefreshToken?: string;
+}
+
+export interface LockedTenantRefreshResult<Value> {
+  readonly value: Value;
+  readonly connection: TenantConnection;
 }
 
 interface ConnectionRow {
@@ -111,6 +128,17 @@ function exactKeys(value: Record<string, unknown>, expected: string[]): void {
 
 function tenantId(value: unknown): string {
   if (typeof value !== 'string' || !tenantIdPattern.test(value))
+    fail('TENANT_CONNECTION_INPUT');
+  return value;
+}
+
+function refreshToken(value: unknown): string {
+  if (
+    typeof value !== 'string' ||
+    value.length < 1 ||
+    value.length > maximumCredentialLength ||
+    !tokenPattern.test(value)
+  )
     fail('TENANT_CONNECTION_INPUT');
   return value;
 }
@@ -182,14 +210,13 @@ function decodeInput(value: unknown): Omit<
   } catch {
     fail('TENANT_CONNECTION_INPUT');
   }
-  if (typeof input.refreshToken !== 'string') fail('TENANT_CONNECTION_INPUT');
   return {
     tenantId: tenantId(input.tenantId),
     salesforceOrgId: normalizeSalesforceOrgId(input.salesforceOrgId),
     authorizationOrigin: salesforceOrigin(input.authorizationOrigin),
     instanceOrigin: salesforceOrigin(input.instanceOrigin),
     namespacePrefix: input.namespacePrefix,
-    refreshToken: input.refreshToken,
+    refreshToken: refreshToken(input.refreshToken),
   };
 }
 
@@ -326,6 +353,124 @@ export class TenantConnectionStore {
     if (result.rowCount !== 1 || result.rows.length !== 1)
       fail('TENANT_CONNECTION_STORAGE');
     return this.connection(result.rows[0]!);
+  }
+
+  async withRefreshLock<Value>(
+    tenantIdValue: string,
+    operation: (
+      connection: TenantConnection,
+    ) => Promise<TenantRefreshResult<Value>>,
+  ): Promise<LockedTenantRefreshResult<Value> | undefined> {
+    const id = tenantId(tenantIdValue);
+    if (
+      typeof operation !== 'function' ||
+      typeof this.database.connect !== 'function'
+    )
+      fail('TENANT_CONNECTION_INPUT');
+    let client: QueryConnection;
+    try {
+      client = await this.database.connect.call(this.database);
+    } catch {
+      fail('TENANT_CONNECTION_STORAGE');
+    }
+    let transaction = false;
+    let operationFailed = false;
+    try {
+      await client.query('BEGIN');
+      transaction = true;
+      const selected = await client.query<ConnectionRow>(
+        `SELECT ${returnedColumns}
+         FROM tenant_connections
+         WHERE tenant_id = $1::uuid
+         FOR UPDATE`,
+        [id],
+      );
+      if (selected.rowCount === 0 && selected.rows.length === 0) {
+        await client.query('COMMIT');
+        transaction = false;
+        return undefined;
+      }
+      if (selected.rowCount !== 1 || selected.rows.length !== 1)
+        fail('TENANT_CONNECTION_STORAGE');
+      let current = this.connection(selected.rows[0]!);
+      let result: TenantRefreshResult<Value>;
+      try {
+        result = await operation(current);
+      } catch (error) {
+        operationFailed = true;
+        throw error;
+      }
+      if (
+        result === null ||
+        typeof result !== 'object' ||
+        types.isProxy(result) ||
+        Object.getPrototypeOf(result) !== Object.prototype
+      )
+        fail('TENANT_CONNECTION_INPUT');
+      const descriptors = Object.getOwnPropertyDescriptors(result);
+      const keys = Object.keys(descriptors).sort().join(',');
+      if (
+        Reflect.ownKeys(descriptors).some(
+          (key) =>
+            typeof key !== 'string' ||
+            !Object.hasOwn(descriptors[key]!, 'value'),
+        ) ||
+        (keys !== 'value' && keys !== 'rotatedRefreshToken,value')
+      )
+        fail('TENANT_CONNECTION_INPUT');
+      const rotated = descriptors.rotatedRefreshToken?.value as unknown;
+      if (rotated !== undefined) {
+        const token = refreshToken(rotated);
+        const encrypted = this.vault.seal(
+          {
+            tenantId: current.tenantId,
+            salesforceOrgId: current.salesforceOrgId,
+          },
+          token,
+        );
+        const updated = await client.query<ConnectionRow>(
+          `UPDATE tenant_connections SET
+             credential_schema_version = $4,
+             credential_key_id = $5,
+             credential_nonce = $6,
+             credential_ciphertext = $7,
+             credential_tag = $8,
+             credential_version = credential_version + 1,
+             credential_updated_at = clock_timestamp(),
+             updated_at = clock_timestamp()
+           WHERE tenant_id = $1::uuid
+             AND salesforce_org_id = $2
+             AND credential_version = $3
+           RETURNING ${returnedColumns}`,
+          [
+            current.tenantId,
+            current.salesforceOrgId,
+            current.credentialVersion,
+            encrypted.schemaVersion,
+            encrypted.keyId,
+            encrypted.nonce,
+            encrypted.ciphertext,
+            encrypted.tag,
+          ],
+        );
+        if (updated.rowCount !== 1 || updated.rows.length !== 1)
+          fail('TENANT_CONNECTION_CONFLICT');
+        current = this.connection(updated.rows[0]!);
+      }
+      await client.query('COMMIT');
+      transaction = false;
+      return Object.freeze({
+        value: descriptors.value.value as Value,
+        connection: current,
+      });
+    } catch (error) {
+      if (transaction) await client.query('ROLLBACK').catch(() => undefined);
+      if (operationFailed || error instanceof TenantConnectionError)
+        throw error;
+      fail('TENANT_CONNECTION_STORAGE');
+    } finally {
+      client.release();
+    }
   }
 
   async rotateEncryption(value: string): Promise<boolean> {
