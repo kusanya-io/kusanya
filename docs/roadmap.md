@@ -327,6 +327,15 @@ actor/tenant/org context; exact-origin CSRF protects start, and a separate HMAC
 cookie binds callback state to the initiating browser. Forged tenant headers cannot
 select a connection. The signed provider response now authenticates before org
 comparison, validates its grant metadata, returns the checked Salesforce user for
-future audit, and deletes matching expired state. Concrete identity/session issuance,
-tenant provisioning, audit persistence and secret wiring are still prerequisites to
-mounting the routes. Note 34 therefore remains open, as does note 39.
+future audit, and deletes matching expired state.
+
+The administrator-session unit (ADR 0042) adds the internal issuer behind that
+contract. Fresh random sessions replace the actor's prior digest atomically, resolve
+immutable provisioned tenant/org context from PostgreSQL on every request, and are
+immediately revocable. The OAuth callback is bound to the exact still-live initiating
+session, closing note 95. The external identity verifier and stable actor mapping,
+approved provisioning interface, secure cookie/login and logout composition,
+deployment secret wiring, actor-to-Salesforce-user audit, privileged disconnect and
+rebind, final publisher composition and publish CLI remain. Note 94 must be preserved
+when mounting the routes. Note 34 therefore remains open, as does note 39; no C10 or
+Phase 1 completion claim is made.

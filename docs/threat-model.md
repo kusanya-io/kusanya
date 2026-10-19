@@ -12,11 +12,11 @@ Salesforce, PR code to CI secrets, and Kusanya containers to other Cobitech work
 
 | Threat                                       | Required control                                                                            | Verification and current status                                                                                                                                                                         |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Forged tenant identity or cross-tenant query | Bind verified credentials to tenant; tenant-scoped queries/keys/storage                     | ADR 0041's unmounted route adapter takes tenant/org only from an injected verified administrator session; forged headers are tested, but the concrete session issuer/provisioning and C10.14 remain     |
+| Forged tenant identity or cross-tenant query | Bind verified credentials to tenant; tenant-scoped queries/keys/storage                     | ADR 0042 immutably provisions actor-to-tenant/org context and resolves every opaque session from PostgreSQL; external identity/provisioning composition and C10.14 remain                               |
 | Duplicate/partially delivered submission     | Durable queue; unique instance Id; idempotent Apex writes; explicit retry state             | C10.5/C10.8; not implemented                                                                                                                                                                            |
 | Tampered Task target                         | Authorize Task and stamp server-resolved target; never trust prefill                        | C10.3; not implemented                                                                                                                                                                                  |
 | Credential theft or log leakage              | KDF for collector passwords, encrypted tenant secrets, environment injection, redacted logs | ADRs 0038-0040 encrypt refresh tokens, serialize refresh use, store only OAuth state digests, derive PKCE under a deployment secret and expose fixed secret-free failures; collector credentials remain |
-| OAuth callback replay or wrong-org grant     | Expiring single-use state, PKCE, signed identity and expected-org binding                   | ADRs 0040-0041 consume state once, verify signed identity before org binding, require scope, and bind callback state to the initiating browser; the adapter remains unmounted pending concrete auth     |
+| OAuth callback replay or wrong-org grant     | Expiring single-use state, PKCE, signed identity and expected-org binding                   | ADRs 0040-0042 consume state once, verify signed identity and org, and bind callback to the exact still-live initiating session; the adapter remains unmounted                                          |
 | Untrusted XML, media or author expressions   | Size/depth limits; reject external entities; safe filenames; constrained validation runtime | Design and negative tests required in Phase 1/2                                                                                                                                                         |
 | Anonymous link abuse/replay                  | Expiry, rate limits and atomic single-use enforcement                                       | C10.13 in Phase 3                                                                                                                                                                                       |
 | Integration privilege or API exhaustion      | Least privilege, publish-time checks, batching/budget and per-tenant limits                 | C10.9/C10.15; not implemented                                                                                                                                                                           |
@@ -40,11 +40,12 @@ and approve its execution. Approval is not automatic security analysis: test cod
 use any credential available to its job. Keep Dev Hub credentials restricted to a
 dedicated nonproduction validation context and rotate/revoke on suspicion.
 
-ADR 0041 wraps the one-time OAuth protocol in an unmounted Fastify adapter. Only a
-strictly decoded context returned by an injected opaque-session verifier supplies
-tenant and expected org. Start requires exact-origin CSRF; callback requires an HMAC
-state cookie belonging to the initiating browser, clears it on every outcome and
-discards Salesforce's human error description. The signed grant validates scope and
-token format and exposes its checked authorizing user for future audit; expired state
-is deleted while refused. Concrete administrator identity, session issuance, tenant
-provisioning, audit persistence and secret wiring remain under note 34.
+ADRs 0041 and 0042 wrap the one-time OAuth protocol in an unmounted Fastify adapter
+and a concrete internal session store. Only a live digest-matched session supplies an
+immutable provisioned tenant and expected org. Start requires exact-origin CSRF;
+callback requires an HMAC binding to the exact initiating session, clears its browser
+cookie on every outcome and refuses after logout, replacement or expiry before state
+consumption. PostgreSQL stores no raw session or CSRF value and is checked on every
+request. The external identity verifier, approved provisioning workflow, audit
+persistence, cookie/login composition and secret wiring remain under note 34; route
+mounting must also preserve the hardened query/cookie-safe logger from note 94.

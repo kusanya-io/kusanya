@@ -225,10 +225,14 @@ bounded exchange, and the signed Salesforce identity must match the expected org
 ADR 0041 adds an unmounted Fastify adapter around that protocol. Its injected
 administrator verifier receives only an opaque host cookie and returns the immutable
 tenant/org binding; a same-origin CSRF check protects start and a separate HMAC
-cookie binds callback state to the initiating browser. Request headers, bodies,
-queries and provider values cannot select the tenant. The concrete identity/session
-issuer and tenant-provisioning workflow are still absent, so `main.ts` does not mount
-the adapter and the deployed API remains health-only. Publisher composition and the
+cookie binds callback state to the initiating browser. ADR 0042 supplies the internal
+opaque session issuer and immutable provisioning store: only a digest is persisted,
+one session per actor is replaced atomically, PostgreSQL is checked for every request,
+and callback completion requires the exact initiating session to remain live. Request
+headers, bodies, queries and provider values cannot select the tenant. The external
+identity verifier, approved provisioning workflow, cookie/login and secret wiring,
+and actor-to-Salesforce-user audit are still absent, so `main.ts` does not mount the
+adapter and the deployed API remains health-only. Publisher composition and the
 publish CLI also remain.
 
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
