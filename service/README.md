@@ -9,8 +9,12 @@ ADR 0038 adds a service-internal tenant connection vault and the first product
 table. It stores one normalized Salesforce org binding per tenant and only an
 AES-256-GCM encrypted refresh-token envelope. Encryption keys remain deployment
 secrets and support active-key rewrap; a connection exposes plaintext only through
-an internal token capability. There is still no OAuth callback, access-token
-refresh adapter, tenant HTTP route or publish CLI.
+an internal token capability. ADR 0039 adds a bounded internal refresh adapter and
+attempt-scoped access-token capability. Refreshes for one tenant are serialized by
+a PostgreSQL row lock across replicas, a rotated refresh token is encrypted and
+committed before access is exposed, and the returned org and instance must match the
+stored binding. There is still no OAuth callback, trusted tenant HTTP route, final
+publisher composition or publish CLI.
 
 Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.
 It has no HTTP route, Salesforce access or publishing authority. See
@@ -75,9 +79,10 @@ npm run test:integration
 ```
 
 Missing `DATABASE_URL` fails when `REQUIRE_DATABASE_TESTS=true`; otherwise the live
-database case explicitly skips. Tests use a real `SELECT 1` through readiness and
-check a real driver's timeout against an unresponsive TCP connection. They create
-no schema and write no records. Never point them at a customer database.
+database case explicitly skips. Tests use a real `SELECT 1` through readiness, apply
+the checked migrations, write and remove isolated synthetic tenant rows, and check a
+real driver's timeout against an unresponsive TCP connection. Never point them at a
+customer database.
 
 ## Run the scaffold
 
