@@ -90,6 +90,51 @@ const migrations = Object.freeze([
         CHECK (expires_at > created_at)
     )`,
   }),
+  Object.freeze({
+    id: '0004_administrator_tenants',
+    sql: `CREATE TABLE tenant_administrator_tenants (
+      tenant_id uuid PRIMARY KEY,
+      expected_salesforce_org_id varchar(18) NOT NULL UNIQUE,
+      authorization_origin varchar(2048) NOT NULL,
+      namespace_prefix varchar(17) NOT NULL DEFAULT '',
+      created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      CONSTRAINT tenant_administrator_tenants_org_id_shape
+        CHECK (expected_salesforce_org_id ~ '^00D[A-Za-z0-9]{15}$'),
+      CONSTRAINT tenant_administrator_tenants_origin_length
+        CHECK (length(authorization_origin) BETWEEN 1 AND 2048),
+      CONSTRAINT tenant_administrator_tenants_namespace_shape
+        CHECK (namespace_prefix ~ '^(|[a-z][a-z0-9]{0,14}__)$')
+    );
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT tenant_id
+        FROM tenant_administrator_bindings
+        GROUP BY tenant_id
+        HAVING count(DISTINCT ROW(
+          expected_salesforce_org_id,
+          authorization_origin,
+          namespace_prefix
+        )) > 1
+      ) THEN
+        RAISE EXCEPTION 'inconsistent administrator tenant bindings';
+      END IF;
+    END $$;
+    INSERT INTO tenant_administrator_tenants (
+      tenant_id, expected_salesforce_org_id,
+      authorization_origin, namespace_prefix
+    )
+    SELECT DISTINCT tenant_id, expected_salesforce_org_id,
+           authorization_origin, namespace_prefix
+    FROM tenant_administrator_bindings;
+    ALTER TABLE tenant_administrator_bindings
+      ADD CONSTRAINT tenant_administrator_bindings_tenant
+      FOREIGN KEY (tenant_id)
+      REFERENCES tenant_administrator_tenants(tenant_id),
+      DROP COLUMN expected_salesforce_org_id,
+      DROP COLUMN authorization_origin,
+      DROP COLUMN namespace_prefix`,
+  }),
 ]);
 
 export class MigrationError extends Error {
@@ -102,7 +147,22 @@ export class MigrationError extends Error {
 const checksum = (sql: string): string =>
   createHash('sha256').update(sql, 'utf8').digest('hex');
 
-export async function applyMigrations(pool: Pool): Promise<void> {
+export type MigrationTarget =
+  | '0001_tenant_connections'
+  | '0002_tenant_oauth_transactions'
+  | '0003_administrator_sessions'
+  | '0004_administrator_tenants';
+
+/** Apply the checked plan through an optional exact target for upgrade verification. */
+export async function applyMigrations(
+  pool: Pool,
+  through?: MigrationTarget,
+): Promise<void> {
+  const targetIndex =
+    through === undefined
+      ? migrations.length - 1
+      : migrations.findIndex((migration) => migration.id === through);
+  if (targetIndex < 0) throw new MigrationError();
   const client = await pool.connect().catch(() => {
     throw new MigrationError();
   });
@@ -116,7 +176,7 @@ export async function applyMigrations(pool: Pool): Promise<void> {
       checksum char(64) NOT NULL,
       applied_at timestamptz NOT NULL DEFAULT clock_timestamp()
     )`);
-    for (const migration of migrations) {
+    for (const migration of migrations.slice(0, targetIndex + 1)) {
       const digest = checksum(migration.sql);
       const existing = await client.query<{ checksum: string }>(
         `SELECT checksum

@@ -12,7 +12,7 @@ Salesforce, PR code to CI secrets, and Kusanya containers to other Cobitech work
 
 | Threat                                       | Required control                                                                            | Verification and current status                                                                                                                                                                         |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Forged tenant identity or cross-tenant query | Bind verified credentials to tenant; tenant-scoped queries/keys/storage                     | ADR 0042 immutably provisions actor-to-tenant/org context and resolves every opaque session from PostgreSQL; external identity/provisioning composition and C10.14 remain                               |
+| Forged tenant identity or cross-tenant query | Bind verified credentials to tenant; tenant-scoped queries/keys/storage                     | ADRs 0042-0043 resolve every opaque session through an immutable actor-to-tenant binding and one tenant-wide org/origin/namespace tuple; external identity/provisioning composition and C10.14 remain   |
 | Duplicate/partially delivered submission     | Durable queue; unique instance Id; idempotent Apex writes; explicit retry state             | C10.5/C10.8; not implemented                                                                                                                                                                            |
 | Tampered Task target                         | Authorize Task and stamp server-resolved target; never trust prefill                        | C10.3; not implemented                                                                                                                                                                                  |
 | Credential theft or log leakage              | KDF for collector passwords, encrypted tenant secrets, environment injection, redacted logs | ADRs 0038-0040 encrypt refresh tokens, serialize refresh use, store only OAuth state digests, derive PKCE under a deployment secret and expose fixed secret-free failures; collector credentials remain |
@@ -40,9 +40,11 @@ and approve its execution. Approval is not automatic security analysis: test cod
 use any credential available to its job. Keep Dev Hub credentials restricted to a
 dedicated nonproduction validation context and rotate/revoke on suspicion.
 
-ADRs 0041 and 0042 wrap the one-time OAuth protocol in an unmounted Fastify adapter
-and a concrete internal session store. Only a live digest-matched session supplies an
-immutable provisioned tenant and expected org. Start requires exact-origin CSRF;
+ADRs 0041-0043 wrap the one-time OAuth protocol in an unmounted Fastify adapter and a
+concrete internal session store. Only a live digest-matched session supplies an
+immutable actor binding and the one org/origin/namespace tuple owned by its tenant;
+provisioning and routing enforce the same namespace grammar. Start requires
+exact-origin CSRF;
 callback requires an HMAC binding to the exact initiating session, clears its browser
 cookie on every outcome and refuses after logout, replacement or expiry before state
 consumption. PostgreSQL stores no raw session or CSRF value and is checked on every

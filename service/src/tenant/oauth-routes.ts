@@ -10,7 +10,10 @@ import {
   type TenantOAuthTransactionStore,
 } from './oauth-authorization.js';
 import type { TenantConnectionStore } from './connection-store.js';
-import type { TrustedAdministratorContext } from './administrator-session.js';
+import {
+  administratorNamespacePrefix,
+  type TrustedAdministratorContext,
+} from './administrator-session.js';
 
 const startPath = '/api/admin/salesforce/authorization';
 const callbackPath = '/api/admin/salesforce/callback';
@@ -104,11 +107,7 @@ function decodeContext(value: unknown): TrustedAdministratorContext {
       /^https:\/\/[A-Za-z0-9.-]+\.salesforce\.com$/,
       2048,
     ),
-    namespacePrefix: exactString(
-      record.namespacePrefix,
-      /^(?:|[a-z][a-z0-9]{0,14}__)$/,
-      17,
-    ),
+    namespacePrefix: administratorNamespacePrefix(record.namespacePrefix),
     csrfToken: exactString(record.csrfToken, csrfPattern, 43),
   });
 }

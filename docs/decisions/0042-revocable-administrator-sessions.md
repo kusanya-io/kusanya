@@ -1,6 +1,6 @@
 # ADR 0042: Revocable administrator sessions and immutable provisioning
 
-- Status: Proposed; implementation awaiting independent verification
+- Status: Accepted; verified in PR #77 and refined by ADR 0043
 - Date: 2026-10-19
 - Brief sections: C1.3a, C2, C4 Tenant Connection, C8, C11 Phase 1
 - Decision owner: Cobitech Solutions
@@ -24,11 +24,13 @@ operator must populate outside public request input.
 
 ### Provision one immutable binding per trusted actor
 
-`tenant_administrator_bindings` maps a bounded internal actor identifier to exactly
-one tenant UUID, normalized Salesforce `00D` org, Salesforce authorization origin and
-namespace prefix. `AdministratorSessionStore.provision` is idempotent only when every
-field is identical. An attempted tenant, org, origin or namespace change returns the
-fixed `ADMINISTRATOR_SESSION_CONFLICT`; it never updates the stored binding.
+ADR 0043 normalizes the provisioning model after independent review.
+`tenant_administrator_tenants` owns exactly one normalized Salesforce `00D` org,
+Salesforce authorization origin and namespace prefix per tenant UUID, while
+`tenant_administrator_bindings` maps a bounded internal actor identifier only to that
+tenant. `AdministratorSessionStore.provision` is idempotent only when both mappings
+are identical. An attempted tenant, org, origin or namespace change returns the fixed
+`ADMINISTRATOR_SESSION_CONFLICT`; it never updates stored context.
 
 The actor identifier must come from a future cryptographically verified identity
 mapping, never a request header, cookie body, query or Salesforce callback. This API
@@ -60,7 +62,8 @@ effect on the next request across replicas. Matching expired rows are deleted wh
 returning no principal. Errors are fixed codes and neither tokens nor database
 details are reflected.
 
-The returned frozen context is reconstructed from the immutable provisioning row and
+The returned frozen context is reconstructed by joining the actor to the immutable
+tenant provisioning row and
 contains the actor, tenant, org, authorization origin, namespace and session-derived
 CSRF token. Tenant identity never comes from the request.
 

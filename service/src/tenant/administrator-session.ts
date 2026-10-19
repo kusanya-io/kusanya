@@ -1,7 +1,6 @@
 /** Opaque, revocable administrator sessions bound to immutable tenant provisioning. */
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { types } from 'node:util';
-import { createSalesforceNames } from '../salesforce-names.js';
 import {
   normalizeSalesforceOrgId,
   type QueryExecutor,
@@ -12,6 +11,7 @@ const tenantPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const sessionPattern = /^[A-Za-z0-9_-]{43}$/;
 const digestPattern = /^[0-9a-f]{64}$/;
+const administratorNamespacePattern = /^(?:|[a-z][a-z0-9]{0,14}__)$/;
 
 export type AdministratorSessionFailureCode =
   | 'ADMINISTRATOR_SESSION_INPUT'
@@ -74,6 +74,13 @@ interface ProvisioningRow {
 
 function fail(code: AdministratorSessionFailureCode): never {
   throw new AdministratorSessionError(code);
+}
+
+/** Canonical namespace accepted by administrator provisioning and HTTP routes. */
+export function administratorNamespacePrefix(value: unknown): string {
+  if (typeof value !== 'string' || !administratorNamespacePattern.test(value))
+    fail('ADMINISTRATOR_SESSION_INPUT');
+  return value;
 }
 
 function plainRecord(value: unknown): Record<string, unknown> {
@@ -147,13 +154,6 @@ function provisioning(value: unknown): DecodedProvisioning {
     'namespacePrefix',
     'tenantId',
   ]);
-  if (typeof input.namespacePrefix !== 'string')
-    fail('ADMINISTRATOR_SESSION_INPUT');
-  try {
-    createSalesforceNames(input.namespacePrefix);
-  } catch {
-    fail('ADMINISTRATOR_SESSION_INPUT');
-  }
   try {
     return {
       actorId: actorId(input.actorId),
@@ -162,7 +162,7 @@ function provisioning(value: unknown): DecodedProvisioning {
         input.expectedSalesforceOrgId,
       ),
       authorizationOrigin: salesforceOrigin(input.authorizationOrigin),
-      namespacePrefix: input.namespacePrefix,
+      namespacePrefix: administratorNamespacePrefix(input.namespacePrefix),
     };
   } catch (error) {
     if (error instanceof AdministratorSessionError) throw error;
@@ -251,19 +251,46 @@ export class AdministratorSessionStore {
     let result;
     try {
       result = await this.database.query(
-        `INSERT INTO tenant_administrator_bindings (
-           actor_id, tenant_id, expected_salesforce_org_id,
-           authorization_origin, namespace_prefix
-         ) VALUES ($1, $2::uuid, $3, $4, $5)
-         ON CONFLICT (actor_id) DO UPDATE SET actor_id = EXCLUDED.actor_id
-         WHERE tenant_administrator_bindings.tenant_id = EXCLUDED.tenant_id
-           AND tenant_administrator_bindings.expected_salesforce_org_id =
-               EXCLUDED.expected_salesforce_org_id
-           AND tenant_administrator_bindings.authorization_origin =
-               EXCLUDED.authorization_origin
-           AND tenant_administrator_bindings.namespace_prefix =
-               EXCLUDED.namespace_prefix
-         RETURNING actor_id`,
+        `WITH tenant_lock AS MATERIALIZED (
+           SELECT pg_advisory_xact_lock(
+             hashtextextended('tenant:' || $2::text, 0)
+           )
+         ), actor_lock AS MATERIALIZED (
+           SELECT pg_advisory_xact_lock(
+             hashtextextended('actor:' || $1, 0)
+           )
+           FROM tenant_lock
+         ), eligible AS MATERIALIZED (
+           SELECT $2::uuid AS tenant_id
+           FROM actor_lock
+           WHERE NOT EXISTS (
+             SELECT 1
+             FROM tenant_administrator_bindings
+             WHERE actor_id = $1
+               AND tenant_id <> $2::uuid
+           )
+         ), tenant AS (
+           INSERT INTO tenant_administrator_tenants (
+             tenant_id, expected_salesforce_org_id,
+             authorization_origin, namespace_prefix
+           )
+           SELECT tenant_id, $3, $4, $5 FROM eligible
+           ON CONFLICT (tenant_id) DO UPDATE SET tenant_id = EXCLUDED.tenant_id
+           WHERE tenant_administrator_tenants.expected_salesforce_org_id =
+                   EXCLUDED.expected_salesforce_org_id
+             AND tenant_administrator_tenants.authorization_origin =
+                   EXCLUDED.authorization_origin
+             AND tenant_administrator_tenants.namespace_prefix =
+                   EXCLUDED.namespace_prefix
+           RETURNING tenant_id
+         ), actor AS (
+           INSERT INTO tenant_administrator_bindings (actor_id, tenant_id)
+           SELECT $1, tenant_id FROM tenant
+           ON CONFLICT (actor_id) DO UPDATE SET actor_id = EXCLUDED.actor_id
+           WHERE tenant_administrator_bindings.tenant_id = EXCLUDED.tenant_id
+           RETURNING actor_id
+         )
+         SELECT actor_id FROM actor`,
         [
           input.actorId,
           input.tenantId,
@@ -272,7 +299,14 @@ export class AdministratorSessionStore {
           input.namespacePrefix,
         ],
       );
-    } catch {
+    } catch (error) {
+      if (
+        error !== null &&
+        typeof error === 'object' &&
+        !types.isProxy(error) &&
+        Object.getOwnPropertyDescriptor(error, 'code')?.value === '23505'
+      )
+        fail('ADMINISTRATOR_SESSION_CONFLICT');
       fail('ADMINISTRATOR_SESSION_STORAGE');
     }
     if (result.rowCount === 0 && result.rows.length === 0)
@@ -338,10 +372,11 @@ export class AdministratorSessionStore {
            WHERE session_digest = $1
              AND expires_at <= clock_timestamp()
          )
-         SELECT b.actor_id, b.tenant_id, b.expected_salesforce_org_id,
-                b.authorization_origin, b.namespace_prefix
+         SELECT b.actor_id, b.tenant_id, t.expected_salesforce_org_id,
+                t.authorization_origin, t.namespace_prefix
          FROM administrator_sessions s
          JOIN tenant_administrator_bindings b ON b.actor_id = s.actor_id
+         JOIN tenant_administrator_tenants t ON t.tenant_id = b.tenant_id
          WHERE s.session_digest = $1
            AND s.expires_at > clock_timestamp()`,
         [digest],
