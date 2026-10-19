@@ -228,7 +228,10 @@ tenant/org binding; a same-origin CSRF check protects start and a separate HMAC
 cookie binds callback state to the initiating browser. ADR 0042 supplies the internal
 opaque session issuer and immutable provisioning store: only a digest is persisted,
 one session per actor is replaced atomically, PostgreSQL is checked for every request,
-and callback completion requires the exact initiating session to remain live. Request
+and callback completion requires the exact initiating session to remain live. ADR
+0043 stores org/origin/namespace once per tenant, shares that tuple across approved
+actors, rejects noncanonical namespaces at provisioning and routing, and serializes
+conflicts without partial rows. Request
 headers, bodies, queries and provider values cannot select the tenant. The external
 identity verifier, approved provisioning workflow, cookie/login and secret wiring,
 and actor-to-Salesforce-user audit are still absent, so `main.ts` does not mount the

@@ -26,6 +26,10 @@ const provisioning = Object.freeze({
 interface BindingRow {
   actor_id: string;
   tenant_id: string;
+}
+
+interface TenantRow {
+  tenant_id: string;
   expected_salesforce_org_id: string;
   authorization_origin: string;
   namespace_prefix: string;
@@ -39,19 +43,29 @@ interface SessionRow {
 
 function memoryDatabase() {
   const bindings = new Map<string, BindingRow>();
+  const tenants = new Map<string, TenantRow>();
   const sessions = new Map<string, SessionRow>();
   const observed: { text: string; values: unknown[] }[] = [];
   let now = Date.now();
   const database: QueryExecutor = {
     async query<Row>(text: string, values: unknown[] = []) {
       observed.push({ text, values });
-      if (/INSERT INTO tenant_administrator_bindings/.test(text)) {
-        const proposed: BindingRow = {
-          actor_id: String(values[0]),
+      if (/INSERT INTO tenant_administrator_tenants/.test(text)) {
+        const proposedTenant: TenantRow = {
           tenant_id: String(values[1]),
           expected_salesforce_org_id: String(values[2]),
           authorization_origin: String(values[3]),
           namespace_prefix: String(values[4]),
+        };
+        const existingTenant = tenants.get(proposedTenant.tenant_id);
+        if (
+          existingTenant !== undefined &&
+          JSON.stringify(existingTenant) !== JSON.stringify(proposedTenant)
+        )
+          return { rowCount: 0, rows: [] } satisfies QueryResult<Row>;
+        const proposed: BindingRow = {
+          actor_id: String(values[0]),
+          tenant_id: String(values[1]),
         };
         const existing = bindings.get(proposed.actor_id);
         if (
@@ -59,6 +73,7 @@ function memoryDatabase() {
           JSON.stringify(existing) !== JSON.stringify(proposed)
         )
           return { rowCount: 0, rows: [] } satisfies QueryResult<Row>;
+        tenants.set(proposedTenant.tenant_id, proposedTenant);
         bindings.set(proposed.actor_id, proposed);
         return {
           rowCount: 1,
@@ -93,9 +108,14 @@ function memoryDatabase() {
           return { rowCount: 0, rows: [] } satisfies QueryResult<Row>;
         }
         const binding = bindings.get(session.actor_id);
+        const tenant =
+          binding === undefined ? undefined : tenants.get(binding.tenant_id);
         return {
-          rowCount: binding === undefined ? 0 : 1,
-          rows: binding === undefined ? [] : [binding as Row],
+          rowCount: binding === undefined || tenant === undefined ? 0 : 1,
+          rows:
+            binding === undefined || tenant === undefined
+              ? []
+              : [{ ...binding, ...tenant } as Row],
         } satisfies QueryResult<Row>;
       }
       if (
@@ -123,6 +143,7 @@ function memoryDatabase() {
   return {
     database,
     bindings,
+    tenants,
     sessions,
     observed,
     advance(milliseconds: number) {
@@ -142,6 +163,9 @@ void test('provisions an exact immutable actor binding and normalizes the org ID
   assert.deepEqual(memory.bindings.get(actor), {
     actor_id: actor,
     tenant_id: tenantId,
+  });
+  assert.deepEqual(memory.tenants.get(tenantId), {
+    tenant_id: tenantId,
     expected_salesforce_org_id: orgId,
     authorization_origin: 'https://login.salesforce.com',
     namespace_prefix: 'ksny__',
@@ -159,6 +183,77 @@ void test('provisions an exact immutable actor binding and normalizes the org ID
       message: 'ADMINISTRATOR_SESSION_CONFLICT',
     });
   assert.equal(memory.bindings.get(actor)?.tenant_id, tenantId);
+});
+
+void test('refuses invalid namespaces and tenant-wide Salesforce disagreements before issuing a session', async () => {
+  const memory = memoryDatabase();
+  const store = new AdministratorSessionStore(memory.database);
+  for (const namespacePrefix of ['MyNs__', 'my_ns__', 'Evil__'])
+    await assert.rejects(
+      store.provision({ ...provisioning, namespacePrefix }),
+      {
+        message: 'ADMINISTRATOR_SESSION_INPUT',
+      },
+    );
+  assert.equal(memory.bindings.size, 0);
+  assert.equal(memory.tenants.size, 0);
+
+  await store.provision(provisioning);
+  const otherActor = 'administrator:other';
+  for (const changed of [
+    { expectedSalesforceOrgId: '00D000000000002EAA' },
+    { authorizationOrigin: 'https://test.salesforce.com' },
+    { namespacePrefix: '' },
+  ])
+    await assert.rejects(
+      store.provision({ ...provisioning, ...changed, actorId: otherActor }),
+      { message: 'ADMINISTRATOR_SESSION_CONFLICT' },
+    );
+  await assert.rejects(store.issue(otherActor, configuration), {
+    message: 'ADMINISTRATOR_SESSION_ABSENT',
+  });
+  assert.equal(memory.bindings.size, 1);
+  assert.equal(memory.tenants.size, 1);
+});
+
+void test('maps only a direct PostgreSQL uniqueness code to a provisioning conflict', async () => {
+  const conflict = new AdministratorSessionStore({
+    async query() {
+      throw Object.defineProperty(
+        new Error('private database detail'),
+        'code',
+        {
+          enumerable: true,
+          value: '23505',
+        },
+      ) as Error & { code: string };
+    },
+  });
+  await assert.rejects(conflict.provision(provisioning), {
+    message: 'ADMINISTRATOR_SESSION_CONFLICT',
+  });
+
+  let getters = 0;
+  const accessorError = Object.defineProperty(
+    new Error('private accessor detail'),
+    'code',
+    {
+      enumerable: true,
+      get() {
+        getters++;
+        return '23505';
+      },
+    },
+  );
+  const storage = new AdministratorSessionStore({
+    async query() {
+      throw accessorError;
+    },
+  });
+  await assert.rejects(storage.provision(provisioning), {
+    message: 'ADMINISTRATOR_SESSION_STORAGE',
+  });
+  assert.equal(getters, 0);
 });
 
 void test('issues only fresh random sessions, stores only digests and derives CSRF', async () => {

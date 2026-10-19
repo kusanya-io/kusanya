@@ -135,11 +135,12 @@ returns no connection metadata. Real Salesforce provider descriptions are discar
 at the HTTP edge.
 
 `AdministratorSessionStore` issues fresh random sessions only after a stable trusted
-actor has an exact provisioned tenant/org/origin/namespace binding. It stores only a
-SHA-256 session digest, keeps one live session per actor, derives CSRF under a
-deployment secret and checks PostgreSQL on every request so logout, operator
-revocation, replacement and expiry are immediate. Provisioning refuses any silent
-binding change.
+actor is provisioned to a tenant whose normalized org/origin/namespace tuple is
+stored once for the whole tenant. Multiple approved actors can share that exact
+tuple; conflicting tenant context, actor movement and noncanonical namespaces are
+refused atomically. The store keeps only a SHA-256 session digest, one live session
+per actor, derives CSRF under a deployment secret and checks PostgreSQL on every
+request so logout, operator revocation, replacement and expiry are immediate.
 
 `main.ts` does not register these routes yet. The external administrator identity
 verifier, approved provisioning workflow, cookie/login composition and deployment

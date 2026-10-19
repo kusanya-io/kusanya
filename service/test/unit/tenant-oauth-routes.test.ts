@@ -428,6 +428,30 @@ void test('rejects duplicate cookies and hostile authenticated contexts without 
   assert.equal(memory.rows.size, 0);
 });
 
+void test('rejects noncanonical provisioned namespaces at the route boundary', async (context) => {
+  for (const namespacePrefix of ['MyNs__', 'my_ns__', 'Evil__']) {
+    const { app, memory } = createRouteApp({
+      authenticateAdministrator: async () => ({
+        actorId: 'administrator:synthetic',
+        tenantId,
+        expectedSalesforceOrgId: orgId,
+        authorizationOrigin: 'https://login.salesforce.com',
+        namespacePrefix,
+        csrfToken,
+      }),
+    });
+    context.after(() => app.close());
+    const response = await app.inject({
+      method: 'POST',
+      url: tenantOAuthRoutePaths.start,
+      headers: startHeaders(),
+    });
+    assert.equal(response.statusCode, 401);
+    assert.deepEqual(response.json(), { error: 'Authentication required' });
+    assert.equal(memory.rows.size, 0);
+  }
+});
+
 void test('never reflects authentication failures and rejects duplicate callback values', async (context) => {
   const privateDetail = 'private-session-signature';
   const { app } = createRouteApp({

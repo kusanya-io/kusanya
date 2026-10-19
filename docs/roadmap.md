@@ -333,7 +333,11 @@ The administrator-session unit (ADR 0042) adds the internal issuer behind that
 contract. Fresh random sessions replace the actor's prior digest atomically, resolve
 immutable provisioned tenant/org context from PostgreSQL on every request, and are
 immediately revocable. The OAuth callback is bound to the exact still-live initiating
-session, closing note 95. The external identity verifier and stable actor mapping,
+session, closing note 95. ADR 0043 makes org, authorization origin and namespace a
+single immutable tenant tuple shared by approved actors, aligns namespace validation
+at provisioning and routing, and serializes conflicting provisioning without residue,
+closing notes 96 and 97 subject to independent verification. The external identity
+verifier and stable actor mapping,
 approved provisioning interface, secure cookie/login and logout composition,
 deployment secret wiring, actor-to-Salesforce-user audit, privileged disconnect and
 rebind, final publisher composition and publish CLI remain. Note 94 must be preserved

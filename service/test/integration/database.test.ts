@@ -584,12 +584,25 @@ void test(
     const pool = createPostgresPool(config, () => {});
     const tenantId = randomUUID();
     const otherTenantId = randomUUID();
+    const raceTenantId = randomUUID();
     const actorId = `administrator:${randomUUID()}`;
+    const secondActorId = `administrator:${randomUUID()}`;
+    const conflictActorId = `administrator:${randomUUID()}`;
+    const raceActorIds = [
+      `administrator:${randomUUID()}`,
+      `administrator:${randomUUID()}`,
+    ];
     context.after(async () => {
       try {
         await pool.query(
-          'DELETE FROM tenant_administrator_bindings WHERE actor_id = $1',
-          [actorId],
+          `DELETE FROM tenant_administrator_bindings
+           WHERE actor_id = ANY($1::varchar[])`,
+          [[actorId, secondActorId, conflictActorId, ...raceActorIds]],
+        );
+        await pool.query(
+          `DELETE FROM tenant_administrator_tenants
+           WHERE tenant_id = ANY($1::uuid[])`,
+          [[tenantId, otherTenantId, raceTenantId]],
         );
       } finally {
         await pool.end();
@@ -597,6 +610,18 @@ void test(
     });
     await applyMigrations(pool);
     await applyMigrations(pool);
+    assert.deepEqual(
+      (
+        await pool.query<{ column_name: string }>(
+          `SELECT column_name
+           FROM information_schema.columns
+           WHERE table_schema = 'public'
+             AND table_name = 'tenant_administrator_bindings'
+           ORDER BY column_name`,
+        )
+      ).rows.map((row) => row.column_name),
+      ['actor_id', 'created_at', 'tenant_id'],
+    );
     const queryExecutor: QueryExecutor = {
       async query<Row>(text: string, values: unknown[] = []) {
         const result = await pool.query(text, values);
@@ -622,9 +647,92 @@ void test(
       ...provisioned,
       expectedSalesforceOrgId: orgId,
     });
+    await store.provision({ ...provisioned, actorId: secondActorId });
     await assert.rejects(
       store.provision({ ...provisioned, tenantId: otherTenantId }),
       { message: 'ADMINISTRATOR_SESSION_CONFLICT' },
+    );
+    assert.equal(
+      (
+        await pool.query<{ count: number }>(
+          `SELECT count(*)::integer AS count
+           FROM tenant_administrator_tenants
+           WHERE tenant_id = $1`,
+          [otherTenantId],
+        )
+      ).rows[0]?.count,
+      0,
+    );
+    for (const changed of [
+      { expectedSalesforceOrgId: '00D000000000002EAA' },
+      { authorizationOrigin: 'https://test.salesforce.com' },
+      { namespacePrefix: 'other__' },
+    ])
+      await assert.rejects(
+        store.provision({
+          ...provisioned,
+          ...changed,
+          actorId: conflictActorId,
+        }),
+        { message: 'ADMINISTRATOR_SESSION_CONFLICT' },
+      );
+    for (const namespacePrefix of ['MyNs__', 'my_ns__', 'Evil__'])
+      await assert.rejects(
+        store.provision({
+          ...provisioned,
+          actorId: conflictActorId,
+          namespacePrefix,
+        }),
+        { message: 'ADMINISTRATOR_SESSION_INPUT' },
+      );
+
+    const race = await Promise.allSettled([
+      store.provision({
+        ...provisioned,
+        actorId: raceActorIds[0]!,
+        tenantId: raceTenantId,
+      }),
+      store.provision({
+        ...provisioned,
+        actorId: raceActorIds[1]!,
+        tenantId: raceTenantId,
+        expectedSalesforceOrgId: '00D000000000002EAA',
+      }),
+    ]);
+    assert.equal(
+      race.filter((result) => result.status === 'fulfilled').length,
+      1,
+    );
+    assert.equal(
+      race.filter(
+        (result) =>
+          result.status === 'rejected' &&
+          result.reason instanceof Error &&
+          result.reason.message === 'ADMINISTRATOR_SESSION_CONFLICT',
+      ).length,
+      1,
+    );
+    assert.equal(
+      (
+        await pool.query<{ count: number }>(
+          `SELECT count(*)::integer AS count
+           FROM tenant_administrator_bindings
+           WHERE actor_id = ANY($1::varchar[])`,
+          [raceActorIds],
+        )
+      ).rows[0]?.count,
+      1,
+    );
+    assert.equal(
+      (
+        await pool.query<{ count: number }>(
+          `SELECT count(*)::integer AS count
+           FROM tenant_administrator_bindings
+           WHERE actor_id = $1`,
+          [conflictActorId],
+        )
+      ).rows[0]?.count,
+      0,
     );
 
     const first = await store.issue(actorId, sessionConfiguration);
@@ -706,7 +814,10 @@ void test(
     assert.equal(
       (
         await pool.query<{ tenant_id: string }>(
-          'SELECT tenant_id::text AS tenant_id FROM tenant_administrator_bindings WHERE actor_id = $1',
+          `SELECT b.tenant_id::text AS tenant_id
+           FROM tenant_administrator_bindings b
+           JOIN tenant_administrator_tenants t ON t.tenant_id = b.tenant_id
+           WHERE b.actor_id = $1`,
           [actorId],
         )
       ).rows[0]?.tenant_id,
