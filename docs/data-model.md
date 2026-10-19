@@ -222,10 +222,18 @@ scoring and operational audit records. Every future object and field must carry 
 description. Target customer objects and fields are mapping data, never constants
 hard-coded from the Splash seed.
 
-PostgreSQL will hold tenant connections, hashed collector credentials, durable relay
-state and API-use counters. Tenant-scoped keys, uniqueness, migration rollback and
-retention constraints will be designed and tested before adding the first tables.
-Salesforce refresh credentials must be encrypted at rest with rotatable keys.
+PostgreSQL now holds the first service product table, `tenant_connections` (ADR
+0038). Its tenant UUID primary key maps to one unique, checked 18-character
+Salesforce org ID plus exact authorization and instance origins, the connection's
+namespace prefix, encrypted-envelope fields, credential version and audit
+timestamps. Reconnection cannot silently rebind a tenant to another org, and one
+org cannot belong to two tenants. Refresh tokens are AES-256-GCM encrypted with a
+fresh nonce and tenant/org authenticated data; key IDs are stored with ciphertext
+while the rotatable keys remain deployment secrets outside PostgreSQL.
+
+Checksum-pinned migrations run as an explicit one-shot command. Hashed collector
+credentials, durable relay state, retention constraints and API-use counters remain
+future tables and must retain tenant-scoped keys and tested isolation.
 
 ADR 0029 defines the future Answer cardinality boundary for dynamic repeats. The
 submitted count is authoritative per enclosing repeat instance; trailing physical
