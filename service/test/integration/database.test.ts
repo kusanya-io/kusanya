@@ -12,6 +12,7 @@ import {
   TenantConnectionStore,
   type QueryExecutor,
 } from '../../src/tenant/connection-store.js';
+import { createTenantSalesforceSession } from '../../src/tenant/salesforce-session.js';
 const databaseUrl = process.env.DATABASE_URL;
 const databaseRequired = process.env.REQUIRE_DATABASE_TESTS === 'true';
 void test(
@@ -227,6 +228,37 @@ void test(
     releaseFirst();
     assert.equal((await firstRefresh)?.connection.credentialVersion, 3);
     assert.equal((await secondRefresh)?.value, 'second');
+
+    const timeoutStarted = performance.now();
+    await assert.rejects(
+      createTenantSalesforceSession(
+        currentStore,
+        tenantId,
+        {
+          clientId: 'integration-client-id',
+          clientSecret: 'integration-client-secret',
+          timeoutMs: 25,
+        },
+        async () => await new Promise<Response>(() => undefined),
+      ),
+      /TENANT_SALESFORCE_SESSION_REFRESH/,
+    );
+    assert.ok(performance.now() - timeoutStarted < 1_000);
+    let enteredAfterTimeout = false;
+    const afterTimeout = await currentStore.withRefreshLock(
+      tenantId,
+      async (selected) => {
+        enteredAfterTimeout = true;
+        assert.equal(selected.credentialVersion, 3);
+        assert.equal(
+          selected.getRefreshToken(),
+          'third-synthetic-refresh-token',
+        );
+        return { value: 'lock-released' };
+      },
+    );
+    assert.equal(enteredAfterTimeout, true);
+    assert.equal(afterTimeout?.value, 'lock-released');
 
     await assert.rejects(
       currentStore.save({
