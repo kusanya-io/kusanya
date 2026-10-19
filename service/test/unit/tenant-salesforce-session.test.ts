@@ -271,21 +271,21 @@ void test('refuses hostile configuration and connection shapes without invoking 
   );
 });
 
-void test('enforces the refresh deadline', async () => {
+void test('enforces the refresh deadline when fetch ignores its abort signal', async () => {
+  const observation: { signal?: AbortSignal } = {};
+  const started = performance.now();
   await assert.rejects(
     createTenantSalesforceSession(
       store(),
       tenantId,
-      { ...client, timeoutMs: 10 },
-      async (_input, init) =>
-        await new Promise<Response>((_resolve, reject) => {
-          init?.signal?.addEventListener(
-            'abort',
-            () => reject(new Error('private timeout detail')),
-            { once: true },
-          );
-        }),
+      { ...client, timeoutMs: 25 },
+      async (_input, init) => {
+        if (init?.signal) observation.signal = init.signal;
+        return await new Promise<Response>(() => undefined);
+      },
     ),
     { message: 'TENANT_SALESFORCE_SESSION_REFRESH' },
   );
+  assert.ok(performance.now() - started < 1_000);
+  assert.equal(observation.signal?.aborted, true);
 });

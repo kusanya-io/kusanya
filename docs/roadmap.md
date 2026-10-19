@@ -302,7 +302,9 @@ Salesforce token rotation and rewrappable for service-key rotation. PostgreSQL
 migrations are transactional, checksum-pinned and explicit. ADR 0039 adds an
 internal trusted-tenant session and bounded refresh exchange, including PostgreSQL
 serialization across replicas and conditional persistence of Salesforce-rotated
-tokens. No OAuth callback, client-app metadata, trusted HTTP authentication, final
+tokens. Its deadline is enforced independently of fetch abort compliance so a stalled
+exchange cannot retain one tenant's row lock indefinitely. No OAuth callback,
+client-app metadata, trusted HTTP authentication, final
 publisher binding or publish CLI is added. Note 34 advances but remains open for
 those boundaries and CLI composition; note 39 remains open, and no C10 or Phase 1
 completion claim is made.

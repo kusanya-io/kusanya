@@ -70,6 +70,11 @@ oversized bodies and a bounded deadline. The External Client App client ID and s
 are deployment inputs to this internal function; their environment wiring and the
 authorization callback remain later work.
 
+The deadline is enforced by racing the complete exchange against a local rejecting
+timeout as well as aborting the supplied signal. A custom or future transport that
+ignores `AbortSignal` therefore cannot keep the tenant's PostgreSQL row lock past the
+deadline. Its abandoned operation cannot expose a session or commit a rotated token.
+
 The response must contain a printable bounded bearer access token, an identity URL
 whose normalized `00D` org ID equals the selected binding, and an instance URL whose
 origin equals the stored instance origin. A root trailing slash is normalized, but
@@ -88,12 +93,16 @@ caller contract.
 Unit tests prove the exact no-cache form request, one-tenant selection, non-enumerated
 access-token capability, conditional rotation, fixed failures, org/origin/type
 binding, hostile shape refusal without getter execution, body limits, timeout and
-secret-free errors. Store tests prove one pinned `BEGIN`/`SELECT FOR UPDATE`/
+secret-free errors. The timeout test deliberately uses a fetch implementation that
+never settles and ignores its abort signal. Store tests prove one pinned `BEGIN`/
+`SELECT FOR UPDATE`/
 `UPDATE`/`COMMIT` sequence and rollback with operation-error preservation.
 
 A disposable PostgreSQL 17 integration test must run two refresh operations against
 one tenant. The second must remain outside its callback until the first commits its
 rotated token, then observe the incremented credential version and replacement token.
+The same real-database test must also prove that a signal-ignoring exchange loses its
+row lock at the configured deadline and that a later same-tenant operation can enter.
 This is database serialization evidence, not a live Salesforce OAuth grant. No
 customer credential, Salesforce scratch org or client-app change is required.
 
@@ -103,6 +112,9 @@ administrator authorization/callback, PKCE state, deployment client configuratio
 connection/disconnect lifecycle, final publisher composition and CLI remain. Note 39
 remains open. No C10 acceptance test, publish-ready state or Phase 1 completion is
 claimed.
+
+Verifier note 88 is answered by the local rejecting race and the real-database
+lock-release test. Deadline enforcement no longer depends on injected fetch behavior.
 
 ## Revisit when
 

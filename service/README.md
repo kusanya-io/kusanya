@@ -13,7 +13,8 @@ an internal token capability. ADR 0039 adds a bounded internal refresh adapter a
 attempt-scoped access-token capability. Refreshes for one tenant are serialized by
 a PostgreSQL row lock across replicas, a rotated refresh token is encrypted and
 committed before access is exposed, and the returned org and instance must match the
-stored binding. There is still no OAuth callback, trusted tenant HTTP route, final
+stored binding. A local rejecting deadline releases that row lock even if an injected
+transport ignores its abort signal. There is still no OAuth callback, trusted tenant HTTP route, final
 publisher composition or publish CLI.
 
 Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.

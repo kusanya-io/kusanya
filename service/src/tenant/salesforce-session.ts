@@ -397,62 +397,79 @@ export async function createTenantSalesforceSession(
         fail('TENANT_SALESFORCE_SESSION_REFRESH');
       }
       const controller = new AbortController();
+      const timeout = new Promise<never>((_, reject) => {
+        controller.signal.addEventListener(
+          'abort',
+          () =>
+            reject(
+              new TenantSalesforceSessionError(
+                'TENANT_SALESFORCE_SESSION_REFRESH',
+              ),
+            ),
+          { once: true },
+        );
+      });
       const timer = setTimeout(
         () => controller.abort(),
         decodedConfiguration.timeoutMs,
       );
       timer.unref();
       try {
-        const body = new URLSearchParams({
-          grant_type: 'refresh_token',
-          client_id: decodedConfiguration.clientId,
-          client_secret: decodedConfiguration.clientSecret,
-          refresh_token: refreshToken,
-        }).toString();
-        refreshToken = '';
-        const response = await fetchImplementation(
-          `${current.authorizationOrigin}/services/oauth2/token`,
-          {
-            method: 'POST',
-            headers: {
-              accept: 'application/json',
-              'content-type':
-                'application/x-www-form-urlencoded; charset=UTF-8',
+        const exchange = async (): Promise<
+          TenantRefreshResult<ReturnType<typeof oauthResponse>>
+        > => {
+          const body = new URLSearchParams({
+            grant_type: 'refresh_token',
+            client_id: decodedConfiguration.clientId,
+            client_secret: decodedConfiguration.clientSecret,
+            refresh_token: refreshToken,
+          }).toString();
+          refreshToken = '';
+          const response = await fetchImplementation(
+            `${current.authorizationOrigin}/services/oauth2/token`,
+            {
+              method: 'POST',
+              headers: {
+                accept: 'application/json',
+                'content-type':
+                  'application/x-www-form-urlencoded; charset=UTF-8',
+              },
+              body,
+              cache: 'no-store',
+              credentials: 'omit',
+              redirect: 'manual',
+              signal: controller.signal,
             },
-            body,
-            cache: 'no-store',
-            credentials: 'omit',
-            redirect: 'manual',
-            signal: controller.signal,
-          },
-        );
-        if (
-          response.status !== 200 ||
-          response.redirected ||
-          response.headers
-            .get('content-type')
-            ?.split(';', 1)[0]
-            ?.trim()
-            .toLowerCase() !== 'application/json'
-        )
-          fail('TENANT_SALESFORCE_SESSION_REFRESH');
-        const bytes = await boundedBytes(response, controller.signal);
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(
-            new TextDecoder('utf-8', { fatal: true }).decode(bytes),
-          ) as unknown;
-        } catch {
-          fail('TENANT_SALESFORCE_SESSION_REFRESH');
-        }
-        const decoded = oauthResponse(parsed, current);
-        rotationSeen = decoded.rotatedRefreshToken !== undefined;
-        return decoded.rotatedRefreshToken === undefined
-          ? { value: decoded }
-          : {
-              value: decoded,
-              rotatedRefreshToken: decoded.rotatedRefreshToken,
-            };
+          );
+          if (
+            response.status !== 200 ||
+            response.redirected ||
+            response.headers
+              .get('content-type')
+              ?.split(';', 1)[0]
+              ?.trim()
+              .toLowerCase() !== 'application/json'
+          )
+            fail('TENANT_SALESFORCE_SESSION_REFRESH');
+          const bytes = await boundedBytes(response, controller.signal);
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(
+              new TextDecoder('utf-8', { fatal: true }).decode(bytes),
+            ) as unknown;
+          } catch {
+            fail('TENANT_SALESFORCE_SESSION_REFRESH');
+          }
+          const decoded = oauthResponse(parsed, current);
+          rotationSeen = decoded.rotatedRefreshToken !== undefined;
+          return decoded.rotatedRefreshToken === undefined
+            ? { value: decoded }
+            : {
+                value: decoded,
+                rotatedRefreshToken: decoded.rotatedRefreshToken,
+              };
+        };
+        return await Promise.race([exchange(), timeout]);
       } finally {
         clearTimeout(timer);
       }
