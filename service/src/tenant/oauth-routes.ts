@@ -2,6 +2,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { types } from 'node:util';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { requireHardenedRequestLogging } from '../http-security.js';
 import {
   beginTenantSalesforceAuthorization,
   completeTenantSalesforceAuthorization,
@@ -241,6 +242,7 @@ export function registerTenantOAuthRoutes(
   app: FastifyInstance,
   dependencies: TenantOAuthRouteDependencies,
 ): void {
+  requireHardenedRequestLogging(app);
   const origin = publicOrigin(dependencies.externalOrigin);
   const secret = stateSecret(dependencies.oauthConfiguration);
   if (

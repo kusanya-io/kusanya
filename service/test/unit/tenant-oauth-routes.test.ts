@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { test } from 'node:test';
+import Fastify from 'fastify';
 import { createApp } from '../../src/app.js';
 import { readConfig } from '../../src/config.js';
 import type {
@@ -500,4 +501,20 @@ void test('refuses route registration unless callback and public origin are exac
       }),
     { message: 'ADMIN_ROUTE_CONFIGURATION' },
   );
+});
+
+void test('refuses OAuth registration on a host with automatic request logging', async () => {
+  const app = Fastify({ logger: false });
+  assert.throws(
+    () =>
+      registerTenantOAuthRoutes(app, {
+        authenticateAdministrator: async () => undefined,
+        transactionStore: memoryStore().store,
+        connectionStore: connectionStore(() => {}),
+        oauthConfiguration,
+        externalOrigin: 'https://service.example',
+      }),
+    { message: 'HTTP_LOGGING_CONFIGURATION' },
+  );
+  await app.close();
 });

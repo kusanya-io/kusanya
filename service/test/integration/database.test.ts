@@ -16,6 +16,10 @@ import {
 import { createTenantSalesforceSession } from '../../src/tenant/salesforce-session.js';
 import { AdministratorSessionStore } from '../../src/tenant/administrator-session.js';
 import {
+  administratorSessionRoutePaths,
+  registerAdministratorSessionRoutes,
+} from '../../src/tenant/administrator-routes.js';
+import {
   beginTenantSalesforceAuthorization,
   completeTenantSalesforceAuthorization,
   TenantOAuthTransactionStore,
@@ -946,5 +950,55 @@ void test(
       ).rows[0]?.tenant_id,
       tenantId,
     );
+
+    const browserSession = await store.issue(actorId, sessionConfiguration);
+    const app = createApp(config, { async ping() {}, async close() {} }, false);
+    registerAdministratorSessionRoutes(app, {
+      verifyLoginRequest: async () => ({ actorId }),
+      sessionStore: store,
+      sessionConfiguration,
+      externalOrigin: 'https://service.example',
+    });
+    const csrf = await app.inject({
+      method: 'POST',
+      url: administratorSessionRoutePaths.csrf,
+      headers: {
+        origin: 'https://service.example',
+        cookie: `__Host-kusanya_admin_session=${browserSession.opaqueSession}`,
+      },
+    });
+    assert.equal(csrf.statusCode, 200);
+    assert.deepEqual(csrf.json(), { csrfToken: browserSession.csrfToken });
+    const logout = await app.inject({
+      method: 'POST',
+      url: administratorSessionRoutePaths.logout,
+      headers: {
+        origin: 'https://service.example',
+        cookie: `__Host-kusanya_admin_session=${browserSession.opaqueSession}`,
+        'x-csrf-token': browserSession.csrfToken,
+      },
+    });
+    assert.equal(logout.statusCode, 204);
+    assert.equal(
+      logout.headers['set-cookie'],
+      '__Host-kusanya_admin_session=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax',
+    );
+    assert.equal(
+      await store.authenticate(
+        browserSession.opaqueSession,
+        sessionConfiguration,
+      ),
+      undefined,
+    );
+    assert.equal(
+      (
+        await pool.query<{ count: number }>(
+          'SELECT count(*)::integer AS count FROM administrator_sessions WHERE actor_id = $1',
+          [actorId],
+        )
+      ).rows[0]?.count,
+      0,
+    );
+    await app.close();
   },
 );

@@ -92,6 +92,12 @@ and retention, executable ingestion of the package-pinned repeat-count policy, a
 general edited-XLSForm import.
 No model unit claims C10 tests 10/12. Do not mark Phase 1 complete from model tests.
 
+ADR 0044 adds the unmounted administrator browser composition: a trusted injected
+login verifier issues the exact host-only cookie, a live same-origin bootstrap
+returns CSRF, and database-first logout clears both server row and browser cookie.
+Both browser adapters now refuse hosts with automatic request logging, closing note 94. External identity selection, mounting/secret wiring and the actor-to-Salesforce
+`005` audit remain under note 34.
+
 The runtime-regression unit (ADR 0015) adds optional Enketo 9.0.1/JavaRosa 6.0.0
 engine probes. Bill's later Collect v2026.3.4 emulator run confirmed nested count
 contexts and the count-reduction divergence, answering note 36 for Collect and
@@ -336,10 +342,10 @@ immediately revocable. The OAuth callback is bound to the exact still-live initi
 session, closing note 95. ADR 0043 makes org, authorization origin and namespace a
 single immutable tenant tuple shared by approved actors, aligns namespace validation
 at provisioning and routing, and serializes conflicting provisioning without residue,
-closing notes 96 and 97 subject to independent verification. The external identity
-verifier and stable actor mapping,
-approved provisioning interface, secure cookie/login and logout composition,
+closing notes 96 and 97. ADR 0044 adds secure cookie/login/logout composition and
+closes note 94 by rejecting hosts with automatic request logging. The external
+identity verifier and stable actor mapping, approved provisioning interface,
 deployment secret wiring, actor-to-Salesforce-user audit, privileged disconnect and
-rebind, final publisher composition and publish CLI remain. Note 94 must be preserved
-when mounting the routes. Note 34 therefore remains open, as does note 39; no C10 or
+rebind, final publisher composition and publish CLI remain. Note 34 therefore remains
+open, as does note 39; no C10 or
 Phase 1 completion claim is made.

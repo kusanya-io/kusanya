@@ -1,6 +1,6 @@
 # ADR 0042: Revocable administrator sessions and immutable provisioning
 
-- Status: Accepted; verified in PR #77 and refined by ADR 0043
+- Status: Accepted; verified in PR #77 and refined by ADRs 0043-0044
 - Date: 2026-10-19
 - Brief sections: C1.3a, C2, C4 Tenant Connection, C8, C11 Phase 1
 - Decision owner: Cobitech Solutions
@@ -90,12 +90,12 @@ measures replacement, conflict, expiry and revocation against the real database.
 
 This advances note 34 but does not close it. The external identity verifier and its
 stable actor mapping, approved provisioning interface, audit tying the trusted actor
-to Salesforce's validated `005` user, deployment secret wiring, secure cookie/login
-and logout routes, privileged disconnect/rebind, final publisher composition and
-publish CLI remain. Note 94 also remains: when the routes are mounted, the concrete
-host must preserve the hardened logger that omits query strings and cookies. Nothing
-is mounted in `main.ts`; OpenAPI remains health-only. No live Salesforce grant, C10
-acceptance test, publish-ready state or Phase 1 completion is claimed.
+to Salesforce's validated `005` user, deployment secret wiring, privileged
+disconnect/rebind, final publisher composition and publish CLI remain. ADR 0044 adds
+the secure cookie/login/logout adapter and closes note 94 with a runtime hardened-host
+registration check. Nothing is mounted in `main.ts`; OpenAPI remains health-only. No
+live Salesforce grant, C10 acceptance test, publish-ready state or Phase 1 completion
+is claimed.
 
 ## Revisit when
 
