@@ -97,6 +97,7 @@ function successfulFetch(
   observed: ObservedRequest[],
   options: {
     commitStatus?: number;
+    loseCommitResponses?: boolean;
     loseFirstCommitResponse?: boolean;
     mismatch?: boolean;
   } = {},
@@ -163,7 +164,10 @@ function successfulFetch(
       const body = JSON.parse(requestBody(init)) as {
         publicationDigest: string;
       };
-      if (options.loseFirstCommitResponse && commitCalls === 1)
+      if (
+        options.loseCommitResponses ||
+        (options.loseFirstCommitResponse && commitCalls === 1)
+      )
         throw new Error('private lost response');
       return jsonResponse(
         {
@@ -453,7 +457,7 @@ void test('fails closed on commit refusal without claiming publication', async (
   assert.deepEqual(result, {
     ok: false,
     diagnostics: [
-      { code: 'PUBLICATION_PUBLISHER_COMMIT', location: 'publisher' },
+      { code: 'PUBLICATION_PUBLISHER_PARTIAL', location: 'publisher' },
     ],
     requestCount: 8,
   });
@@ -486,6 +490,32 @@ void test('retries an uncertain commit once with the identical attested identiti
   assert.equal(requestBody(commits[0]!.init), requestBody(commits[1]!.init));
 });
 
+void test('classifies two uncertain commit responses as a partial publication', async () => {
+  const observed: ObservedRequest[] = [];
+  const result = await publishSalesforceDefinition(
+    configuration(),
+    { formVersionId },
+    acceptXForm,
+    successfulFetch(observed, { loseCommitResponses: true }),
+  );
+  assert.deepEqual(result, {
+    ok: false,
+    diagnostics: [
+      { code: 'PUBLICATION_PUBLISHER_PARTIAL', location: 'publisher' },
+    ],
+    requestCount: 8,
+  });
+  assert.equal(
+    observed.filter(({ url }) => url.endsWith('/v1/publications/commit'))
+      .length,
+    2,
+  );
+  assert.equal(
+    observed.filter(({ init }) => init.method === 'DELETE').length,
+    0,
+  );
+});
+
 void test('refuses a commit response that does not repeat the package digest', async () => {
   const observed: ObservedRequest[] = [];
   const fetcher = successfulFetch(observed);
@@ -506,7 +536,7 @@ void test('refuses a commit response that does not repeat the package digest', a
   assert.deepEqual(result, {
     ok: false,
     diagnostics: [
-      { code: 'PUBLICATION_PUBLISHER_COMMIT', location: 'publisher' },
+      { code: 'PUBLICATION_PUBLISHER_PARTIAL', location: 'publisher' },
     ],
     requestCount: 8,
   });

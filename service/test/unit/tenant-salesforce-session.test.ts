@@ -5,6 +5,7 @@ import {
   type TenantConnection,
 } from '../../src/tenant/connection-store.js';
 import {
+  createBoundTenantSalesforceSession,
   createTenantSalesforceSession,
   type TenantConnectionSessionStore,
 } from '../../src/tenant/salesforce-session.js';
@@ -176,6 +177,66 @@ void test('returns a fixed absence without making a token request', async () => 
     { message: 'TENANT_SALESFORCE_SESSION_NOT_CONNECTED' },
   );
   assert.equal(requests, 0);
+});
+
+void test('refuses a provisioning mismatch before refresh-token access or network I/O', async () => {
+  const mismatches = [
+    { expectedSalesforceOrgId: normalizeSalesforceOrgId('00D000000000002') },
+    { authorizationOrigin: 'https://test.salesforce.com' },
+    { namespacePrefix: '' },
+  ];
+  for (const mismatch of mismatches) {
+    let tokenReads = 0;
+    let requests = 0;
+    const selected = connection();
+    const guarded = { ...selected } as Record<string, unknown>;
+    Object.defineProperty(guarded, 'getRefreshToken', {
+      configurable: false,
+      enumerable: false,
+      value: () => {
+        tokenReads++;
+        return 'synthetic-refresh-token';
+      },
+      writable: false,
+    });
+    await assert.rejects(
+      createBoundTenantSalesforceSession(
+        store(Object.freeze(guarded) as unknown as TenantConnection),
+        {
+          tenantId,
+          expectedSalesforceOrgId: orgId,
+          authorizationOrigin: 'https://login.salesforce.com',
+          namespacePrefix: 'ksny__',
+          ...mismatch,
+        },
+        client,
+        async () => {
+          requests++;
+          return response();
+        },
+      ),
+      { message: 'TENANT_SALESFORCE_SESSION_BINDING' },
+    );
+    assert.equal(tokenReads, 0);
+    assert.equal(requests, 0);
+  }
+});
+
+void test('creates a bound session only from the exact provisioning tuple', async () => {
+  const session = await createBoundTenantSalesforceSession(
+    store(),
+    {
+      tenantId,
+      expectedSalesforceOrgId: orgId,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: 'ksny__',
+    },
+    client,
+    async () => response(),
+  );
+  assert.equal(session.tenantId, tenantId);
+  assert.equal(session.salesforceOrgId, orgId);
+  assert.equal(await session.getAccessToken(), 'synthetic-access-token');
 });
 
 void test('binds the response to the selected org, instance and Bearer type', async () => {

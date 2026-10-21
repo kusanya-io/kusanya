@@ -1,6 +1,7 @@
 /** Attempt-scoped Salesforce access obtained from one trusted tenant binding. */
 import { types } from 'node:util';
 import { createSalesforceNames } from '../salesforce-names.js';
+import { administratorNamespacePrefix } from './administrator-session.js';
 import {
   normalizeSalesforceOrgId,
   type TenantConnection,
@@ -18,6 +19,7 @@ const maximumResponseBytes = 65_536;
 export type TenantSalesforceSessionFailureCode =
   | 'TENANT_SALESFORCE_SESSION_INPUT'
   | 'TENANT_SALESFORCE_SESSION_NOT_CONNECTED'
+  | 'TENANT_SALESFORCE_SESSION_BINDING'
   | 'TENANT_SALESFORCE_SESSION_REFRESH'
   | 'TENANT_SALESFORCE_SESSION_ROTATION';
 
@@ -41,6 +43,13 @@ export interface TenantSalesforceSession {
   readonly namespacePrefix: string;
   readonly credentialVersion: number;
   getAccessToken(): Promise<string>;
+}
+
+export interface TenantSalesforceSessionBinding {
+  readonly tenantId: string;
+  readonly expectedSalesforceOrgId: string;
+  readonly authorizationOrigin: string;
+  readonly namespacePrefix: string;
 }
 
 export interface TenantConnectionSessionStore {
@@ -249,6 +258,44 @@ function connection(
   return value as TenantConnection;
 }
 
+function binding(value: unknown): TenantSalesforceSessionBinding {
+  const decoded = plainRecord(value, 'TENANT_SALESFORCE_SESSION_INPUT');
+  exactKeys(
+    decoded,
+    [
+      'authorizationOrigin',
+      'expectedSalesforceOrgId',
+      'namespacePrefix',
+      'tenantId',
+    ],
+    'TENANT_SALESFORCE_SESSION_INPUT',
+  );
+  if (
+    typeof decoded.tenantId !== 'string' ||
+    !tenantIdPattern.test(decoded.tenantId) ||
+    typeof decoded.namespacePrefix !== 'string'
+  )
+    fail('TENANT_SALESFORCE_SESSION_INPUT');
+  let namespacePrefix: string;
+  try {
+    namespacePrefix = administratorNamespacePrefix(decoded.namespacePrefix);
+  } catch {
+    fail('TENANT_SALESFORCE_SESSION_INPUT');
+  }
+  return Object.freeze({
+    tenantId: decoded.tenantId,
+    expectedSalesforceOrgId: normalizedOrgId(
+      decoded.expectedSalesforceOrgId,
+      'TENANT_SALESFORCE_SESSION_INPUT',
+    ),
+    authorizationOrigin: salesforceOrigin(
+      decoded.authorizationOrigin,
+      'TENANT_SALESFORCE_SESSION_INPUT',
+    ),
+    namespacePrefix,
+  });
+}
+
 async function boundedBytes(
   response: Response,
   signal: AbortSignal,
@@ -374,6 +421,43 @@ export async function createTenantSalesforceSession(
   configurationValue: SalesforceOAuthClientConfiguration,
   fetchImplementation: FetchImplementation = fetch,
 ): Promise<TenantSalesforceSession> {
+  return await createSession(
+    store,
+    trustedTenantId,
+    undefined,
+    configurationValue,
+    fetchImplementation,
+  );
+}
+
+/**
+ * Create a session only when the selected connection still matches the exact
+ * immutable administrator provisioning tuple. The comparison happens before
+ * decrypting the refresh token or making the OAuth request.
+ */
+export async function createBoundTenantSalesforceSession(
+  store: TenantConnectionSessionStore,
+  trustedBindingValue: TenantSalesforceSessionBinding,
+  configurationValue: SalesforceOAuthClientConfiguration,
+  fetchImplementation: FetchImplementation = fetch,
+): Promise<TenantSalesforceSession> {
+  const trustedBinding = binding(trustedBindingValue);
+  return await createSession(
+    store,
+    trustedBinding.tenantId,
+    trustedBinding,
+    configurationValue,
+    fetchImplementation,
+  );
+}
+
+async function createSession(
+  store: TenantConnectionSessionStore,
+  trustedTenantId: string,
+  trustedBinding: TenantSalesforceSessionBinding | undefined,
+  configurationValue: SalesforceOAuthClientConfiguration,
+  fetchImplementation: FetchImplementation,
+): Promise<TenantSalesforceSession> {
   if (
     typeof trustedTenantId !== 'string' ||
     !tenantIdPattern.test(trustedTenantId) ||
@@ -390,6 +474,13 @@ export async function createTenantSalesforceSession(
   try {
     locked = await store.withRefreshLock(trustedTenantId, async (selected) => {
       const current = connection(selected, trustedTenantId);
+      if (
+        trustedBinding !== undefined &&
+        (current.salesforceOrgId !== trustedBinding.expectedSalesforceOrgId ||
+          current.authorizationOrigin !== trustedBinding.authorizationOrigin ||
+          current.namespacePrefix !== trustedBinding.namespacePrefix)
+      )
+        fail('TENANT_SALESFORCE_SESSION_BINDING');
       let refreshToken: string;
       try {
         refreshToken = tokenValue(current.getRefreshToken());

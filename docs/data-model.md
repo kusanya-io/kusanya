@@ -233,10 +233,15 @@ while the rotatable keys remain deployment secrets outside PostgreSQL.
 
 ADR 0045 adds append-only `tenant_salesforce_authorization_audits`. Each successful
 grant records the tenant, its bound trusted administrator actor, normalized `00D`
-org, signed authorizing `005` user and resulting credential version. The audit insert
-and encrypted connection upsert share one transaction, so neither may exist without
-the other. Reauthorization adds a new row and never overwrites earlier principal
-history; no OAuth/session credential or callback value is an audit column.
+org, signed authorizing `005` user and resulting credential version. The audited
+OAuth path inserts the audit and upserts the encrypted connection in one transaction,
+so that path cannot commit either write alone. The audit foreign key also prevents
+an audit without its connection. The lower-level connection store can still create
+a connection without an audit for isolated tests and internal storage work, so the
+reverse is not a schema invariant. Reauthorization adds a new row and never
+overwrites earlier principal history; no OAuth/session credential or callback value
+is an audit column. Append-only is enforced by the Kusanya write path, not as tamper
+evidence against a privileged database role (ADR 0045).
 
 Checksum-pinned migrations run as an explicit one-shot command. Hashed collector
 credentials, durable relay state, retention constraints and API-use counters remain
