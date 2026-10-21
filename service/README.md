@@ -19,7 +19,9 @@ and callback protocol. ADR 0041 adds an unmounted HTTP adapter with an injected
 trusted-session contract, same-origin CSRF and browser-bound callback state. ADR 0042
 adds the internal opaque session issuer, live revocation and immutable actor-to-tenant
 provisioning. A concrete external identity verifier, approved provisioning workflow,
-deployment wiring, final publisher composition and the publish CLI remain.
+deployment wiring, final publisher composition and the publish CLI remain. ADR 0044
+adds the unmounted browser login/CSRF/logout composition and makes hardened request
+logging a runtime prerequisite for both administrator adapters.
 
 Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.
 It has no HTTP route, Salesforce access or publishing authority. See
@@ -159,12 +161,22 @@ refused atomically. The store keeps only a SHA-256 session digest, one live sess
 per actor, derives CSRF under a deployment secret and checks PostgreSQL on every
 request so logout, operator revocation, replacement and expiry are immediate.
 
+`registerAdministratorSessionRoutes` composes that store behind an injected trusted
+login verifier. A successful exact-origin login issues
+`__Host-kusanya_admin_session` with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`,
+an explicit `Max-Age` and no `Domain`; it returns no CSRF or identity data. A separate
+exact-origin authenticated POST returns only the session-derived CSRF token. Logout
+requires the live cookie and that token, deletes the database row first and clears
+the cookie only after revocation succeeds. The session and OAuth adapters refuse
+registration unless the host's actual Fastify log controller disables automatic
+request logging, so callback codes, state and cookies cannot enter default request
+logs (note 94).
+
 `main.ts` does not register these routes yet. The external administrator identity
-verifier, approved provisioning workflow, cookie/login composition and deployment
-secret wiring remain required; the health-only OpenAPI description therefore stays
-accurate. A future composition must also persist an audit tying its trusted actor to
-the validated Salesforce `005` user returned by the authorization boundary and must
-preserve the service's query/cookie-safe logging policy.
+verifier, approved provisioning workflow and deployment secret wiring remain
+required; the health-only OpenAPI description therefore stays accurate. A future
+authorization persistence unit must also atomically record an audit tying its trusted
+actor to the validated Salesforce `005` user returned by the authorization boundary.
 
 ## Salesforce namespace configuration
 

@@ -231,9 +231,13 @@ one session per actor is replaced atomically, PostgreSQL is checked for every re
 and callback completion requires the exact initiating session to remain live. ADR
 0043 stores org/origin/namespace once per tenant, shares that tuple across approved
 actors, rejects noncanonical namespaces at provisioning and routing, and serializes
-conflicts without partial rows. Request
+conflicts without partial rows. ADR 0044 composes unmounted administrator login, a
+live-session same-origin CSRF bootstrap and database-first logout. It issues only a
+`Secure`, `HttpOnly`, `SameSite=Lax`, host-only cookie and makes disabled automatic
+request logging a runtime registration requirement for both browser adapters, closing
+note 94. Request
 headers, bodies, queries and provider values cannot select the tenant. The external
-identity verifier, approved provisioning workflow, cookie/login and secret wiring,
+identity verifier, approved provisioning workflow and secret wiring,
 and actor-to-Salesforce-user audit are still absent, so `main.ts` does not mount the
 adapter and the deployed API remains health-only. Publisher composition and the
 publish CLI also remain.
