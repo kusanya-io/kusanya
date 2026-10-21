@@ -74,7 +74,7 @@ one tuple survive.
 
 This closes review notes 96 and 97 if independently verified. It does not implement
 the external identity verifier, approved provisioning interface, secure login/cookie
-and logout composition, actor-to-Salesforce-user audit, privileged disconnect/rebind,
+and logout composition, privileged disconnect/rebind,
 publisher composition or CLI. Note 94 still applies when the OAuth adapter is mounted:
 the host must preserve query- and cookie-safe logging. Nothing is mounted in
 `main.ts`, no Salesforce metadata or CI boundary changes, and no C10 acceptance test,

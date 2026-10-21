@@ -9,6 +9,8 @@ import type {
 const tenantIdPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const salesforceIdPattern = /^00D[A-Za-z0-9]{12}(?:[A-Za-z0-9]{3})?$/;
+const salesforceUserIdPattern = /^005[A-Za-z0-9]{12}(?:[A-Za-z0-9]{3})?$/;
+const actorIdPattern = /^[A-Za-z0-9:_-]{1,128}$/;
 const tokenPattern = /^[\x21-\x7e]+$/;
 const maximumCredentialLength = 4096;
 
@@ -31,6 +33,13 @@ export interface TenantConnectionInput {
   readonly instanceOrigin: string;
   readonly namespacePrefix: string;
   readonly refreshToken: string;
+}
+
+export interface TenantAuthorizationAuditInput extends TenantConnectionInput {
+  /** Stable actor from the live administrator session, never request data. */
+  readonly actorId: string;
+  /** Salesforce user from the signed OAuth identity response. */
+  readonly salesforceUserId: string;
 }
 
 export interface TenantConnection {
@@ -157,14 +166,22 @@ function salesforceChecksum(id: string): string {
   return suffix;
 }
 
-export function normalizeSalesforceOrgId(value: unknown): string {
-  if (typeof value !== 'string' || !salesforceIdPattern.test(value))
+function normalizeSalesforceId(value: unknown, pattern: RegExp): string {
+  if (typeof value !== 'string' || !pattern.test(value))
     fail('TENANT_CONNECTION_INPUT');
   const first = value.slice(0, 15);
   const normalized = first + salesforceChecksum(first);
   if (value.length === 18 && value !== normalized)
     fail('TENANT_CONNECTION_INPUT');
   return normalized;
+}
+
+export function normalizeSalesforceOrgId(value: unknown): string {
+  return normalizeSalesforceId(value, salesforceIdPattern);
+}
+
+export function normalizeSalesforceUserId(value: unknown): string {
+  return normalizeSalesforceId(value, salesforceUserIdPattern);
 }
 
 function salesforceOrigin(value: unknown): string {
@@ -188,21 +205,13 @@ function salesforceOrigin(value: unknown): string {
   return parsed.origin;
 }
 
-function decodeInput(value: unknown): Omit<
-  TenantConnectionInput,
-  'salesforceOrgId'
-> & {
+type DecodedConnectionInput = Omit<TenantConnectionInput, 'salesforceOrgId'> & {
   salesforceOrgId: string;
-} {
-  const input = plainRecord(value);
-  exactKeys(input, [
-    'tenantId',
-    'salesforceOrgId',
-    'authorizationOrigin',
-    'instanceOrigin',
-    'namespacePrefix',
-    'refreshToken',
-  ]);
+};
+
+function decodeConnectionRecord(
+  input: Record<string, unknown>,
+): DecodedConnectionInput {
   if (typeof input.namespacePrefix !== 'string')
     fail('TENANT_CONNECTION_INPUT');
   try {
@@ -217,6 +226,43 @@ function decodeInput(value: unknown): Omit<
     instanceOrigin: salesforceOrigin(input.instanceOrigin),
     namespacePrefix: input.namespacePrefix,
     refreshToken: refreshToken(input.refreshToken),
+  };
+}
+
+function decodeInput(value: unknown): DecodedConnectionInput {
+  const input = plainRecord(value);
+  exactKeys(input, [
+    'tenantId',
+    'salesforceOrgId',
+    'authorizationOrigin',
+    'instanceOrigin',
+    'namespacePrefix',
+    'refreshToken',
+  ]);
+  return decodeConnectionRecord(input);
+}
+
+function decodeAuthorizationInput(value: unknown): DecodedConnectionInput & {
+  actorId: string;
+  salesforceUserId: string;
+} {
+  const input = plainRecord(value);
+  exactKeys(input, [
+    'actorId',
+    'tenantId',
+    'salesforceOrgId',
+    'salesforceUserId',
+    'authorizationOrigin',
+    'instanceOrigin',
+    'namespacePrefix',
+    'refreshToken',
+  ]);
+  if (typeof input.actorId !== 'string' || !actorIdPattern.test(input.actorId))
+    fail('TENANT_CONNECTION_INPUT');
+  return {
+    ...decodeConnectionRecord(input),
+    actorId: input.actorId,
+    salesforceUserId: normalizeSalesforceUserId(input.salesforceUserId),
   };
 }
 
@@ -286,6 +332,46 @@ export class TenantConnectionStore {
     private readonly vault: TenantCredentialVault,
   ) {}
 
+  private upsert(
+    executor: QueryExecutor,
+    input: DecodedConnectionInput,
+    encrypted: EncryptedTenantCredential,
+  ): Promise<QueryResult<ConnectionRow>> {
+    return executor.query<ConnectionRow>(
+      `INSERT INTO tenant_connections (
+        tenant_id, salesforce_org_id, authorization_origin, instance_origin,
+        namespace_prefix, credential_schema_version, credential_key_id,
+        credential_nonce, credential_ciphertext, credential_tag
+      ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      ON CONFLICT (tenant_id) DO UPDATE SET
+        authorization_origin = EXCLUDED.authorization_origin,
+        instance_origin = EXCLUDED.instance_origin,
+        namespace_prefix = EXCLUDED.namespace_prefix,
+        credential_schema_version = EXCLUDED.credential_schema_version,
+        credential_key_id = EXCLUDED.credential_key_id,
+        credential_nonce = EXCLUDED.credential_nonce,
+        credential_ciphertext = EXCLUDED.credential_ciphertext,
+        credential_tag = EXCLUDED.credential_tag,
+        credential_version = tenant_connections.credential_version + 1,
+        credential_updated_at = clock_timestamp(),
+        updated_at = clock_timestamp()
+      WHERE tenant_connections.salesforce_org_id = EXCLUDED.salesforce_org_id
+      RETURNING ${returnedColumns}`,
+      [
+        input.tenantId,
+        input.salesforceOrgId,
+        input.authorizationOrigin,
+        input.instanceOrigin,
+        input.namespacePrefix,
+        encrypted.schemaVersion,
+        encrypted.keyId,
+        encrypted.nonce,
+        encrypted.ciphertext,
+        encrypted.tag,
+      ],
+    );
+  }
+
   async save(value: TenantConnectionInput): Promise<TenantConnection> {
     const input = decodeInput(value);
     const context = {
@@ -295,45 +381,81 @@ export class TenantConnectionStore {
     const encrypted = this.vault.seal(context, input.refreshToken);
     let result: QueryResult<ConnectionRow>;
     try {
-      result = await this.database.query<ConnectionRow>(
-        `INSERT INTO tenant_connections (
-          tenant_id, salesforce_org_id, authorization_origin, instance_origin,
-          namespace_prefix, credential_schema_version, credential_key_id,
-          credential_nonce, credential_ciphertext, credential_tag
-        ) VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        ON CONFLICT (tenant_id) DO UPDATE SET
-          authorization_origin = EXCLUDED.authorization_origin,
-          instance_origin = EXCLUDED.instance_origin,
-          namespace_prefix = EXCLUDED.namespace_prefix,
-          credential_schema_version = EXCLUDED.credential_schema_version,
-          credential_key_id = EXCLUDED.credential_key_id,
-          credential_nonce = EXCLUDED.credential_nonce,
-          credential_ciphertext = EXCLUDED.credential_ciphertext,
-          credential_tag = EXCLUDED.credential_tag,
-          credential_version = tenant_connections.credential_version + 1,
-          credential_updated_at = clock_timestamp(),
-          updated_at = clock_timestamp()
-        WHERE tenant_connections.salesforce_org_id = EXCLUDED.salesforce_org_id
-        RETURNING ${returnedColumns}`,
-        [
-          input.tenantId,
-          input.salesforceOrgId,
-          input.authorizationOrigin,
-          input.instanceOrigin,
-          input.namespacePrefix,
-          encrypted.schemaVersion,
-          encrypted.keyId,
-          encrypted.nonce,
-          encrypted.ciphertext,
-          encrypted.tag,
-        ],
-      );
+      result = await this.upsert(this.database, input, encrypted);
     } catch (error) {
       fail(databaseFailureCode(error));
     }
     if (result.rowCount !== 1 || result.rows.length !== 1)
       fail('TENANT_CONNECTION_CONFLICT');
     return this.connection(result.rows[0]!);
+  }
+
+  /** Persist a signed OAuth grant and its trusted administrator audit atomically. */
+  async saveAuthorization(
+    value: TenantAuthorizationAuditInput,
+  ): Promise<TenantConnection> {
+    const input = decodeAuthorizationInput(value);
+    if (typeof this.database.connect !== 'function')
+      fail('TENANT_CONNECTION_INPUT');
+    const encrypted = this.vault.seal(
+      {
+        tenantId: input.tenantId,
+        salesforceOrgId: input.salesforceOrgId,
+      },
+      input.refreshToken,
+    );
+    let client: QueryConnection;
+    try {
+      client = await this.database.connect.call(this.database);
+    } catch {
+      fail('TENANT_CONNECTION_STORAGE');
+    }
+    let transaction = false;
+    try {
+      await client.query('BEGIN');
+      transaction = true;
+      const saved = await this.upsert(client, input, encrypted);
+      if (saved.rowCount !== 1 || saved.rows.length !== 1)
+        fail('TENANT_CONNECTION_CONFLICT');
+      const connection = this.connection(saved.rows[0]!);
+      const audit = await client.query(
+        `INSERT INTO tenant_salesforce_authorization_audits (
+           tenant_id, actor_id, salesforce_org_id,
+           salesforce_user_id, credential_version
+         )
+         SELECT c.tenant_id, b.actor_id, c.salesforce_org_id, $3, $4
+         FROM tenant_connections c
+         JOIN tenant_administrator_bindings b
+           ON b.tenant_id = c.tenant_id
+         JOIN tenant_administrator_tenants t
+           ON t.tenant_id = b.tenant_id
+         WHERE c.tenant_id = $1::uuid
+           AND b.actor_id = $2
+           AND c.salesforce_org_id = $5
+           AND t.expected_salesforce_org_id = c.salesforce_org_id
+           AND t.authorization_origin = c.authorization_origin
+           AND t.namespace_prefix = c.namespace_prefix
+         RETURNING authorization_audit_id`,
+        [
+          input.tenantId,
+          input.actorId,
+          input.salesforceUserId,
+          connection.credentialVersion,
+          input.salesforceOrgId,
+        ],
+      );
+      if (audit.rowCount !== 1 || audit.rows.length !== 1)
+        fail('TENANT_CONNECTION_CONFLICT');
+      await client.query('COMMIT');
+      transaction = false;
+      return connection;
+    } catch (error) {
+      if (transaction) await client.query('ROLLBACK').catch(() => undefined);
+      if (error instanceof TenantConnectionError) throw error;
+      fail(databaseFailureCode(error));
+    } finally {
+      client.release();
+    }
   }
 
   async load(value: string): Promise<TenantConnection | undefined> {

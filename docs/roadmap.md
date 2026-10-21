@@ -345,7 +345,10 @@ at provisioning and routing, and serializes conflicting provisioning without res
 closing notes 96 and 97. ADR 0044 adds secure cookie/login/logout composition and
 closes note 94 by rejecting hosts with automatic request logging. The external
 identity verifier and stable actor mapping, approved provisioning interface,
-deployment secret wiring, actor-to-Salesforce-user audit, privileged disconnect and
-rebind, final publisher composition and publish CLI remain. Note 34 therefore remains
-open, as does note 39; no C10 or
-Phase 1 completion claim is made.
+deployment secret wiring, privileged disconnect and rebind, final publisher
+composition and publish CLI remain. ADR 0045 commits the encrypted connection and an
+append-only trusted-actor/Salesforce-`005` audit in one transaction, preserves prior
+reauthorizations, and rolls back both writes for an unbound actor. It also centralizes
+the authenticated-context decoder, closing note 98, while documenting note 99's
+provider constraint. Note 34 therefore remains open for its other strands, as does
+note 39; no C10 or Phase 1 completion claim is made.

@@ -6,8 +6,8 @@ import { requireHardenedRequestLogging } from '../http-security.js';
 import type {
   AdministratorSessionConfiguration,
   AdministratorSessionStore,
-  TrustedAdministratorContext,
 } from './administrator-session.js';
+import { decodeTrustedAdministratorContext } from './administrator-session.js';
 
 const loginPath = '/api/admin/session/login';
 const csrfPath = '/api/admin/session/csrf';
@@ -80,6 +80,14 @@ function trustedActor(value: unknown): string {
   return exactActor(record.actorId);
 }
 
+function trustedContext(value: unknown) {
+  try {
+    return decodeTrustedAdministratorContext(value);
+  } catch {
+    throw new AdministratorHttpInputError();
+  }
+}
+
 function emptyRequest(request: FastifyRequest): boolean {
   const query = request.query;
   if (query === null || typeof query !== 'object' || types.isProxy(query))
@@ -121,51 +129,6 @@ function safeEqual(left: string, right: string): boolean {
   const a = Buffer.from(left, 'ascii');
   const b = Buffer.from(right, 'ascii');
   return a.length === b.length && timingSafeEqual(a, b);
-}
-
-function decodeContext(value: unknown): TrustedAdministratorContext {
-  const record = plainRecord(value);
-  if (
-    Object.keys(record).sort().join(',') !==
-    [
-      'actorId',
-      'authorizationOrigin',
-      'csrfToken',
-      'expectedSalesforceOrgId',
-      'namespacePrefix',
-      'tenantId',
-    ]
-      .sort()
-      .join(',')
-  )
-    throw new AdministratorHttpInputError();
-  if (
-    typeof record.actorId !== 'string' ||
-    !actorPattern.test(record.actorId) ||
-    typeof record.tenantId !== 'string' ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
-      record.tenantId,
-    ) ||
-    typeof record.expectedSalesforceOrgId !== 'string' ||
-    !/^00D[A-Za-z0-9]{15}$/.test(record.expectedSalesforceOrgId) ||
-    typeof record.authorizationOrigin !== 'string' ||
-    !/^https:\/\/[A-Za-z0-9.-]+\.salesforce\.com$/.test(
-      record.authorizationOrigin,
-    ) ||
-    typeof record.namespacePrefix !== 'string' ||
-    !/^(?:|[a-z][a-z0-9]{0,14}__)$/.test(record.namespacePrefix) ||
-    typeof record.csrfToken !== 'string' ||
-    !csrfPattern.test(record.csrfToken)
-  )
-    throw new AdministratorHttpInputError();
-  return Object.freeze({
-    actorId: record.actorId,
-    tenantId: record.tenantId,
-    expectedSalesforceOrgId: record.expectedSalesforceOrgId,
-    authorizationOrigin: record.authorizationOrigin,
-    namespacePrefix: record.namespacePrefix,
-    csrfToken: record.csrfToken,
-  });
 }
 
 function sameOrigin(request: FastifyRequest, origin: string): boolean {
@@ -218,7 +181,7 @@ export function registerAdministratorSessionRoutes(
       const session = cookieValue(request);
       if (session === undefined || !sessionPattern.test(session))
         throw new AdministratorHttpInputError();
-      const context = decodeContext(
+      const context = trustedContext(
         await dependencies.sessionStore.authenticate(
           session,
           dependencies.sessionConfiguration,
@@ -246,7 +209,7 @@ export function registerAdministratorSessionRoutes(
       const session = cookieValue(request);
       if (session === undefined || !sessionPattern.test(session))
         throw new AdministratorHttpInputError();
-      const context = decodeContext(
+      const context = trustedContext(
         await dependencies.sessionStore.authenticate(
           session,
           dependencies.sessionConfiguration,

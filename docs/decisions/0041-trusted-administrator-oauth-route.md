@@ -74,7 +74,8 @@ The provider response signature is now authenticated before expected-org compari
 so `TENANT_OAUTH_BINDING` describes a signed Salesforce identity rather than forged
 response content. The exact requested `api refresh_token` scope is required;
 `token_format`, when supplied, must be `jwt`. The validated `005` authorizing user ID
-is returned as non-secret metadata for later audit composition.
+is returned as non-secret metadata; ADR 0045 persists it atomically with the live
+trusted actor and encrypted connection.
 
 Any user whom the Salesforce connected/external client app permits to authorize in
 the expected org may grant the connection. This unit does not impose one preselected
@@ -99,7 +100,7 @@ A PostgreSQL integration test proves an expired transaction is refused and delet
 This advances note 34 through a reviewable HTTP adapter but does not close it. ADR
 0042 supplies the internal session issuer and immutable provisioning store, but a
 concrete identity verifier and approved provisioning operator, deployment secret
-wiring, audit persistence, privileged disconnect/rebind, final publisher composition
+wiring, privileged disconnect/rebind, final publisher composition
 and publish CLI remain. The adapter is intentionally absent from the running app and
 OpenAPI until those mounting requirements are implemented. No live Salesforce grant,
 metadata, package, scratch org, C10 acceptance test, publish-ready state or Phase 1

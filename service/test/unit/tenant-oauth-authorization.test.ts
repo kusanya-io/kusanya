@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash, createHmac } from 'node:crypto';
 import { test } from 'node:test';
 import type {
-  TenantConnectionInput,
+  TenantAuthorizationAuditInput,
   TenantConnectionStore,
 } from '../../src/tenant/connection-store.js';
 import {
@@ -16,6 +16,7 @@ const tenantId = '10000000-0000-4000-8000-000000000001';
 const orgId = '00D000000000001EAA';
 const otherOrgId = '00D000000000002EAA';
 const userId = '005000000000001';
+const actorId = 'administrator:synthetic';
 const stateSecretBytes = Buffer.alloc(32, 41);
 const configuration: TenantOAuthConfiguration = Object.freeze({
   clientId: 'synthetic-client-id',
@@ -114,7 +115,7 @@ async function started(store: TenantOAuthTransactionStore) {
 
 function connectionStore(onSave: (value: Record<string, unknown>) => void) {
   return {
-    async save(value: TenantConnectionInput) {
+    async saveAuthorization(value: TenantAuthorizationAuditInput) {
       onSave({ ...value });
       return Object.freeze({
         tenantId,
@@ -127,7 +128,7 @@ function connectionStore(onSave: (value: Record<string, unknown>) => void) {
         getRefreshToken: () => 'synthetic-refresh-token',
       });
     },
-  } satisfies Pick<TenantConnectionStore, 'save'>;
+  } satisfies Pick<TenantConnectionStore, 'saveAuthorization'>;
 }
 
 void test('starts a server-bound one-time PKCE authorization without storing browser secrets', async () => {
@@ -177,6 +178,7 @@ void test('a new trusted start invalidates the prior pending state for that tena
     completeTenantSalesforceAuthorization(
       memory.store,
       connectionStore(() => assert.fail('must not save')),
+      actorId,
       { state: first.state, code: 'synthetic-authorization-code' },
       configuration,
       async () => {
@@ -201,6 +203,7 @@ void test('exchanges once, verifies the signed org identity and saves only the f
   const result = await completeTenantSalesforceAuthorization(
     memory.store,
     connectionStore((value) => saves.push(value)),
+    actorId,
     { state, code: 'synthetic-authorization-code' },
     configuration,
     async (input, init = {}) => {
@@ -245,8 +248,10 @@ void test('exchanges once, verifies the signed org identity and saves only the f
   });
   assert.deepEqual(saves, [
     {
+      actorId,
       tenantId,
       salesforceOrgId: orgId,
+      salesforceUserId: userId,
       authorizationOrigin: 'https://login.salesforce.com',
       instanceOrigin: 'https://tenant.my.salesforce.com',
       namespacePrefix: 'ksny__',
@@ -274,6 +279,7 @@ void test('atomically consumes state so replay and concurrent callbacks cannot e
     completeTenantSalesforceAuthorization(
       memory.store,
       connectionStore(() => saves++),
+      actorId,
       { state, code: 'synthetic-authorization-code' },
       configuration,
       async () => {
@@ -306,6 +312,7 @@ void test('consumes provider-error callbacks and never contacts Salesforce', asy
     completeTenantSalesforceAuthorization(
       memory.store,
       connectionStore(() => assert.fail('must not save')),
+      actorId,
       { state, error: 'access_denied' },
       configuration,
       async () => {
@@ -342,6 +349,7 @@ void test('refuses wrong-org, bad-signature and partial grants without a half-wr
       completeTenantSalesforceAuthorization(
         memory.store,
         connectionStore(() => saves++),
+        actorId,
         { state, code: 'synthetic-authorization-code' },
         configuration,
         async () => response(),
@@ -379,6 +387,7 @@ void test('authenticates provider identity before reporting an org mismatch and 
       completeTenantSalesforceAuthorization(
         memory.store,
         connectionStore(() => assert.fail('must not save')),
+        actorId,
         { state, code: 'synthetic-authorization-code' },
         configuration,
         async () => item.response,
@@ -391,6 +400,7 @@ void test('authenticates provider identity before reporting an org mismatch and 
   const accepted = await completeTenantSalesforceAuthorization(
     memory.store,
     connectionStore(() => {}),
+    actorId,
     { state, code: 'synthetic-authorization-code' },
     configuration,
     async () =>
@@ -432,6 +442,7 @@ void test('refuses malformed and oversized provider responses after consuming st
       completeTenantSalesforceAuthorization(
         memory.store,
         connectionStore(() => assert.fail('must not save')),
+        actorId,
         { state, code: 'synthetic-authorization-code' },
         configuration,
         async () => response(),
@@ -450,10 +461,11 @@ void test('normalizes connection failures after consuming state without leaking 
     await completeTenantSalesforceAuthorization(
       memory.store,
       {
-        async save() {
+        async saveAuthorization() {
           throw new Error('synthetic-refresh-token private database detail');
         },
-      } satisfies Pick<TenantConnectionStore, 'save'>,
+      } satisfies Pick<TenantConnectionStore, 'saveAuthorization'>,
+      actorId,
       { state, code: 'synthetic-authorization-code' },
       configuration,
       async () => signedResponse(),
@@ -482,6 +494,7 @@ void test('enforces a fetch-independent deadline and ignores a late valid grant'
     completeTenantSalesforceAuthorization(
       memory.store,
       connectionStore(() => saves++),
+      actorId,
       { state, code: 'synthetic-authorization-code' },
       { ...configuration, timeoutMs: 25 },
       async (_input, init) => {
@@ -538,6 +551,7 @@ void test('rejects hostile inputs and accessors before storage or network use', 
     completeTenantSalesforceAuthorization(
       callbackMemory.store,
       connectionStore(() => assert.fail('must not save')),
+      actorId,
       hostileCallback as never,
       configuration,
     ),

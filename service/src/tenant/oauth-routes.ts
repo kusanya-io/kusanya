@@ -12,7 +12,7 @@ import {
 } from './oauth-authorization.js';
 import type { TenantConnectionStore } from './connection-store.js';
 import {
-  administratorNamespacePrefix,
+  decodeTrustedAdministratorContext,
   type TrustedAdministratorContext,
 } from './administrator-session.js';
 
@@ -33,35 +33,11 @@ export interface TenantOAuthRouteDependencies {
     opaqueSession: string,
   ) => Promise<unknown>;
   readonly transactionStore: TenantOAuthTransactionStore;
-  readonly connectionStore: Pick<TenantConnectionStore, 'save'>;
+  readonly connectionStore: Pick<TenantConnectionStore, 'saveAuthorization'>;
   readonly oauthConfiguration: TenantOAuthConfiguration;
   /** Exact public HTTPS origin that owns these routes and the session cookie. */
   readonly externalOrigin: string;
   readonly fetchImplementation?: typeof fetch;
-}
-
-function plainRecord(value: unknown): Record<string, unknown> | undefined {
-  if (
-    value === null ||
-    typeof value !== 'object' ||
-    types.isProxy(value) ||
-    Object.getPrototypeOf(value) !== Object.prototype
-  )
-    return undefined;
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  if (
-    Reflect.ownKeys(descriptors).some(
-      (key) =>
-        typeof key !== 'string' || !Object.hasOwn(descriptors[key]!, 'value'),
-    )
-  )
-    return undefined;
-  return Object.fromEntries(
-    Object.entries(descriptors).map(([key, descriptor]) => [
-      key,
-      descriptor.value,
-    ]),
-  );
 }
 
 function exactString(value: unknown, pattern: RegExp, maximum: number): string {
@@ -72,45 +48,6 @@ function exactString(value: unknown, pattern: RegExp, maximum: number): string {
   )
     throw new AdministratorRouteInputError();
   return value;
-}
-
-function decodeContext(value: unknown): TrustedAdministratorContext {
-  const record = plainRecord(value);
-  if (
-    record === undefined ||
-    Object.keys(record).sort().join(',') !==
-      [
-        'actorId',
-        'authorizationOrigin',
-        'csrfToken',
-        'expectedSalesforceOrgId',
-        'namespacePrefix',
-        'tenantId',
-      ]
-        .sort()
-        .join(',')
-  )
-    throw new AdministratorRouteInputError();
-  return Object.freeze({
-    actorId: exactString(record.actorId, /^[A-Za-z0-9:_-]{1,128}$/, 128),
-    tenantId: exactString(
-      record.tenantId,
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      36,
-    ),
-    expectedSalesforceOrgId: exactString(
-      record.expectedSalesforceOrgId,
-      /^00D[A-Za-z0-9]{12}(?:[A-Za-z0-9]{3})?$/,
-      18,
-    ),
-    authorizationOrigin: exactString(
-      record.authorizationOrigin,
-      /^https:\/\/[A-Za-z0-9.-]+\.salesforce\.com$/,
-      2048,
-    ),
-    namespacePrefix: administratorNamespacePrefix(record.namespacePrefix),
-    csrfToken: exactString(record.csrfToken, csrfPattern, 43),
-  });
 }
 
 function cookieValue(
@@ -259,7 +196,7 @@ export function registerTenantOAuthRoutes(
         return reply.code(401).send({ error: 'Authentication required' });
       let context: TrustedAdministratorContext;
       try {
-        context = decodeContext(
+        context = decodeTrustedAdministratorContext(
           await dependencies.authenticateAdministrator(session),
         );
       } catch {
@@ -318,8 +255,11 @@ export function registerTenantOAuthRoutes(
       const session = cookieValue(request, administratorCookie);
       if (session === undefined || !opaquePattern.test(session))
         return reply.code(401).send({ error: 'Authentication required' });
+      let context: TrustedAdministratorContext;
       try {
-        decodeContext(await dependencies.authenticateAdministrator(session));
+        context = decodeTrustedAdministratorContext(
+          await dependencies.authenticateAdministrator(session),
+        );
       } catch {
         return reply.code(401).send({ error: 'Authentication required' });
       }
@@ -333,6 +273,7 @@ export function registerTenantOAuthRoutes(
       await completeTenantSalesforceAuthorization(
         dependencies.transactionStore,
         dependencies.connectionStore,
+        context.actorId,
         input,
         dependencies.oauthConfiguration,
         dependencies.fetchImplementation,

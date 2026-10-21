@@ -231,6 +231,13 @@ org cannot belong to two tenants. Refresh tokens are AES-256-GCM encrypted with 
 fresh nonce and tenant/org authenticated data; key IDs are stored with ciphertext
 while the rotatable keys remain deployment secrets outside PostgreSQL.
 
+ADR 0045 adds append-only `tenant_salesforce_authorization_audits`. Each successful
+grant records the tenant, its bound trusted administrator actor, normalized `00D`
+org, signed authorizing `005` user and resulting credential version. The audit insert
+and encrypted connection upsert share one transaction, so neither may exist without
+the other. Reauthorization adds a new row and never overwrites earlier principal
+history; no OAuth/session credential or callback value is an audit column.
+
 Checksum-pinned migrations run as an explicit one-shot command. Hashed collector
 credentials, durable relay state, retention constraints and API-use counters remain
 future tables and must retain tenant-scoped keys and tested isolation.

@@ -88,9 +88,9 @@ or contact Salesforce. A PostgreSQL integration test applies the migration twice
 inspects raw rows for token absence, races two issuances to one active digest, and
 measures replacement, conflict, expiry and revocation against the real database.
 
-This advances note 34 but does not close it. The external identity verifier and its
-stable actor mapping, approved provisioning interface, audit tying the trusted actor
-to Salesforce's validated `005` user, deployment secret wiring, privileged
+This advances note 34 but does not close it. ADR 0045 adds the atomic audit tying the
+trusted actor to Salesforce's validated `005` user. The external identity verifier
+and its stable actor mapping, approved provisioning interface, deployment secret wiring, privileged
 disconnect/rebind, final publisher composition and publish CLI remain. ADR 0044 adds
 the secure cookie/login/logout adapter and closes note 94 with a runtime hardened-host
 registration check. Nothing is mounted in `main.ts`; OpenAPI remains health-only. No

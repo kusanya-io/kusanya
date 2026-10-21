@@ -5,7 +5,7 @@ import Fastify from 'fastify';
 import { createApp } from '../../src/app.js';
 import { readConfig } from '../../src/config.js';
 import type {
-  TenantConnectionInput,
+  TenantAuthorizationAuditInput,
   TenantConnectionStore,
 } from '../../src/tenant/connection-store.js';
 import {
@@ -23,6 +23,7 @@ const forgedTenantId = '20000000-0000-4000-8000-000000000002';
 const orgId = '00D000000000001EAA';
 const forgedOrgId = '00D000000000002EAA';
 const userId = '005000000000001';
+const forgedUserId = '005000000000002';
 const csrfToken = 'c'.repeat(43);
 const administratorSession = 's'.repeat(43);
 const stateSecret = Buffer.alloc(32, 51);
@@ -97,9 +98,11 @@ function signedResponse(): Response {
   );
 }
 
-function connectionStore(onSave: (input: TenantConnectionInput) => void) {
+function connectionStore(
+  onSave: (input: TenantAuthorizationAuditInput) => void,
+) {
   return {
-    async save(input: TenantConnectionInput) {
+    async saveAuthorization(input: TenantAuthorizationAuditInput) {
       onSave(input);
       return Object.freeze({
         tenantId,
@@ -112,12 +115,12 @@ function connectionStore(onSave: (input: TenantConnectionInput) => void) {
         getRefreshToken: () => 'synthetic-refresh-token',
       });
     },
-  } satisfies Pick<TenantConnectionStore, 'save'>;
+  } satisfies Pick<TenantConnectionStore, 'saveAuthorization'>;
 }
 
 function createRouteApp(
   overrides: Partial<TenantOAuthRouteDependencies> = {},
-  onSave: (input: TenantConnectionInput) => void = () => {},
+  onSave: (input: TenantAuthorizationAuditInput) => void = () => {},
 ) {
   const memory = memoryStore();
   const app = createApp(config, { async ping() {}, async close() {} }, false);
@@ -179,6 +182,8 @@ void test('starts from only the verified session binding and ignores forged tena
     headers: startHeaders({
       'x-tenant-id': forgedTenantId,
       'x-salesforce-org-id': forgedOrgId,
+      'x-salesforce-user-id': forgedUserId,
+      'x-administrator-actor': 'administrator:forged',
     }),
   });
   assert.equal(response.statusCode, 303);
@@ -256,7 +261,7 @@ void test('requires a verified session, exact same-origin CSRF and an empty star
 });
 
 void test('binds the callback to the initiating browser and stores no callback material in the response', async (context) => {
-  const saved: TenantConnectionInput[] = [];
+  const saved: TenantAuthorizationAuditInput[] = [];
   const { app } = createRouteApp({}, (input) => saved.push(input));
   context.after(() => app.close());
   const start = await app.inject({
@@ -282,6 +287,8 @@ void test('binds the callback to the initiating browser and stores no callback m
       cookie: callbackCookie(cookie),
       'x-tenant-id': forgedTenantId,
       'x-salesforce-org-id': forgedOrgId,
+      'x-salesforce-user-id': forgedUserId,
+      'x-administrator-actor': 'administrator:forged',
     },
   });
   assert.equal(response.statusCode, 200);
@@ -289,6 +296,8 @@ void test('binds the callback to the initiating browser and stores no callback m
   assert.equal(saved.length, 1);
   assert.equal(saved[0]?.tenantId, tenantId);
   assert.equal(saved[0]?.salesforceOrgId, orgId);
+  assert.equal(saved[0]?.actorId, 'administrator:synthetic');
+  assert.equal(saved[0]?.salesforceUserId, userId);
   assert.equal(
     response.headers['set-cookie'],
     '__Host-kusanya_oauth_binding=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax',
