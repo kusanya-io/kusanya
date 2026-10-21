@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   normalizeSalesforceOrgId,
+  normalizeSalesforceUserId,
   TenantConnectionError,
   TenantConnectionStore,
   type QueryConnection,
@@ -59,6 +60,13 @@ void test('Salesforce org IDs normalize to one checked case-safe identity', () =
     () => normalizeSalesforceOrgId('005000000000001'),
     /TENANT_CONNECTION_INPUT/,
   );
+  const userId = normalizeSalesforceUserId('005000000000001');
+  assert.equal(userId.length, 18);
+  assert.equal(normalizeSalesforceUserId(userId), userId);
+  assert.throws(
+    () => normalizeSalesforceUserId('00D000000000001'),
+    /TENANT_CONNECTION_INPUT/,
+  );
 });
 
 void test('save parameterizes secrets and returns a non-enumerating token capability', async () => {
@@ -103,6 +111,58 @@ void test('save parameterizes secrets and returns a non-enumerating token capabi
   assert.doesNotMatch(JSON.stringify(connection), /synthetic-refresh-token/);
   assert.equal(Object.keys(connection).includes('getRefreshToken'), false);
   assert.ok(Object.isFrozen(connection));
+});
+
+void test('authorization save commits the connection and append-only actor audit together', async () => {
+  const statements: string[] = [];
+  const values: unknown[][] = [];
+  let released = false;
+  const client: QueryConnection = {
+    async query<Row>(text: string, parameters: unknown[] = []) {
+      statements.push(text.trim().split(/\s+/, 1)[0]!);
+      values.push(parameters);
+      if (/^INSERT INTO tenant_connections/.test(text.trim()))
+        return {
+          rowCount: 1,
+          rows: [connectionRow('synthetic-refresh-token', 3) as Row],
+        } satisfies QueryResult<Row>;
+      if (
+        /^INSERT INTO tenant_salesforce_authorization_audits/.test(text.trim())
+      )
+        return {
+          rowCount: 1,
+          rows: [{ authorization_audit_id: '7' } as Row],
+        } satisfies QueryResult<Row>;
+      return { rowCount: null, rows: [] } satisfies QueryResult<Row>;
+    },
+    release() {
+      released = true;
+    },
+  };
+  const store = new TenantConnectionStore(
+    {
+      async query() {
+        throw new Error('unpooled query not expected');
+      },
+      async connect() {
+        return client;
+      },
+    },
+    vault,
+  );
+  const connection = await store.saveAuthorization({
+    ...input,
+    actorId: 'administrator:synthetic',
+    salesforceUserId: '005000000000001',
+  });
+  assert.deepEqual(statements, ['BEGIN', 'INSERT', 'INSERT', 'COMMIT']);
+  assert.equal(connection.credentialVersion, 3);
+  assert.equal(values[2]?.[0], tenantId);
+  assert.equal(values[2]?.[1], 'administrator:synthetic');
+  assert.equal(values[2]?.[2], normalizeSalesforceUserId('005000000000001'));
+  assert.equal(values[2]?.[3], 3);
+  assert.doesNotMatch(JSON.stringify(values), /synthetic-refresh-token/);
+  assert.equal(released, true);
 });
 
 void test('load is tenant-keyed, absent-safe and rejects malformed identities before I/O', async () => {

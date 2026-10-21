@@ -10,6 +10,7 @@ import { applyMigrations } from '../../src/migrations.js';
 import { createTenantCredentialVault } from '../../src/tenant/credential-vault.js';
 import {
   normalizeSalesforceOrgId,
+  normalizeSalesforceUserId,
   TenantConnectionStore,
   type QueryExecutor,
 } from '../../src/tenant/connection-store.js';
@@ -348,6 +349,9 @@ void test(
     const pool = createPostgresPool(config, () => {});
     const tenantId = randomUUID();
     const rejectedTenantId = randomUUID();
+    const actorId = `administrator:${randomUUID()}`;
+    const orgStem = `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+    const orgId = normalizeSalesforceOrgId(orgStem);
     context.after(async () => {
       try {
         await pool.query(
@@ -356,9 +360,22 @@ void test(
           [tenantId, rejectedTenantId],
         );
         await pool.query(
+          `DELETE FROM tenant_salesforce_authorization_audits
+           WHERE tenant_id IN ($1::uuid, $2::uuid)`,
+          [tenantId, rejectedTenantId],
+        );
+        await pool.query(
           `DELETE FROM tenant_connections
            WHERE tenant_id IN ($1::uuid, $2::uuid)`,
           [tenantId, rejectedTenantId],
+        );
+        await pool.query(
+          'DELETE FROM tenant_administrator_bindings WHERE actor_id = $1',
+          [actorId],
+        );
+        await pool.query(
+          'DELETE FROM tenant_administrator_tenants WHERE tenant_id = $1::uuid',
+          [tenantId],
         );
       } finally {
         await pool.end();
@@ -393,6 +410,7 @@ void test(
         },
       }),
     );
+    const administratorStore = new AdministratorSessionStore(queryExecutor);
     const stateSecret = Buffer.alloc(32, 71).toString('base64');
     const oauthConfiguration = {
       clientId: 'integration-client-id',
@@ -402,8 +420,13 @@ void test(
       timeoutMs: 1_000,
       transactionTtlSeconds: 300,
     } as const;
-    const orgStem = `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`;
-    const orgId = normalizeSalesforceOrgId(orgStem);
+    await administratorStore.provision({
+      actorId,
+      tenantId,
+      expectedSalesforceOrgId: orgId,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: '',
+    });
     const start = await beginTenantSalesforceAuthorization(
       transactionStore,
       {
@@ -437,6 +460,7 @@ void test(
       completeTenantSalesforceAuthorization(
         transactionStore,
         connectionStore,
+        actorId,
         { state, code: 'integration-authorization-code' },
         oauthConfiguration,
         async () => {
@@ -477,6 +501,151 @@ void test(
       JSON.stringify(rawConnection.rows),
       /integration-(?:refresh|access)-token/,
     );
+    const firstAudit = await pool.query(
+      `SELECT actor_id, salesforce_org_id, salesforce_user_id,
+              credential_version
+       FROM tenant_salesforce_authorization_audits
+       WHERE tenant_id = $1::uuid
+       ORDER BY authorization_audit_id`,
+      [tenantId],
+    );
+    assert.deepEqual(firstAudit.rows, [
+      {
+        actor_id: actorId,
+        salesforce_org_id: orgId,
+        salesforce_user_id: normalizeSalesforceUserId('005000000000001'),
+        credential_version: 1,
+      },
+    ]);
+
+    const secondStart = await beginTenantSalesforceAuthorization(
+      transactionStore,
+      {
+        trustedTenantId: tenantId,
+        expectedSalesforceOrgId: orgId,
+        authorizationOrigin: 'https://login.salesforce.com',
+        namespacePrefix: '',
+      },
+      oauthConfiguration,
+    );
+    const secondState = new URL(secondStart.authorizationUrl).searchParams.get(
+      'state',
+    );
+    assert.ok(secondState);
+    const secondUserId = '005000000000002';
+    const secondIdentity = `https://login.salesforce.com/id/${orgId}/${secondUserId}`;
+    const secondSignature = createHmac(
+      'sha256',
+      oauthConfiguration.clientSecret,
+    )
+      .update(secondIdentity + issuedAt)
+      .digest('base64');
+    await completeTenantSalesforceAuthorization(
+      transactionStore,
+      connectionStore,
+      actorId,
+      { state: secondState, code: 'second-authorization-code' },
+      oauthConfiguration,
+      async () =>
+        new Response(
+          JSON.stringify({
+            access_token: 'second-access-token',
+            refresh_token: 'second-refresh-token',
+            signature: secondSignature,
+            scope: 'api refresh_token',
+            instance_url: 'https://tenant.my.salesforce.com',
+            id: secondIdentity,
+            token_type: 'Bearer',
+            issued_at: issuedAt,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    const audits = await pool.query(
+      `SELECT actor_id, salesforce_org_id, salesforce_user_id,
+              credential_version
+       FROM tenant_salesforce_authorization_audits
+       WHERE tenant_id = $1::uuid
+       ORDER BY authorization_audit_id`,
+      [tenantId],
+    );
+    assert.deepEqual(audits.rows, [
+      ...firstAudit.rows,
+      {
+        actor_id: actorId,
+        salesforce_org_id: orgId,
+        salesforce_user_id: normalizeSalesforceUserId(secondUserId),
+        credential_version: 2,
+      },
+    ]);
+    assert.doesNotMatch(
+      JSON.stringify(
+        (
+          await pool.query(
+            `SELECT * FROM tenant_salesforce_authorization_audits
+             WHERE tenant_id = $1::uuid`,
+            [tenantId],
+          )
+        ).rows,
+      ),
+      /(?:access|refresh)-token|authorization-code|state|session|csrf/i,
+    );
+    assert.equal(
+      (await connectionStore.load(tenantId))?.getRefreshToken(),
+      'second-refresh-token',
+    );
+
+    const refusedStart = await beginTenantSalesforceAuthorization(
+      transactionStore,
+      {
+        trustedTenantId: tenantId,
+        expectedSalesforceOrgId: orgId,
+        authorizationOrigin: 'https://login.salesforce.com',
+        namespacePrefix: '',
+      },
+      oauthConfiguration,
+    );
+    const refusedState = new URL(
+      refusedStart.authorizationUrl,
+    ).searchParams.get('state');
+    assert.ok(refusedState);
+    await assert.rejects(
+      completeTenantSalesforceAuthorization(
+        transactionStore,
+        connectionStore,
+        'administrator:not-provisioned',
+        { state: refusedState, code: 'refused-authorization-code' },
+        oauthConfiguration,
+        async () =>
+          new Response(
+            JSON.stringify({
+              access_token: 'refused-access-token',
+              refresh_token: 'refused-refresh-token',
+              signature: secondSignature,
+              scope: 'api refresh_token',
+              instance_url: 'https://tenant.my.salesforce.com',
+              id: secondIdentity,
+              token_type: 'Bearer',
+              issued_at: issuedAt,
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+      ),
+      { message: 'TENANT_OAUTH_CONNECTION' },
+    );
+    const afterRefusal = await connectionStore.load(tenantId);
+    assert.equal(afterRefusal?.credentialVersion, 2);
+    assert.equal(afterRefusal?.getRefreshToken(), 'second-refresh-token');
+    assert.equal(
+      (
+        await pool.query(
+          `SELECT 1 FROM tenant_salesforce_authorization_audits
+           WHERE tenant_id = $1::uuid`,
+          [tenantId],
+        )
+      ).rowCount,
+      2,
+    );
 
     const rejectedStart = await beginTenantSalesforceAuthorization(
       transactionStore,
@@ -496,6 +665,7 @@ void test(
       completeTenantSalesforceAuthorization(
         transactionStore,
         connectionStore,
+        actorId,
         { state: rejectedState, code: 'rejected-authorization-code' },
         oauthConfiguration,
         async () =>
@@ -544,6 +714,7 @@ void test(
       completeTenantSalesforceAuthorization(
         transactionStore,
         connectionStore,
+        actorId,
         { state: expiredState, code: 'expired-authorization-code' },
         oauthConfiguration,
         async () => {
@@ -684,6 +855,7 @@ void test(
         '0002_tenant_oauth_transactions',
         '0003_administrator_sessions',
         '0004_administrator_tenants',
+        '0005_salesforce_authorization_audits',
       ],
     );
   },

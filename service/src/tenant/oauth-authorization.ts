@@ -685,7 +685,8 @@ async function exchangeAuthorizationCode(
 
 export async function completeTenantSalesforceAuthorization(
   transactionStore: TenantOAuthTransactionStore,
-  connectionStore: Pick<TenantConnectionStore, 'save'>,
+  connectionStore: Pick<TenantConnectionStore, 'saveAuthorization'>,
+  trustedActorId: string,
   callbackValue: TenantAuthorizationCallback,
   configurationValue: TenantOAuthConfiguration,
   fetchImplementation: FetchImplementation = fetch,
@@ -696,7 +697,7 @@ export async function completeTenantSalesforceAuthorization(
     typeof transactionStore.consume !== 'function' ||
     connectionStore === null ||
     typeof connectionStore !== 'object' ||
-    typeof connectionStore.save !== 'function' ||
+    typeof connectionStore.saveAuthorization !== 'function' ||
     typeof fetchImplementation !== 'function'
   )
     fail('TENANT_OAUTH_INPUT');
@@ -715,9 +716,11 @@ export async function completeTenantSalesforceAuthorization(
     fetchImplementation,
   );
   try {
-    const connection = await connectionStore.save({
+    const connection = await connectionStore.saveAuthorization({
+      actorId: trustedActorId,
       tenantId: transaction.tenantId,
       salesforceOrgId: transaction.expectedSalesforceOrgId,
+      salesforceUserId: exchanged.salesforceUserId,
       authorizationOrigin: transaction.authorizationOrigin,
       instanceOrigin: exchanged.instanceOrigin,
       namespacePrefix: transaction.namespacePrefix,

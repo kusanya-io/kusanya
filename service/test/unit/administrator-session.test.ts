@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   AdministratorSessionError,
   AdministratorSessionStore,
+  decodeTrustedAdministratorContext,
 } from '../../src/tenant/administrator-session.js';
 import type {
   QueryExecutor,
@@ -21,6 +22,31 @@ const provisioning = Object.freeze({
   expectedSalesforceOrgId: '00D000000000001',
   authorizationOrigin: 'https://login.salesforce.com',
   namespacePrefix: 'ksny__',
+});
+
+void test('one shared context decoder normalizes IDs and refuses executable shapes', () => {
+  const decoded = decodeTrustedAdministratorContext({
+    actorId: actor,
+    tenantId,
+    expectedSalesforceOrgId: '00D000000000001',
+    authorizationOrigin: 'https://login.salesforce.com',
+    namespacePrefix: 'ksny__',
+    csrfToken: 'c'.repeat(43),
+  });
+  assert.equal(decoded.expectedSalesforceOrgId, orgId);
+  assert.ok(Object.isFrozen(decoded));
+  let getters = 0;
+  const hostile = Object.defineProperty({}, 'actorId', {
+    enumerable: true,
+    get() {
+      getters++;
+      return actor;
+    },
+  });
+  assert.throws(() => decodeTrustedAdministratorContext(hostile), {
+    message: 'ADMINISTRATOR_SESSION_INPUT',
+  });
+  assert.equal(getters, 0);
 });
 
 interface BindingRow {

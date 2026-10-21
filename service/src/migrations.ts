@@ -135,6 +135,31 @@ const migrations = Object.freeze([
       DROP COLUMN authorization_origin,
       DROP COLUMN namespace_prefix`,
   }),
+  Object.freeze({
+    id: '0005_salesforce_authorization_audits',
+    sql: `ALTER TABLE tenant_administrator_bindings
+      ADD CONSTRAINT tenant_administrator_bindings_actor_tenant
+      UNIQUE (actor_id, tenant_id);
+    CREATE TABLE tenant_salesforce_authorization_audits (
+      authorization_audit_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      tenant_id uuid NOT NULL
+        REFERENCES tenant_connections(tenant_id),
+      actor_id varchar(128) NOT NULL,
+      salesforce_org_id varchar(18) NOT NULL,
+      salesforce_user_id varchar(18) NOT NULL,
+      credential_version integer NOT NULL,
+      authorized_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      CONSTRAINT tenant_salesforce_authorization_audits_actor_tenant
+        FOREIGN KEY (actor_id, tenant_id)
+        REFERENCES tenant_administrator_bindings(actor_id, tenant_id),
+      CONSTRAINT tenant_salesforce_authorization_audits_org_id_shape
+        CHECK (salesforce_org_id ~ '^00D[A-Za-z0-9]{15}$'),
+      CONSTRAINT tenant_salesforce_authorization_audits_user_id_shape
+        CHECK (salesforce_user_id ~ '^005[A-Za-z0-9]{15}$'),
+      CONSTRAINT tenant_salesforce_authorization_audits_credential_version
+        CHECK (credential_version >= 1)
+    )`,
+  }),
 ]);
 
 export class MigrationError extends Error {
@@ -151,7 +176,8 @@ export type MigrationTarget =
   | '0001_tenant_connections'
   | '0002_tenant_oauth_transactions'
   | '0003_administrator_sessions'
-  | '0004_administrator_tenants';
+  | '0004_administrator_tenants'
+  | '0005_salesforce_authorization_audits';
 
 /** Apply the checked plan through an optional exact target for upgrade verification. */
 export async function applyMigrations(

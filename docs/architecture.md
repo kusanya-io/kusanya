@@ -235,11 +235,15 @@ conflicts without partial rows. ADR 0044 composes unmounted administrator login,
 live-session same-origin CSRF bootstrap and database-first logout. It issues only a
 `Secure`, `HttpOnly`, `SameSite=Lax`, host-only cookie and makes disabled automatic
 request logging a runtime registration requirement for both browser adapters, closing
-note 94. Request
-headers, bodies, queries and provider values cannot select the tenant. The external
-identity verifier, approved provisioning workflow and secret wiring,
-and actor-to-Salesforce-user audit are still absent, so `main.ts` does not mount the
-adapter and the deployed API remains health-only. Publisher composition and the
+note 94. ADR 0045 appends the live administrator actor and signed Salesforce `005`
+user to an immutable audit event in the same PostgreSQL transaction that commits the
+encrypted connection. Reauthorization preserves earlier credential-version events,
+and a missing actor binding rolls the credential write back. One shared strict
+administrator-context decoder now serves the session store and both adapters,
+closing note 98. Request headers, bodies, queries and provider values cannot select
+the tenant or either audit principal. The external identity verifier, approved
+provisioning workflow and secret wiring are still absent, so `main.ts` does not mount
+the adapter and the deployed API remains health-only. Publisher composition and the
 publish CLI also remain.
 
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is

@@ -1,6 +1,6 @@
 # ADR 0044: Administrator browser session composition and logging guard
 
-- Status: Accepted
+- Status: Accepted; verified in PR #81
 - Date: 2026-10-20
 - Brief sections: C1.3a, C2, C8, C11 Phase 1
 - Decision owner: Cobitech Solutions
@@ -90,12 +90,19 @@ session, reject hostile verifier/context objects without executing accessors, an
 reject both session and OAuth adapters on a default Fastify host.
 
 No route is mounted in `main.ts`, no identity provider or public provisioning API is
-chosen, and no Salesforce license is required per collector. The audit tying the
-trusted actor to the validated Salesforce `005` user, privileged disconnect/rebind,
-final publisher composition and publish CLI remain under note 34.
+chosen, and no Salesforce license is required per collector. ADR 0045 adds the audit
+tying the trusted actor to the validated Salesforce `005` user. Privileged
+disconnect/rebind, final publisher composition and publish CLI remain under note 34.
+
+The empty login query/body is a security boundary, not a provider-neutral transport.
+It excludes SAML HTTP POST binding and OIDC `form_post` response mode from direct use
+with this route. A future provider must verify through another injected mechanism or
+trigger a separately reviewed route-contract change. ADR 0045 records this
+consequence from note 99 without choosing the provider.
 
 ## Revisit when
 
-Bill selects the external identity provider, the routes are mounted, session-secret
+Bill selects the external identity provider, especially one requiring a form-post
+assertion, the routes are mounted, session-secret
 rotation is operationalized, multiple sessions per actor are needed, or a separate
 HTTP host is introduced.

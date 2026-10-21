@@ -215,6 +215,41 @@ function csrfToken(secret: Buffer, session: string): string {
     .digest('base64url');
 }
 
+/** Strictly decode the one shared authenticated administrator context shape. */
+export function decodeTrustedAdministratorContext(
+  value: unknown,
+): TrustedAdministratorContext {
+  const input = plainRecord(value);
+  exactKeys(input, [
+    'actorId',
+    'authorizationOrigin',
+    'csrfToken',
+    'expectedSalesforceOrgId',
+    'namespacePrefix',
+    'tenantId',
+  ]);
+  if (
+    typeof input.csrfToken !== 'string' ||
+    !sessionPattern.test(input.csrfToken)
+  )
+    fail('ADMINISTRATOR_SESSION_INPUT');
+  try {
+    return Object.freeze({
+      actorId: actorId(input.actorId),
+      tenantId: tenantId(input.tenantId),
+      expectedSalesforceOrgId: normalizeSalesforceOrgId(
+        input.expectedSalesforceOrgId,
+      ),
+      authorizationOrigin: salesforceOrigin(input.authorizationOrigin),
+      namespacePrefix: administratorNamespacePrefix(input.namespacePrefix),
+      csrfToken: input.csrfToken,
+    });
+  } catch (error) {
+    if (error instanceof AdministratorSessionError) throw error;
+    fail('ADMINISTRATOR_SESSION_INPUT');
+  }
+}
+
 function decodeRow(
   value: unknown,
   secret: Buffer,
@@ -229,7 +264,7 @@ function decodeRow(
       authorizationOrigin: row.authorization_origin,
       namespacePrefix: row.namespace_prefix,
     });
-    return Object.freeze({
+    return decodeTrustedAdministratorContext({
       actorId: decoded.actorId,
       tenantId: decoded.tenantId,
       expectedSalesforceOrgId: decoded.expectedSalesforceOrgId,

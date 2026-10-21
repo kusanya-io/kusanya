@@ -146,7 +146,11 @@ adapter that can be registered only with a concrete trusted administrator-sessio
 verifier. It stores only a state digest and trusted tenant/org metadata in
 `tenant_oauth_transactions`; the PKCE verifier is derived under a deployment secret.
 The callback consumes state once before exchanging the code and only then writes the
-encrypted refresh token through `TenantConnectionStore`. The adapter accepts neither
+encrypted refresh token through `TenantConnectionStore`. ADR 0045 makes that write
+atomic with an append-only audit event containing only the live trusted actor, signed
+Salesforce `005` user, normalized org and resulting credential version. A later
+reauthorization appends rather than overwrites history, and a missing actor binding
+rolls the connection update back. The adapter accepts neither
 tenant nor expected org from request headers, bodies, queries or callbacks. Start is
 a same-origin, session-authenticated POST with session-bound CSRF; callback completion
 requires an HMAC browser binding to the exact still-active initiating session and
@@ -174,9 +178,9 @@ logs (note 94).
 
 `main.ts` does not register these routes yet. The external administrator identity
 verifier, approved provisioning workflow and deployment secret wiring remain
-required; the health-only OpenAPI description therefore stays accurate. A future
-authorization persistence unit must also atomically record an audit tying its trusted
-actor to the validated Salesforce `005` user returned by the authorization boundary.
+required; the health-only OpenAPI description therefore stays accurate. The login
+route's empty query/body contract also excludes SAML HTTP POST binding and OIDC
+`form_post` unless a later reviewed provider composition changes the route.
 
 ## Salesforce namespace configuration
 
