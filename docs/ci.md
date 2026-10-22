@@ -152,12 +152,16 @@ PR #3 is not exempt. Main's required check is still present for exempt PRs.
 
 Read-only preflight checks both active and daily capacity before creation. Daily
 capacity is a daily allocation, not a rolling 24-hour window; deleting an org frees
-active capacity, not daily capacity. The allocation resets at midnight in the Dev
-Hub's configured `America/Los_Angeles` time zone (07:00 UTC during daylight saving
-time and 08:00 UTC otherwise), independently of the harness's UTC-day retry budget.
-`BLOCKED` exits 75 with limit/remaining/required counts and, because Salesforce's
-API supplies no reset timestamp, `next UTC slot unavailable`. Preflight uses live
-limits rather than predicting availability from creation history.
+active capacity, not daily capacity. Salesforce's `CreatedDate = TODAY` grouping
+has an evidenced midnight `America/Los_Angeles` boundary (07:00 UTC during daylight
+saving time and 08:00 UTC otherwise). The allocation resetting on that same boundary
+is inferred, not directly observed. `DailyScratchOrgs.remaining` has returned 6/6
+after a scratch org was created and deleted in the same Salesforce day, so it is not
+a reliable consumption figure. The current preflight still reads it, but its daily
+arm cannot guarantee that an exhausted day is blocked; Salesforce creation remains
+the authoritative enforcement point. This is separate from the harness's UTC-day
+retry budget. `BLOCKED` exits 75 with the reported counts and, because Salesforce's
+API supplies no trustworthy reset timestamp, `next UTC slot unavailable`.
 Malformed limits and failed queries fail closed. A race can still exhaust quota
 after preflight: recognized limit errors receive the same blocked treatment.
 The gate fails for BLOCKED; it never skips or substitutes the development org.

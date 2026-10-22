@@ -373,3 +373,10 @@ reconciliation rather than becoming a false success. The Salesforce request coun
 excludes the OAuth exchange by definition. Note 34 still covers deployment and
 external-identity composition, lifecycle reconciliation and the publish CLI; no
 C10 or Phase 1 completion claim is made.
+
+ADR 0048 gives those durable attempts a read-only reconciler. Started rows resolve
+as indeterminate without Salesforce access; partial rows use only their exact stored
+identities to prove committed, unlinked or missing artifacts. Resolution is one-way
+and race-idempotent, and cannot upload, commit, delete or retry publication. Artifact
+retention/deletion and operator presentation remain future units. Note 103 corrects
+the scratch-capacity documentation without changing the trusted harness in this PR.
