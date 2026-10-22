@@ -257,6 +257,13 @@ one-way; an uncertain commit stores the package digest and uploaded ContentVersi
 IDs, while interruption leaves an explicit unresolved `started` row. This does not
 pretend PostgreSQL and Salesforce are one transaction and does not add a retry.
 
+ADR 0048 adds an internal, unmounted reconciler. A `started` row has no safe remote
+identity and resolves locally as indeterminate. A `partial` row is inspected through
+the exact recorded Form Version, package digest and ContentVersion IDs using only
+bounded GET requests. The result records committed, unlinked or artifacts-missing
+without changing the original attempt outcome. It has no upload, commit, delete or
+publisher capability, and it does not authorize retry.
+
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure
 `createSalesforceNames(prefix)` service helper qualifies explicitly Kusanya-owned

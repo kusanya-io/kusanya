@@ -14,12 +14,17 @@ All were deleted, but deletion restored active capacity,
 not daily capacity. Hosted run `34499943255` authenticated successfully and then
 failed before scratch creation. No hosted Apex evidence resulted.
 
-Correction (issue #5 note 16, confirmed 22 October): the daily limit is **not** a
-rolling 24-hour allocation. It resets at midnight in the Dev Hub's configured
-`America/Los_Angeles` time zone (07:00 UTC during daylight saving time and 08:00 UTC
-otherwise), separately from the harness's deliberately UTC-day retry budget. Live
-remaining counts stay authoritative; the API supplies no reset timestamp, so the
-tooling reports next-slot time as unavailable rather than deriving one from history.
+Correction (issue #5 note 16, refined by note 103 on 22 October): the daily limit is
+**not** a rolling 24-hour allocation. `CreatedDate = TODAY` changes at midnight in
+the Dev Hub's configured `America/Los_Angeles` time zone (07:00 UTC during daylight
+saving time and 08:00 UTC otherwise). The allocation resetting on that same boundary
+is inferred rather than directly observed. `DailyScratchOrgs.remaining` has reported
+6/6 after one org was created and deleted during the same Salesforce day, so it is
+not a reliable consumption figure and cannot be called authoritative. The current
+preflight consults it, but the daily arm cannot reliably block an exhausted day;
+the creation request is the authoritative enforcement point. This remains separate
+from the harness's deliberately UTC-day retry budget. The API supplies no trustworthy
+reset timestamp, so tooling reports next-slot time as unavailable.
 
 Claude's [design review 5171295026](https://github.com/kusanya-io/kusanya/pull/3#pullrequestreview-5171295026)
 recommended adjustments A1–A11 and identified finding 10. Bill explicitly approved

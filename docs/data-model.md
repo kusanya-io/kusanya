@@ -236,6 +236,10 @@ and Form Version before OAuth begins. Its state moves once from `started` to
 `succeeded`, `failed` or `partial`. A partial row retains the exact package digest
 and both uploaded ContentVersion IDs; an interrupted attempt stays `started` for a
 future reconciler. It stores no credential, provider response or form content.
+ADR 0048 adds a separate nullable reconciliation status and timestamp. Only
+`started` may become `indeterminate`; only `partial` may become `committed`,
+`unlinked` or `artifacts_missing`. The original publication outcome is retained,
+and the database constraint makes the resolution one-way and shape-consistent.
 
 ADR 0045 adds append-only `tenant_salesforce_authorization_audits`. Each successful
 grant records the tenant, its bound trusted administrator actor, normalized `00D`

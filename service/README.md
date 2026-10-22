@@ -27,6 +27,9 @@ adapter plus a durable tenant-scoped attempt ledger. A partial Salesforce commit
 surfaced distinctly and stores the exact uploaded artifact identities for future
 reconciliation; interrupted attempts remain unresolved. `main.ts` does not mount
 the route until external identity and deployment-secret wiring are approved.
+ADR 0048 adds an internal read-only reconciler for those attempt rows. It records
+indeterminate, committed, unlinked or artifacts-missing evidence through a one-way
+tenant-scoped transition. It cannot publish, upload or delete and exposes no route.
 
 Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.
 It has no HTTP route, Salesforce access or publishing authority. See

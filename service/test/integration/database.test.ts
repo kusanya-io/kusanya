@@ -129,13 +129,36 @@ void test(
       }),
       { message: 'PUBLICATION_ATTEMPT_STORAGE' },
     );
+    assert.equal(
+      (await store.loadReconcilable(trusted, attemptId)).outcome,
+      'partial',
+    );
+    const reconciled = await Promise.all([
+      store.resolve(trusted, attemptId, 'partial', 'unlinked', 2),
+      store.resolve(trusted, attemptId, 'partial', 'committed', 1),
+    ]);
+    assert.deepEqual(reconciled[0], reconciled[1]);
+    assert.ok(['unlinked', 'committed'].includes(reconciled[0].status));
+    await assert.rejects(
+      store.loadReconcilable(
+        {
+          ...trusted,
+          tenantId: otherTenantId,
+          expectedSalesforceOrgId: otherOrgId,
+        },
+        attemptId,
+      ),
+      { message: 'PUBLICATION_ATTEMPT_STORAGE' },
+    );
     assert.deepEqual(
       (
         await pool.query(
           `SELECT tenant_id::text, actor_id, salesforce_org_id, outcome,
                   trim(publication_digest) AS publication_digest,
                   xform_version_id, xlsform_version_id, failure_code,
-                  salesforce_request_count
+                  salesforce_request_count, reconciliation_status,
+                  reconciliation_request_count,
+                  (reconciled_at IS NOT NULL) AS has_reconciled_at
            FROM tenant_publication_attempts
            WHERE publication_attempt_id = $1`,
           [attemptId],
@@ -152,6 +175,9 @@ void test(
           xlsform_version_id: '068000000000002AAA',
           failure_code: 'PUBLICATION_PUBLISHER_PARTIAL',
           salesforce_request_count: 8,
+          reconciliation_status: reconciled[0].status,
+          reconciliation_request_count: reconciled[0].requestCount,
+          has_reconciled_at: true,
         },
       ],
     );
@@ -1045,6 +1071,7 @@ void test(
         '0004_administrator_tenants',
         '0005_salesforce_authorization_audits',
         '0006_publication_attempts',
+        '0007_publication_attempt_reconciliation',
       ],
     );
   },

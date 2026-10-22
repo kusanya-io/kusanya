@@ -219,6 +219,30 @@ const migrations = Object.freeze([
       )
     )`,
   }),
+  Object.freeze({
+    id: '0007_publication_attempt_reconciliation',
+    sql: `ALTER TABLE tenant_publication_attempts
+      ADD COLUMN reconciliation_status varchar(32),
+      ADD COLUMN reconciliation_request_count integer,
+      ADD COLUMN reconciled_at timestamptz,
+      ADD CONSTRAINT tenant_publication_attempts_reconciliation_shape CHECK (
+        (reconciliation_status IS NULL
+          AND reconciliation_request_count IS NULL
+          AND reconciled_at IS NULL)
+        OR
+        (outcome = 'started'
+          AND reconciliation_status = 'indeterminate'
+          AND reconciliation_request_count = 0
+          AND reconciled_at IS NOT NULL)
+        OR
+        (outcome = 'partial'
+          AND reconciliation_status IN (
+            'committed', 'unlinked', 'artifacts_missing'
+          )
+          AND reconciliation_request_count >= 1
+          AND reconciled_at IS NOT NULL)
+      )`,
+  }),
 ]);
 
 export class MigrationError extends Error {
@@ -237,7 +261,8 @@ export type MigrationTarget =
   | '0003_administrator_sessions'
   | '0004_administrator_tenants'
   | '0005_salesforce_authorization_audits'
-  | '0006_publication_attempts';
+  | '0006_publication_attempts'
+  | '0007_publication_attempt_reconciliation';
 
 /** Apply the checked plan through an optional exact target for upgrade verification. */
 export async function applyMigrations(
