@@ -52,6 +52,7 @@ void test(
     const tenantId = randomUUID();
     const otherTenantId = randomUUID();
     const actorId = `administrator:${randomUUID()}`;
+    const otherActorId = `administrator:${randomUUID()}`;
     const orgId = normalizeSalesforceOrgId(
       `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`,
     );
@@ -65,8 +66,8 @@ void test(
           [[tenantId, otherTenantId]],
         );
         await pool.query(
-          `DELETE FROM tenant_administrator_bindings WHERE actor_id = $1`,
-          [actorId],
+          `DELETE FROM tenant_administrator_bindings WHERE actor_id = ANY($1::varchar[])`,
+          [[actorId, otherActorId]],
         );
         await pool.query(
           `DELETE FROM tenant_administrator_tenants WHERE tenant_id = ANY($1::uuid[])`,
@@ -86,8 +87,8 @@ void test(
     );
     await pool.query(
       `INSERT INTO tenant_administrator_bindings (actor_id, tenant_id)
-       VALUES ($1, $2)`,
-      [actorId, tenantId],
+       VALUES ($1, $2), ($3, $4)`,
+      [actorId, tenantId, otherActorId, otherTenantId],
     );
     const executor: QueryExecutor = {
       async query<Row>(text: string, values: unknown[] = []) {
@@ -104,6 +105,23 @@ void test(
       namespacePrefix: 'ksny__',
       csrfToken: 'c'.repeat(43),
     };
+    const otherTrusted = {
+      actorId: otherActorId,
+      tenantId: otherTenantId,
+      expectedSalesforceOrgId: otherOrgId,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: '',
+      csrfToken: 'o'.repeat(43),
+    };
+    const otherAttemptId = await store.start(
+      otherTrusted,
+      'a0B000000000002AAA',
+    );
+    await store.complete(otherAttemptId, otherTenantId, {
+      outcome: 'failed',
+      failureCode: 'PUBLICATION_REJECTED',
+      salesforceRequestCount: 0,
+    });
     const attemptId = await store.start(trusted, 'a0B000000000001AAA');
     await assert.rejects(
       store.complete(attemptId, otherTenantId, {
@@ -139,6 +157,26 @@ void test(
     ]);
     assert.deepEqual(reconciled[0], reconciled[1]);
     assert.ok(['unlinked', 'committed'].includes(reconciled[0].status));
+    const tenantView = await store.listForOperator(trusted);
+    const otherTenantView = await store.listForOperator(otherTrusted);
+    assert.deepEqual(
+      tenantView.map((attempt) => attempt.attemptId),
+      [attemptId],
+    );
+    assert.deepEqual(
+      otherTenantView.map((attempt) => ({
+        attemptId: attempt.attemptId,
+        formVersionId: attempt.formVersionId,
+        operatorStatus: attempt.operatorStatus,
+      })),
+      [
+        {
+          attemptId: otherAttemptId,
+          formVersionId: 'a0B000000000002AAA',
+          operatorStatus: 'rejected',
+        },
+      ],
+    );
     await assert.rejects(
       store.loadReconcilable(
         {

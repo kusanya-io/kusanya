@@ -380,3 +380,10 @@ identities to prove committed, unlinked or missing artifacts. Resolution is one-
 and race-idempotent, and cannot upload, commit, delete or retry publication. Artifact
 retention/deletion and operator presentation remain future units. Note 103 corrects
 the scratch-capacity documentation without changing the trusted harness in this PR.
+
+ADR 0049 adds the corresponding read-only operator presentation boundary. A live
+administrator session plus exact origin and CSRF may read only the newest 100
+tenant-scoped attempt summaries. Fixed wording keeps unresolved and indeterminate
+outcomes as human-judgement states rather than failures or pending work. The adapter
+cannot reconcile, retry, publish, retain or delete and remains unmounted pending the
+approved deployment composition. Retention and operator actions remain later units.

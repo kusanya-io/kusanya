@@ -240,6 +240,11 @@ ADR 0048 adds a separate nullable reconciliation status and timestamp. Only
 `started` may become `indeterminate`; only `partial` may become `committed`,
 `unlinked` or `artifacts_missing`. The original publication outcome is retained,
 and the database constraint makes the resolution one-way and shape-consistent.
+ADR 0049 reads at most the newest 100 attempts through the complete live
+actor/tenant provisioning tuple. Its operator projection deliberately excludes
+credentials, provider data, actor/org identifiers, digests, ContentVersion IDs,
+failure codes and request counts. Unresolved and indeterminate rows are labelled as
+requiring human judgement, never as failed, pending or retryable.
 
 ADR 0045 adds append-only `tenant_salesforce_authorization_audits`. Each successful
 grant records the tenant, its bound trusted administrator actor, normalized `00D`

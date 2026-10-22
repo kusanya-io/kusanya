@@ -237,3 +237,166 @@ void test('refuses persisted reconciliation states that contradict their outcome
     );
   }
 });
+
+void test('lists a bounded least-data operator view with human-judgement states', async () => {
+  const started = new Date('2026-10-22T10:00:00.000Z');
+  const completed = new Date('2026-10-22T10:01:00.000Z');
+  const reconciled = new Date('2026-10-22T10:02:00.000Z');
+  const states = [
+    ['started', null, null, null, 'human_judgement_required_unresolved'],
+    [
+      'started',
+      'indeterminate',
+      null,
+      reconciled,
+      'human_judgement_required_indeterminate',
+    ],
+    ['partial', null, completed, null, 'human_judgement_required_unresolved'],
+    ['succeeded', null, completed, null, 'published'],
+    ['failed', null, completed, null, 'rejected'],
+    ['partial', 'committed', completed, reconciled, 'published_confirmed'],
+    [
+      'partial',
+      'unlinked',
+      completed,
+      reconciled,
+      'unlinked_artifacts_confirmed',
+    ],
+    [
+      'partial',
+      'artifacts_missing',
+      completed,
+      reconciled,
+      'artifacts_missing_confirmed',
+    ],
+  ] as const;
+  let queryText = '';
+  let queryValues: unknown[] = [];
+  const store = new PublicationAttemptStore({
+    async query<Row>(text: string, values: unknown[] = []) {
+      queryText = text;
+      queryValues = values;
+      return {
+        rowCount: states.length,
+        rows: states.map(
+          ([outcome, reconciliation, completedAt, reconciledAt], index) =>
+            ({
+              publication_attempt_id: `10000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+              form_version_id: 'a0B000000000001AAA',
+              outcome,
+              reconciliation_status: reconciliation,
+              created_at: started,
+              completed_at: completedAt,
+              reconciled_at: reconciledAt,
+            }) as Row,
+        ),
+      };
+    },
+  });
+  const result = await store.listForOperator(context);
+  assert.deepEqual(
+    result.map((attempt) => attempt.operatorStatus),
+    states.map((state) => state[4]),
+  );
+  assert.equal(Object.isFrozen(result), true);
+  assert.equal(
+    result.every((attempt) => Object.isFrozen(attempt)),
+    true,
+  );
+  assert.deepEqual(queryValues, [
+    context.actorId,
+    context.tenantId,
+    context.expectedSalesforceOrgId,
+    context.authorizationOrigin,
+    context.namespacePrefix,
+  ]);
+  assert.match(queryText, /LIMIT 100/);
+  assert.match(queryText, /binding\.actor_id = \$1/);
+  assert.match(queryText, /tenant\.namespace_prefix = \$5/);
+  const projection = queryText.slice(0, queryText.indexOf('FROM'));
+  for (const excluded of [
+    'actor_id',
+    'publication_digest',
+    'xform_version_id',
+    'xlsform_version_id',
+    'failure_code',
+    'salesforce_request_count',
+    'reconciliation_request_count',
+  ])
+    assert.doesNotMatch(projection, new RegExp(excluded));
+});
+
+void test('operator view fails closed on contradictory rows and timestamps', async () => {
+  const variants = [
+    {
+      outcome: 'started',
+      reconciliation_status: 'committed',
+      completed_at: null,
+      reconciled_at: new Date('2026-10-22T10:02:00.000Z'),
+    },
+    {
+      outcome: 'partial',
+      reconciliation_status: null,
+      completed_at: null,
+      reconciled_at: null,
+    },
+    {
+      outcome: 'succeeded',
+      reconciliation_status: null,
+      completed_at: new Date('2026-10-22T09:59:00.000Z'),
+      reconciled_at: null,
+    },
+  ];
+  for (const variant of variants) {
+    const store = new PublicationAttemptStore({
+      async query<Row>() {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              publication_attempt_id: '10000000-0000-4000-8000-000000000009',
+              form_version_id: 'a0B000000000001AAA',
+              created_at: new Date('2026-10-22T10:00:00.000Z'),
+              ...variant,
+            } as Row,
+          ],
+        };
+      },
+    });
+    await assert.rejects(
+      store.listForOperator(context),
+      PublicationAttemptError,
+    );
+  }
+});
+
+void test('operator view refuses executable timestamp properties without invoking them', async () => {
+  let calls = 0;
+  const hostileDate = new Date('2026-10-22T10:00:00.000Z');
+  Object.defineProperty(hostileDate, 'getTime', {
+    get() {
+      calls++;
+      throw new Error('must not run');
+    },
+  });
+  const store = new PublicationAttemptStore({
+    async query<Row>() {
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            publication_attempt_id: '10000000-0000-4000-8000-000000000009',
+            form_version_id: 'a0B000000000001AAA',
+            outcome: 'started',
+            reconciliation_status: null,
+            created_at: hostileDate,
+            completed_at: null,
+            reconciled_at: null,
+          } as Row,
+        ],
+      };
+    },
+  });
+  await assert.rejects(store.listForOperator(context), PublicationAttemptError);
+  assert.equal(calls, 0);
+});

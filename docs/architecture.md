@@ -264,6 +264,13 @@ bounded GET requests. The result records committed, unlinked or artifacts-missin
 without changing the original attempt outcome. It has no upload, commit, delete or
 publisher capability, and it does not authorize retry.
 
+ADR 0049 adds an unmounted, read-only administrator presentation adapter for those
+attempts. One bounded tenant-scoped SELECT maps ledger states to fixed operator
+statuses; unresolved and indeterminate states explicitly require human judgement.
+The response excludes credentials, provider material, publication digests, Files,
+failure details and request counts. The adapter has no reconciler, publisher,
+retention, retry or deletion capability and keeps the deployed API health-only.
+
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure
 `createSalesforceNames(prefix)` service helper qualifies explicitly Kusanya-owned

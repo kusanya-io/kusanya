@@ -30,6 +30,10 @@ the route until external identity and deployment-secret wiring are approved.
 ADR 0048 adds an internal read-only reconciler for those attempt rows. It records
 indeterminate, committed, unlinked or artifacts-missing evidence through a one-way
 tenant-scoped transition. It cannot publish, upload or delete and exposes no route.
+ADR 0049 adds an unmounted, read-only administrator listing adapter. It returns a
+bounded least-data attempt summary under the same live-session, exact-origin and
+CSRF controls. Unresolved and indeterminate attempts explicitly require human
+judgement; the adapter cannot reconcile, retry, publish or delete.
 
 Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.
 It has no HTTP route, Salesforce access or publishing authority. See

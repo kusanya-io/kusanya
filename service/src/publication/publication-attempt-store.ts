@@ -34,6 +34,24 @@ export type ReconcilablePublicationAttempt =
       requestCount: number;
     }>;
 
+export type PublicationAttemptOperatorStatus =
+  | 'human_judgement_required_unresolved'
+  | 'human_judgement_required_indeterminate'
+  | 'published'
+  | 'rejected'
+  | 'published_confirmed'
+  | 'unlinked_artifacts_confirmed'
+  | 'artifacts_missing_confirmed';
+
+export interface PublicationAttemptOperatorSummary {
+  readonly attemptId: string;
+  readonly formVersionId: string;
+  readonly operatorStatus: PublicationAttemptOperatorStatus;
+  readonly startedAt: string;
+  readonly completedAt: string | null;
+  readonly reconciledAt: string | null;
+}
+
 export interface PublicationAttemptCompletion {
   readonly outcome: PublicationAttemptOutcome;
   readonly salesforceRequestCount: number;
@@ -386,6 +404,158 @@ export class PublicationAttemptStore {
         status: existing.status,
         requestCount: existing.requestCount,
       });
+    } catch {
+      throw new PublicationAttemptError();
+    }
+  }
+
+  /** Return a bounded, least-data operator view; this method performs one SELECT. */
+  async listForOperator(
+    contextValue: TrustedAdministratorContext,
+  ): Promise<readonly PublicationAttemptOperatorSummary[]> {
+    let context: TrustedAdministratorContext;
+    try {
+      context = decodeTrustedAdministratorContext(contextValue);
+    } catch {
+      throw new PublicationAttemptError();
+    }
+    interface AttemptRow {
+      publication_attempt_id: unknown;
+      form_version_id: unknown;
+      outcome: unknown;
+      reconciliation_status: unknown;
+      created_at: unknown;
+      completed_at: unknown;
+      reconciled_at: unknown;
+    }
+    const timestamp = (
+      value: unknown,
+    ): Readonly<{ milliseconds: number; iso: string }> => {
+      if (
+        value === null ||
+        typeof value !== 'object' ||
+        types.isProxy(value) ||
+        Object.getPrototypeOf(value) !== Date.prototype ||
+        Reflect.ownKeys(value).length !== 0
+      )
+        throw new Error();
+      const milliseconds = Date.prototype.getTime.call(value);
+      if (!Number.isFinite(milliseconds)) throw new Error();
+      return Object.freeze({
+        milliseconds,
+        iso: new Date(milliseconds).toISOString(),
+      });
+    };
+    try {
+      const result = await this.database.query<AttemptRow>(
+        `SELECT attempt.publication_attempt_id::text,
+                attempt.form_version_id, attempt.outcome,
+                attempt.reconciliation_status,
+                attempt.created_at, attempt.completed_at,
+                attempt.reconciled_at
+         FROM tenant_publication_attempts AS attempt
+         JOIN tenant_administrator_bindings AS binding
+           ON binding.actor_id = $1 AND binding.tenant_id = attempt.tenant_id
+         JOIN tenant_administrator_tenants AS tenant
+           ON tenant.tenant_id = attempt.tenant_id
+         WHERE attempt.tenant_id = $2
+           AND attempt.salesforce_org_id = $3
+           AND tenant.expected_salesforce_org_id = $3
+           AND tenant.authorization_origin = $4
+           AND tenant.namespace_prefix = $5
+         ORDER BY attempt.created_at DESC,
+                  attempt.publication_attempt_id DESC
+         LIMIT 100`,
+        [
+          context.actorId,
+          context.tenantId,
+          context.expectedSalesforceOrgId,
+          context.authorizationOrigin,
+          context.namespacePrefix,
+        ],
+      );
+      if (result.rowCount !== result.rows.length || result.rows.length > 100)
+        throw new Error();
+      return Object.freeze(
+        result.rows.map((row) => {
+          if (
+            typeof row.publication_attempt_id !== 'string' ||
+            !attemptIdPattern.test(row.publication_attempt_id) ||
+            typeof row.form_version_id !== 'string' ||
+            !idPattern.test(row.form_version_id)
+          )
+            throw new Error();
+          const created = timestamp(row.created_at);
+          const completed =
+            row.completed_at === null ? null : timestamp(row.completed_at);
+          const reconciled =
+            row.reconciled_at === null ? null : timestamp(row.reconciled_at);
+          if (
+            (completed !== null &&
+              completed.milliseconds < created.milliseconds) ||
+            (reconciled !== null &&
+              reconciled.milliseconds < created.milliseconds) ||
+            (completed !== null &&
+              reconciled !== null &&
+              reconciled.milliseconds < completed.milliseconds)
+          )
+            throw new Error();
+
+          let operatorStatus: PublicationAttemptOperatorStatus;
+          if (row.outcome === 'started' && completed === null) {
+            if (row.reconciliation_status === null && reconciled === null)
+              operatorStatus = 'human_judgement_required_unresolved';
+            else if (
+              row.reconciliation_status === 'indeterminate' &&
+              reconciled !== null
+            )
+              operatorStatus = 'human_judgement_required_indeterminate';
+            else throw new Error();
+          } else if (
+            row.outcome === 'succeeded' &&
+            completed !== null &&
+            row.reconciliation_status === null &&
+            reconciled === null
+          )
+            operatorStatus = 'published';
+          else if (
+            row.outcome === 'failed' &&
+            completed !== null &&
+            row.reconciliation_status === null &&
+            reconciled === null
+          )
+            operatorStatus = 'rejected';
+          else if (row.outcome === 'partial' && completed !== null) {
+            if (row.reconciliation_status === null && reconciled === null)
+              operatorStatus = 'human_judgement_required_unresolved';
+            else if (
+              row.reconciliation_status === 'committed' &&
+              reconciled !== null
+            )
+              operatorStatus = 'published_confirmed';
+            else if (
+              row.reconciliation_status === 'unlinked' &&
+              reconciled !== null
+            )
+              operatorStatus = 'unlinked_artifacts_confirmed';
+            else if (
+              row.reconciliation_status === 'artifacts_missing' &&
+              reconciled !== null
+            )
+              operatorStatus = 'artifacts_missing_confirmed';
+            else throw new Error();
+          } else throw new Error();
+
+          return Object.freeze({
+            attemptId: row.publication_attempt_id,
+            formVersionId: row.form_version_id,
+            operatorStatus,
+            startedAt: created.iso,
+            completedAt: completed?.iso ?? null,
+            reconciledAt: reconciled?.iso ?? null,
+          });
+        }),
+      );
     } catch {
       throw new PublicationAttemptError();
     }
