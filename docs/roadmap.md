@@ -352,3 +352,14 @@ reauthorizations, and rolls back both writes for an unbound actor. It also centr
 the authenticated-context decoder, closing note 98, while documenting note 99's
 provider constraint. Note 34 therefore remains open for its other strands, as does
 note 39; no C10 or Phase 1 completion claim is made.
+
+ADR 0046 supplies the final internal publisher composition. It accepts only a live
+trusted administrator context, compares its immutable org/origin/namespace tuple
+with the selected encrypted tenant connection before credential or Salesforce use,
+creates one attempt-scoped session, and passes that session as ADR 0036's sole token
+source. Refresh time consumes the shared attempt deadline. A post-attestation commit
+failure now returns an explicit partial-publication diagnostic because unlinked
+private Files may remain and no cross-REST rollback is claimed. Salesforce access,
+sharing and metadata are unchanged. Note 34 remains open for operator provisioning,
+deployment wiring, external identity, privileged connection lifecycle and the
+publish CLI; note 39 remains open, and no C10 or Phase 1 completion claim is made.

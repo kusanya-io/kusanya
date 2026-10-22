@@ -14,7 +14,10 @@ import {
   TenantConnectionStore,
   type QueryExecutor,
 } from '../../src/tenant/connection-store.js';
-import { createTenantSalesforceSession } from '../../src/tenant/salesforce-session.js';
+import {
+  createBoundTenantSalesforceSession,
+  createTenantSalesforceSession,
+} from '../../src/tenant/salesforce-session.js';
 import { AdministratorSessionStore } from '../../src/tenant/administrator-session.js';
 import {
   administratorSessionRoutePaths,
@@ -271,6 +274,64 @@ void test(
     );
     assert.equal(enteredAfterTimeout, true);
     assert.equal(afterTimeout?.value, 'lock-released');
+
+    let mismatchedRequests = 0;
+    await assert.rejects(
+      createBoundTenantSalesforceSession(
+        currentStore,
+        {
+          tenantId,
+          expectedSalesforceOrgId: orgId,
+          authorizationOrigin: 'https://test.salesforce.com',
+          namespacePrefix: '',
+        },
+        {
+          clientId: 'integration-client-id',
+          clientSecret: 'integration-client-secret',
+          timeoutMs: 1_000,
+        },
+        async () => {
+          mismatchedRequests++;
+          throw new Error('must not run');
+        },
+      ),
+      /TENANT_SALESFORCE_SESSION_BINDING/,
+    );
+    assert.equal(mismatchedRequests, 0);
+
+    const boundSession = await createBoundTenantSalesforceSession(
+      currentStore,
+      {
+        tenantId,
+        expectedSalesforceOrgId: orgId,
+        authorizationOrigin: 'https://test.salesforce.com',
+        namespacePrefix: 'ksny__',
+      },
+      {
+        clientId: 'integration-client-id',
+        clientSecret: 'integration-client-secret',
+        timeoutMs: 1_000,
+      },
+      async () =>
+        new Response(
+          JSON.stringify({
+            access_token: 'integration-access-token',
+            instance_url: 'https://tenant.sandbox.my.salesforce.com',
+            id: `https://test.salesforce.com/id/${orgId}/005000000000001`,
+            token_type: 'Bearer',
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json; charset=UTF-8' },
+          },
+        ),
+    );
+    assert.equal(boundSession.tenantId, tenantId);
+    assert.equal(boundSession.salesforceOrgId, orgId);
+    assert.equal(
+      await boundSession.getAccessToken(),
+      'integration-access-token',
+    );
 
     await assert.rejects(
       currentStore.save({

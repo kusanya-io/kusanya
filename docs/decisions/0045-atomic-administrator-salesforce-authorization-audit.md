@@ -29,7 +29,7 @@ body.
 
 ## Decision
 
-### Append one immutable event for every committed grant
+### Append one event for every committed grant
 
 Migration `0005_salesforce_authorization_audits` adds
 `tenant_salesforce_authorization_audits`. Each row records an identity-generated
@@ -38,8 +38,10 @@ authorizing `005` user, resulting credential version and database timestamp. Act
 and tenant have a composite foreign key to the immutable administrator binding; the
 tenant also references the committed connection.
 
-Events are append-only. A later successful authorization writes another event with
-the new credential version instead of updating or deleting history. No access token,
+Events are append-only through the Kusanya write path. A later successful
+authorization writes another event instead of updating or deleting history. The
+schema does not revoke `UPDATE` or `DELETE` from a privileged database role, so this
+is not a tamper-evidence claim against database administration. No access token,
 refresh token, OAuth code, state, session, CSRF value or provider response is stored
 in the audit table.
 
@@ -97,6 +99,15 @@ deployment secret wiring, privileged disconnect/rebind, final
 `publishSalesforceDefinition` composition and publish CLI remain. Nothing is mounted
 in `main.ts`; no live Salesforce grant, C10 acceptance test, publish-ready state or
 Phase 1 completion is claimed.
+
+The audited OAuth path always commits the connection and event together. The older
+low-level `TenantConnectionStore.save` remains available to tests and internal
+storage callers, so a connection without an audit is representable outside that
+path. This is an API-boundary fact, not a claim that an audit can exist without its
+connection foreign key. A future production composition may narrow that method's
+visibility once all non-audited test setup uses a dedicated fixture boundary.
+These clarifications answer verifier notes 100 and 101 without claiming database
+tamper evidence or narrowing a code path in this unit.
 
 ## Revisit when
 

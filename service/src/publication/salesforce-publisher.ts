@@ -29,7 +29,8 @@ export interface SalesforcePublicationRequest {
 type PublisherFailureCode =
   | 'PUBLICATION_PUBLISHER_INPUT'
   | 'PUBLICATION_PUBLISHER_DEFINITION'
-  | 'PUBLICATION_PUBLISHER_COMMIT';
+  | 'PUBLICATION_PUBLISHER_COMMIT'
+  | 'PUBLICATION_PUBLISHER_PARTIAL';
 
 export type SalesforcePublisherResult =
   | Readonly<{
@@ -513,7 +514,7 @@ export async function publishSalesforceDefinition(
       });
     } catch {
       if (attempt === 1)
-        return publisherRefusal('PUBLICATION_PUBLISHER_COMMIT', requestCount);
+        return publisherRefusal('PUBLICATION_PUBLISHER_PARTIAL', requestCount);
     }
   }
   return publisherRefusal('PUBLICATION_PUBLISHER_COMMIT', requestCount);
