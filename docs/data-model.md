@@ -231,6 +231,12 @@ org cannot belong to two tenants. Refresh tokens are AES-256-GCM encrypted with 
 fresh nonce and tenant/org authenticated data; key IDs are stored with ciphertext
 while the rotatable keys remain deployment secrets outside PostgreSQL.
 
+`tenant_publication_attempts` (ADR 0047) records the actor, tenant, expected org
+and Form Version before OAuth begins. Its state moves once from `started` to
+`succeeded`, `failed` or `partial`. A partial row retains the exact package digest
+and both uploaded ContentVersion IDs; an interrupted attempt stays `started` for a
+future reconciler. It stores no credential, provider response or form content.
+
 ADR 0045 adds append-only `tenant_salesforce_authorization_audits`. Each successful
 grant records the tenant, its bound trusted administrator actor, normalized `00D`
 org, signed authorizing `005` user and resulting credential version. The audited

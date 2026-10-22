@@ -14,11 +14,12 @@ All were deleted, but deletion restored active capacity,
 not daily capacity. Hosted run `34499943255` authenticated successfully and then
 failed before scratch creation. No hosted Apex evidence resulted.
 
-Correction (issue #5 note 16, 11 September): the daily limit is **not** a rolling
-24-hour allocation. At 09:00 UTC the hub reported six of six remaining while the
-previous six creations were less than 24 hours old. The actual reset time is not
-confirmed. Neither this ADR nor the tooling assumes midnight Pacific or another
-reset time; live remaining counts are authoritative and next-slot time is unavailable.
+Correction (issue #5 note 16, confirmed 22 October): the daily limit is **not** a
+rolling 24-hour allocation. It resets at midnight in the Dev Hub's configured
+`America/Los_Angeles` time zone (07:00 UTC during daylight saving time and 08:00 UTC
+otherwise), separately from the harness's deliberately UTC-day retry budget. Live
+remaining counts stay authoritative; the API supplies no reset timestamp, so the
+tooling reports next-slot time as unavailable rather than deriving one from history.
 
 Claude's [design review 5171295026](https://github.com/kusanya-io/kusanya/pull/3#pullrequestreview-5171295026)
 recommended adjustments A1–A11 and identified finding 10. Bill explicitly approved

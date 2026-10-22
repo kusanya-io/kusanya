@@ -22,6 +22,11 @@ provisioning. A concrete external identity verifier, approved provisioning workf
 deployment wiring, final publisher composition and the publish CLI remain. ADR 0044
 adds the unmounted browser login/CSRF/logout composition and makes hardened request
 logging a runtime prerequisite for both administrator adapters.
+ADR 0047 adds an unmounted, live-session and same-origin-CSRF administrator publish
+adapter plus a durable tenant-scoped attempt ledger. A partial Salesforce commit is
+surfaced distinctly and stores the exact uploaded artifact identities for future
+reconciliation; interrupted attempts remain unresolved. `main.ts` does not mount
+the route until external identity and deployment-secret wiring are approved.
 
 Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.
 It has no HTTP route, Salesforce access or publishing authority. See

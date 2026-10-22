@@ -160,6 +160,65 @@ const migrations = Object.freeze([
         CHECK (credential_version >= 1)
     )`,
   }),
+  Object.freeze({
+    id: '0006_publication_attempts',
+    sql: `CREATE TABLE tenant_publication_attempts (
+      publication_attempt_id uuid PRIMARY KEY,
+      tenant_id uuid NOT NULL,
+      actor_id varchar(128) NOT NULL,
+      salesforce_org_id varchar(18) NOT NULL,
+      form_version_id varchar(18) NOT NULL,
+      outcome varchar(16) NOT NULL DEFAULT 'started',
+      publication_digest char(64),
+      xform_version_id varchar(18),
+      xlsform_version_id varchar(18),
+      failure_code varchar(128),
+      salesforce_request_count integer,
+      created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      completed_at timestamptz,
+      CONSTRAINT tenant_publication_attempts_actor_tenant
+        FOREIGN KEY (actor_id, tenant_id)
+        REFERENCES tenant_administrator_bindings(actor_id, tenant_id),
+      CONSTRAINT tenant_publication_attempts_tenant
+        FOREIGN KEY (tenant_id)
+        REFERENCES tenant_administrator_tenants(tenant_id),
+      CONSTRAINT tenant_publication_attempts_org_shape
+        CHECK (salesforce_org_id ~ '^00D[A-Za-z0-9]{15}$'),
+      CONSTRAINT tenant_publication_attempts_form_version_shape
+        CHECK (form_version_id ~ '^[A-Za-z0-9]{15}([A-Za-z0-9]{3})?$'),
+      CONSTRAINT tenant_publication_attempts_outcome
+        CHECK (outcome IN ('started', 'succeeded', 'failed', 'partial')),
+      CONSTRAINT tenant_publication_attempts_digest_shape
+        CHECK (publication_digest IS NULL OR publication_digest ~ '^[0-9a-f]{64}$'),
+      CONSTRAINT tenant_publication_attempts_xform_shape
+        CHECK (xform_version_id IS NULL OR xform_version_id ~ '^068[A-Za-z0-9]{15}$'),
+      CONSTRAINT tenant_publication_attempts_xlsform_shape
+        CHECK (xlsform_version_id IS NULL OR xlsform_version_id ~ '^068[A-Za-z0-9]{15}$'),
+      CONSTRAINT tenant_publication_attempts_request_count
+        CHECK (salesforce_request_count IS NULL OR salesforce_request_count >= 0),
+      CONSTRAINT tenant_publication_attempts_terminal_shape CHECK (
+        (outcome = 'started' AND completed_at IS NULL
+          AND publication_digest IS NULL AND xform_version_id IS NULL
+          AND xlsform_version_id IS NULL AND failure_code IS NULL
+          AND salesforce_request_count IS NULL)
+        OR
+        (outcome = 'succeeded' AND completed_at IS NOT NULL
+          AND publication_digest IS NOT NULL AND xform_version_id IS NULL
+          AND xlsform_version_id IS NULL AND failure_code IS NULL
+          AND salesforce_request_count IS NOT NULL)
+        OR
+        (outcome = 'failed' AND completed_at IS NOT NULL
+          AND publication_digest IS NULL AND xform_version_id IS NULL
+          AND xlsform_version_id IS NULL AND failure_code IS NOT NULL
+          AND salesforce_request_count IS NOT NULL)
+        OR
+        (outcome = 'partial' AND completed_at IS NOT NULL
+          AND publication_digest IS NOT NULL AND xform_version_id IS NOT NULL
+          AND xlsform_version_id IS NOT NULL AND failure_code IS NOT NULL
+          AND salesforce_request_count IS NOT NULL)
+      )
+    )`,
+  }),
 ]);
 
 export class MigrationError extends Error {
@@ -177,7 +236,8 @@ export type MigrationTarget =
   | '0002_tenant_oauth_transactions'
   | '0003_administrator_sessions'
   | '0004_administrator_tenants'
-  | '0005_salesforce_authorization_audits';
+  | '0005_salesforce_authorization_audits'
+  | '0006_publication_attempts';
 
 /** Apply the checked plan through an optional exact target for upgrade verification. */
 export async function applyMigrations(

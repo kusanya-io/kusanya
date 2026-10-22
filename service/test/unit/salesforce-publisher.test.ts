@@ -492,11 +492,15 @@ void test('retries an uncertain commit once with the identical attested identiti
 
 void test('classifies two uncertain commit responses as a partial publication', async () => {
   const observed: ObservedRequest[] = [];
+  const partials: unknown[] = [];
   const result = await publishSalesforceDefinition(
     configuration(),
     { formVersionId },
     acceptXForm,
     successfulFetch(observed, { loseCommitResponses: true }),
+    async (partial) => {
+      partials.push(partial);
+    },
   );
   assert.deepEqual(result, {
     ok: false,
@@ -514,6 +518,45 @@ void test('classifies two uncertain commit responses as a partial publication', 
     observed.filter(({ init }) => init.method === 'DELETE').length,
     0,
   );
+  assert.equal(partials.length, 1);
+  assert.match(
+    (partials[0] as { publicationDigest: string }).publicationDigest,
+    /^[0-9a-f]{64}$/,
+  );
+  assert.deepEqual(
+    {
+      ...(partials[0] as Record<string, unknown>),
+      publicationDigest: '<digest>',
+    },
+    {
+      publicationDigest: '<digest>',
+      xformVersionId: '068000000000001AAA',
+      xlsformVersionId: '068000000000002AAA',
+      requestCount: 8,
+    },
+  );
+});
+
+void test('keeps a distinct unresolved-partial code when durable recording fails', async () => {
+  const result = await publishSalesforceDefinition(
+    configuration(),
+    { formVersionId },
+    acceptXForm,
+    successfulFetch([], { loseCommitResponses: true }),
+    async () => {
+      throw new Error('synthetic storage failure');
+    },
+  );
+  assert.deepEqual(result, {
+    ok: false,
+    diagnostics: [
+      {
+        code: 'PUBLICATION_PUBLISHER_PARTIAL_RECORDING',
+        location: 'publisher',
+      },
+    ],
+    requestCount: 8,
+  });
 });
 
 void test('refuses a commit response that does not repeat the package digest', async () => {

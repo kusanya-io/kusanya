@@ -30,7 +30,19 @@ type PublisherFailureCode =
   | 'PUBLICATION_PUBLISHER_INPUT'
   | 'PUBLICATION_PUBLISHER_DEFINITION'
   | 'PUBLICATION_PUBLISHER_COMMIT'
-  | 'PUBLICATION_PUBLISHER_PARTIAL';
+  | 'PUBLICATION_PUBLISHER_PARTIAL'
+  | 'PUBLICATION_PUBLISHER_PARTIAL_RECORDING';
+
+export interface SalesforcePublicationPartial {
+  readonly publicationDigest: string;
+  readonly xformVersionId: string;
+  readonly xlsformVersionId: string;
+  readonly requestCount: number;
+}
+
+export type RecordSalesforcePublicationPartial = (
+  partial: SalesforcePublicationPartial,
+) => Promise<void>;
 
 export type SalesforcePublisherResult =
   | Readonly<{
@@ -283,13 +295,17 @@ export async function publishSalesforceDefinition(
   requestValue: SalesforcePublicationRequest,
   validateXForm: ValidateXForm,
   fetchImplementation: FetchImplementation = fetch,
+  recordPartial?: RecordSalesforcePublicationPartial,
 ): Promise<SalesforcePublisherResult> {
   let configuration: ReturnType<typeof decodeConfiguration>;
   let formVersionId: string;
   try {
     configuration = decodeConfiguration(configurationValue);
     formVersionId = decodeRequest(requestValue);
-    if (typeof validateXForm !== 'function')
+    if (
+      typeof validateXForm !== 'function' ||
+      (recordPartial !== undefined && typeof recordPartial !== 'function')
+    )
       throw new PublisherFailure('PUBLICATION_PUBLISHER_INPUT');
   } catch {
     return publisherRefusal('PUBLICATION_PUBLISHER_INPUT', 0);
@@ -513,8 +529,26 @@ export async function publishSalesforceDefinition(
         requestCount,
       });
     } catch {
-      if (attempt === 1)
+      if (attempt === 1) {
+        if (recordPartial !== undefined) {
+          try {
+            await recordPartial(
+              Object.freeze({
+                publicationDigest: packaged.packageSha256,
+                xformVersionId: artifacts.xformVersionId,
+                xlsformVersionId: artifacts.xlsformVersionId,
+                requestCount,
+              }),
+            );
+          } catch {
+            return publisherRefusal(
+              'PUBLICATION_PUBLISHER_PARTIAL_RECORDING',
+              requestCount,
+            );
+          }
+        }
         return publisherRefusal('PUBLICATION_PUBLISHER_PARTIAL', requestCount);
+      }
     }
   }
   return publisherRefusal('PUBLICATION_PUBLISHER_COMMIT', requestCount);

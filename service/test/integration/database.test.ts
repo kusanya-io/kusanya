@@ -7,6 +7,7 @@ import { createApp } from '../../src/app.js';
 import { readConfig } from '../../src/config.js';
 import { createDatabase, createPostgresPool } from '../../src/database.js';
 import { applyMigrations } from '../../src/migrations.js';
+import { PublicationAttemptStore } from '../../src/publication/publication-attempt-store.js';
 import { createTenantCredentialVault } from '../../src/tenant/credential-vault.js';
 import {
   normalizeSalesforceOrgId,
@@ -30,6 +31,132 @@ import {
 } from '../../src/tenant/oauth-authorization.js';
 const databaseUrl = process.env.DATABASE_URL;
 const databaseRequired = process.env.REQUIRE_DATABASE_TESTS === 'true';
+
+void test(
+  'publication attempts are durable, tenant-scoped and one-way in PostgreSQL',
+  {
+    timeout: 15000,
+    skip:
+      !databaseUrl && !databaseRequired
+        ? 'Set DATABASE_URL to a disposable PostgreSQL 17 database'
+        : false,
+  },
+  async (context) => {
+    assert.ok(databaseUrl);
+    const config = readConfig({
+      ...process.env,
+      NODE_ENV: 'test',
+      DATABASE_URL: databaseUrl,
+    });
+    const pool = createPostgresPool(config, () => {});
+    const tenantId = randomUUID();
+    const otherTenantId = randomUUID();
+    const actorId = `administrator:${randomUUID()}`;
+    const orgId = normalizeSalesforceOrgId(
+      `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+    );
+    const otherOrgId = normalizeSalesforceOrgId(
+      `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+    );
+    context.after(async () => {
+      try {
+        await pool.query(
+          `DELETE FROM tenant_publication_attempts WHERE tenant_id = ANY($1::uuid[])`,
+          [[tenantId, otherTenantId]],
+        );
+        await pool.query(
+          `DELETE FROM tenant_administrator_bindings WHERE actor_id = $1`,
+          [actorId],
+        );
+        await pool.query(
+          `DELETE FROM tenant_administrator_tenants WHERE tenant_id = ANY($1::uuid[])`,
+          [[tenantId, otherTenantId]],
+        );
+      } finally {
+        await pool.end();
+      }
+    });
+    await applyMigrations(pool);
+    await pool.query(
+      `INSERT INTO tenant_administrator_tenants
+         (tenant_id, expected_salesforce_org_id, authorization_origin, namespace_prefix)
+       VALUES ($1, $2, 'https://login.salesforce.com', 'ksny__'),
+              ($3, $4, 'https://login.salesforce.com', '')`,
+      [tenantId, orgId, otherTenantId, otherOrgId],
+    );
+    await pool.query(
+      `INSERT INTO tenant_administrator_bindings (actor_id, tenant_id)
+       VALUES ($1, $2)`,
+      [actorId, tenantId],
+    );
+    const executor: QueryExecutor = {
+      async query<Row>(text: string, values: unknown[] = []) {
+        const result = await pool.query(text, values);
+        return { rows: result.rows as Row[], rowCount: result.rowCount };
+      },
+    };
+    const store = new PublicationAttemptStore(executor);
+    const trusted = {
+      actorId,
+      tenantId,
+      expectedSalesforceOrgId: orgId,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: 'ksny__',
+      csrfToken: 'c'.repeat(43),
+    };
+    const attemptId = await store.start(trusted, 'a0B000000000001AAA');
+    await assert.rejects(
+      store.complete(attemptId, otherTenantId, {
+        outcome: 'failed',
+        failureCode: 'PUBLICATION_REJECTED',
+        salesforceRequestCount: 0,
+      }),
+      { message: 'PUBLICATION_ATTEMPT_STORAGE' },
+    );
+    await store.complete(attemptId, tenantId, {
+      outcome: 'partial',
+      failureCode: 'PUBLICATION_PUBLISHER_PARTIAL',
+      publicationDigest: 'd'.repeat(64),
+      xformVersionId: '068000000000001AAA',
+      xlsformVersionId: '068000000000002AAA',
+      salesforceRequestCount: 8,
+    });
+    await assert.rejects(
+      store.complete(attemptId, tenantId, {
+        outcome: 'failed',
+        failureCode: 'PUBLICATION_REJECTED',
+        salesforceRequestCount: 0,
+      }),
+      { message: 'PUBLICATION_ATTEMPT_STORAGE' },
+    );
+    assert.deepEqual(
+      (
+        await pool.query(
+          `SELECT tenant_id::text, actor_id, salesforce_org_id, outcome,
+                  trim(publication_digest) AS publication_digest,
+                  xform_version_id, xlsform_version_id, failure_code,
+                  salesforce_request_count
+           FROM tenant_publication_attempts
+           WHERE publication_attempt_id = $1`,
+          [attemptId],
+        )
+      ).rows,
+      [
+        {
+          tenant_id: tenantId,
+          actor_id: actorId,
+          salesforce_org_id: orgId,
+          outcome: 'partial',
+          publication_digest: 'd'.repeat(64),
+          xform_version_id: '068000000000001AAA',
+          xlsform_version_id: '068000000000002AAA',
+          failure_code: 'PUBLICATION_PUBLISHER_PARTIAL',
+          salesforce_request_count: 8,
+        },
+      ],
+    );
+  },
+);
 void test(
   'PostgreSQL dependency responds through the HTTP readiness contract',
   {
@@ -917,6 +1044,7 @@ void test(
         '0003_administrator_sessions',
         '0004_administrator_tenants',
         '0005_salesforce_authorization_audits',
+        '0006_publication_attempts',
       ],
     );
   },

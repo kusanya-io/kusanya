@@ -250,6 +250,13 @@ a rollback claim. The external identity verifier, approved
 provisioning workflow and secret wiring are still absent, so `main.ts` does not mount
 the adapter and the deployed API remains health-only. The publish CLI also remains.
 
+ADR 0047 places an unmounted administrator HTTP boundary around that composition.
+It derives authority only from the live opaque session plus same-origin CSRF and
+writes a tenant-bound PostgreSQL attempt before OAuth. Known terminal outcomes are
+one-way; an uncertain commit stores the package digest and uploaded ContentVersion
+IDs, while interruption leaves an explicit unresolved `started` row. This does not
+pretend PostgreSQL and Salesforce are one transaction and does not add a retry.
+
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure
 `createSalesforceNames(prefix)` service helper qualifies explicitly Kusanya-owned
