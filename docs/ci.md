@@ -152,11 +152,12 @@ PR #3 is not exempt. Main's required check is still present for exempt PRs.
 
 Read-only preflight checks both active and daily capacity before creation. Daily
 capacity is a daily allocation, not a rolling 24-hour window; deleting an org frees
-active capacity, not daily capacity. The observed reset time is still unconfirmed
-(issue #5 note 16). `BLOCKED` exits 75 with limit/remaining/required counts and
-`next UTC slot unavailable`. Never infer a reset by adding 24 hours to creation
-timestamps or assume midnight Pacific. Preflight uses live limits without querying
-creation history; any future reset forecast needs independently confirmed ADR evidence.
+active capacity, not daily capacity. The allocation resets at midnight in the Dev
+Hub's configured `America/Los_Angeles` time zone (07:00 UTC during daylight saving
+time and 08:00 UTC otherwise), independently of the harness's UTC-day retry budget.
+`BLOCKED` exits 75 with limit/remaining/required counts and, because Salesforce's
+API supplies no reset timestamp, `next UTC slot unavailable`. Preflight uses live
+limits rather than predicting availability from creation history.
 Malformed limits and failed queries fail closed. A race can still exhaust quota
 after preflight: recognized limit errors receive the same blocked treatment.
 The gate fails for BLOCKED; it never skips or substitutes the development org.

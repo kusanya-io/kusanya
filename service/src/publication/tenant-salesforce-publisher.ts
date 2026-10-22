@@ -14,6 +14,7 @@ import {
 import type { ValidateXForm } from './odk-validate.js';
 import {
   publishSalesforceDefinition,
+  type RecordSalesforcePublicationPartial,
   type SalesforcePublicationRequest,
   type SalesforcePublisherResult,
 } from './salesforce-publisher.js';
@@ -147,6 +148,7 @@ export async function publishTenantSalesforceDefinition(
   requestValue: SalesforcePublicationRequest,
   validateXForm: ValidateXForm,
   fetchImplementation: FetchImplementation = fetch,
+  recordPartial?: RecordSalesforcePublicationPartial,
 ): Promise<SalesforcePublisherResult> {
   let context: TrustedAdministratorContext;
   let decoded: ReturnType<typeof configuration>;
@@ -157,7 +159,8 @@ export async function publishTenantSalesforceDefinition(
     publicationRequest = request(requestValue);
     if (
       typeof validateXForm !== 'function' ||
-      typeof fetchImplementation !== 'function'
+      typeof fetchImplementation !== 'function' ||
+      (recordPartial !== undefined && typeof recordPartial !== 'function')
     )
       throw new Error('TENANT_PUBLICATION_INPUT');
   } catch {
@@ -206,5 +209,6 @@ export async function publishTenantSalesforceDefinition(
     publicationRequest,
     validateXForm,
     fetchImplementation,
+    recordPartial,
   );
 }

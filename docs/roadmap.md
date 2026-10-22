@@ -363,3 +363,13 @@ private Files may remain and no cross-REST rollback is claimed. Salesforce acces
 sharing and metadata are unchanged. Note 34 remains open for operator provisioning,
 deployment wiring, external identity, privileged connection lifecycle and the
 publish CLI; note 39 remains open, and no C10 or Phase 1 completion claim is made.
+
+ADR 0047 adds the unmounted administrator publish route and PostgreSQL attempt
+ledger. A live session and same-origin CSRF token are the only operator authority;
+request data cannot select a tenant. Every attempt is written before OAuth and
+transitions once to succeeded, failed or partial. Partial rows retain the exact
+digest and ContentVersion IDs; an interrupted outcome remains started for
+reconciliation rather than becoming a false success. The Salesforce request count
+excludes the OAuth exchange by definition. Note 34 still covers deployment and
+external-identity composition, lifecycle reconciliation and the publish CLI; no
+C10 or Phase 1 completion claim is made.
