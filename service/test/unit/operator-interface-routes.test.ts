@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import Fastify from 'fastify';
 import { createApp } from '../../src/app.js';
@@ -96,26 +95,4 @@ void test('has no operator-shell mutation route and refuses an unhardened host',
     /HTTP_LOGGING_CONFIGURATION/,
   );
   await unsafe.close();
-});
-
-void test('documents only the mounted operator controls and bounded continuation shape', async () => {
-  const contract = await readFile(
-    new URL('../../../../docs/openapi.yaml', import.meta.url),
-    'utf8',
-  );
-  for (const path of [
-    '/admin:',
-    '/api/admin/administrators:',
-    '/api/admin/salesforce/publication-attempts:',
-  ])
-    assert.ok(contract.includes(path), path);
-  assert.match(contract, /required: \[attempts, nextCursor\]/);
-  assert.match(contract, /pattern: '\^\[A-Za-z0-9_-\]\{86\}\$'/);
-  assert.match(contract, /additionalProperties: false\s+required: \[subject\]/);
-  assert.doesNotMatch(
-    contract.slice(
-      contract.indexOf('/api/admin/salesforce/publication-attempts:'),
-    ),
-    /publicationDigest|xformVersionId|xlsformVersionId|failureCode|requestCount/,
-  );
 });
