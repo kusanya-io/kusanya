@@ -34,6 +34,8 @@ jobs:
     outputs:
       decision: ${{ steps.classify.outputs.decision }}
       head_sha: ${{ steps.classify.outputs.head_sha }}
+      base_sha: ${{ steps.classify.outputs.base_sha }}
+      salesforce_tree_sha: ${{ steps.classify.outputs.salesforce_tree_sha }}
       budget_allowed: ${{ steps.budget.outputs.allowed }}
     env:
       GH_TOKEN: ${{ github.token }}
@@ -44,11 +46,12 @@ jobs:
       KUSANYA_POLICY_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pull_request }}
       KUSANYA_POLICY_HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.reviewed_sha }}
       KUSANYA_POLICY_BASE_REF: ${{ github.event.repository.default_branch }}
+      KUSANYA_POLICY_EVENT_NAME: ${{ github.event_name }}
     steps:
       - name: Checkout immutable policy
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: 1d0edc1818e1eda0c42f752aca19eb3ec9a15894
+          ref: afc78d2d8e0d597ae8b8d42c1dd069a0a0dee18e
           path: trusted
           persist-credentials: false
           sparse-checkout: scripts
@@ -78,9 +81,15 @@ jobs:
           KUSANYA_POLICY_CHECKOUT_SHA="$(git -C reviewed rev-parse HEAD)"
           export KUSANYA_POLICY_CHECKOUT_SHA
           policy="$(node trusted/scripts/apex-pr-policy.mjs classify)"
-          decision="$(jq -er '.decision | select(. == "documentation-exemption" or . == "full-apex")' <<< "$policy")"
+          [[ "$(jq -er '.schemaVersion | select(. == 2)' <<< "$policy")" == 2 ]] || exit 1
+          decision="$(jq -er '.decision | select(. == "documentation-exemption" or . == "salesforce-identical-exemption" or . == "full-apex")' <<< "$policy")"
           [[ "$(jq -er .headSha <<< "$policy")" == "$REVIEWED_SHA" ]] || exit 1
-          printf 'decision=%s\nhead_sha=%s\n' "$decision" "$REVIEWED_SHA" >> "$GITHUB_OUTPUT"
+          base_sha="$(jq -er '.baseSha | strings | select(test("^[0-9a-f]{40}$"))' <<< "$policy")"
+          salesforce_tree_sha=''
+          if [[ "$decision" == salesforce-identical-exemption ]]; then
+            salesforce_tree_sha="$(jq -er '.salesforceTreeSha | strings | select(test("^[0-9a-f]{40}$"))' <<< "$policy")"
+          fi
+          printf 'decision=%s\nhead_sha=%s\nbase_sha=%s\nsalesforce_tree_sha=%s\n' "$decision" "$REVIEWED_SHA" "$base_sha" "$salesforce_tree_sha" >> "$GITHUB_OUTPUT"
       - name: Enforce complete exact-head retry budget
         id: budget
         if: steps.classify.outputs.decision == 'full-apex'
@@ -150,7 +159,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # Proposed immutable source pin; Claude must review it before first approval.
-          ref: 1d0edc1818e1eda0c42f752aca19eb3ec9a15894
+          ref: afc78d2d8e0d597ae8b8d42c1dd069a0a0dee18e
           path: trusted
           persist-credentials: false
           sparse-checkout: scripts
@@ -261,13 +270,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require exact-head Apex or explicit documentation exemption
+      - name: Require exact-head Apex or trusted exemption
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number || inputs.pull_request }}
           REVIEWED_SHA: ${{ github.event.pull_request.head.sha || inputs.reviewed_sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           POLICY_RESULT: ${{ needs.policy.result }}
           POLICY_SHA: ${{ needs.policy.outputs.head_sha }}
+          POLICY_BASE_SHA: ${{ needs.policy.outputs.base_sha }}
+          POLICY_SALESFORCE_TREE_SHA: ${{ needs.policy.outputs.salesforce_tree_sha }}
           POLICY_DECISION: ${{ needs.policy.outputs.decision }}
           BUDGET_ALLOWED: ${{ needs.policy.outputs.budget_allowed }}
           APEX_RESULT: ${{ needs.apex.result }}
@@ -275,10 +287,19 @@ jobs:
           set -euo pipefail
           [[ "$POLICY_RESULT" == success && "$POLICY_SHA" == "$REVIEWED_SHA" ]] || { echo 'PR policy did not validate this exact head.'; exit 1; }
           [[ "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)" == "$REVIEWED_SHA" ]] || { echo 'PR head changed; this result is stale.'; exit 1; }
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .base.ref)" == "$DEFAULT_BRANCH" ]] || { echo 'PR base changed; this result is stale.'; exit 1; }
+          [[ "$POLICY_BASE_SHA" =~ ^[0-9a-f]{40}$ && "$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .base.sha)" == "$POLICY_BASE_SHA" ]] || { echo 'PR base commit changed; this result is stale.'; exit 1; }
+          accepted_base="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$DEFAULT_BRANCH" --jq '[.ref, .object.type, .object.sha] | @tsv')"
+          IFS=$'\t' read -r accepted_ref accepted_type accepted_sha <<< "$accepted_base"
+          [[ "$accepted_ref" == "refs/heads/$DEFAULT_BRANCH" && "$accepted_type" == commit && "$accepted_sha" == "$POLICY_BASE_SHA" ]] || { echo 'Accepted main changed; this result is stale.'; exit 1; }
           case "$POLICY_DECISION" in
             documentation-exemption)
-              [[ "$APEX_RESULT" == skipped ]] || { echo 'Unexpected Apex state for documentation exemption.'; exit 1; }
+              [[ "$APEX_RESULT" == skipped && -z "$POLICY_SALESFORCE_TREE_SHA" ]] || { echo 'Unexpected Apex state for documentation exemption.'; exit 1; }
               printf 'Apex not run—approved documentation-only exemption at %s. Not phase-gate Apex evidence.\n' "$REVIEWED_SHA"
+              ;;
+            salesforce-identical-exemption)
+              [[ "$APEX_RESULT" == skipped && "$POLICY_SALESFORCE_TREE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Unexpected Apex state for Salesforce-identical exemption.'; exit 1; }
+              printf 'Apex not run—trusted salesforce tree %s is identical to accepted main %s at reviewed head %s. Not phase-gate or C10 Apex evidence.\n' "$POLICY_SALESFORCE_TREE_SHA" "$POLICY_BASE_SHA" "$REVIEWED_SHA"
               ;;
             full-apex)
               [[ "$BUDGET_ALLOWED" == true && "$APEX_RESULT" == success ]] || { echo 'Apex did not pass. BLOCKED, failed, cancelled and skipped runs do not satisfy this gate.'; exit 1; }

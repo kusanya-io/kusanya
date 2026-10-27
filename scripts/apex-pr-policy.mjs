@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 export const DOCUMENTATION_EXEMPTION_LABEL =
   'Apex not run—approved documentation-only exemption';
+export const SALESFORCE_IDENTICAL_EXEMPTION_LABEL =
+  'Apex not run—trusted salesforce tree identical to accepted main';
 const sha = (value) =>
   typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 const positive = (value) => Number.isSafeInteger(value) && value > 0;
@@ -40,6 +42,7 @@ function verifyIdentity({
   repository,
   expectedHeadSha,
   checkoutSha,
+  acceptedBaseSha,
   baseRef,
 }) {
   requireCondition(
@@ -52,8 +55,10 @@ function verifyIdentity({
     'Repository identity is missing or malformed.',
   );
   requireCondition(
-    sha(expectedHeadSha) && checkoutSha === expectedHeadSha,
-    'The checkout and expected full head SHA must match.',
+    sha(expectedHeadSha) &&
+      checkoutSha === expectedHeadSha &&
+      sha(acceptedBaseSha),
+    'The checkout, expected head and accepted base must be full SHAs.',
   );
   requireCondition(
     pr?.state === 'open' &&
@@ -62,7 +67,7 @@ function verifyIdentity({
       pr.head?.repo?.full_name === repository.full_name &&
       pr.base?.repo?.full_name === repository.full_name &&
       pr.head?.sha === expectedHeadSha &&
-      sha(pr.base?.sha) &&
+      pr.base?.sha === acceptedBaseSha &&
       pr.base?.ref === repository.default_branch &&
       (baseRef === undefined || baseRef === pr.base.ref),
     'An open same-repository PR against the default branch at this exact SHA is required.',
@@ -71,6 +76,90 @@ function verifyIdentity({
     positive(pr.changed_files),
     'A complete nonempty pull request diff is required.',
   );
+}
+
+function isVerificationBoundaryPath(path) {
+  return (
+    ordinaryPath(path) &&
+    (path === '.github' ||
+      path.startsWith('.github/') ||
+      path === 'scripts' ||
+      path.startsWith('scripts/'))
+  );
+}
+
+function validateCompleteDiff(input) {
+  verifyIdentity(input);
+  const { pr, files, baseTree, headTree } = input;
+  requireCondition(
+    Array.isArray(files) && files.length === pr.changed_files,
+    'Pull request file count is incomplete or inconsistent.',
+  );
+  const before = treeEntries(baseTree);
+  const after = treeEntries(headTree);
+  const seen = new Set();
+  for (const file of files) {
+    requireCondition(
+      file &&
+        ordinaryPath(file.filename) &&
+        sha(file.sha) &&
+        !seen.has(file.filename) &&
+        ['added', 'modified', 'removed', 'renamed'].includes(file.status),
+      'The complete diff includes a malformed, duplicate, or unknown change.',
+    );
+    seen.add(file.filename);
+    let resultEntry;
+    if (file.status === 'renamed') {
+      requireCondition(
+        ordinaryPath(file.previous_filename) &&
+          file.previous_filename !== file.filename &&
+          before.has(file.previous_filename) &&
+          after.has(file.filename) &&
+          !before.has(file.filename) &&
+          !after.has(file.previous_filename),
+        'Rename entries are incomplete or inconsistent.',
+      );
+      resultEntry = after.get(file.filename);
+    } else {
+      requireCondition(
+        file.previous_filename === undefined,
+        'Unexpected previous filename on a non-rename change.',
+      );
+      if (file.status === 'added') {
+        requireCondition(
+          !before.has(file.filename) && after.has(file.filename),
+          'Added file disagrees with the immutable Git trees.',
+        );
+        resultEntry = after.get(file.filename);
+      } else if (file.status === 'removed') {
+        requireCondition(
+          before.has(file.filename) && !after.has(file.filename),
+          'Removed file disagrees with the immutable Git trees.',
+        );
+        resultEntry = before.get(file.filename);
+      } else {
+        requireCondition(
+          before.has(file.filename) && after.has(file.filename),
+          'Modified file is missing from an immutable Git tree.',
+        );
+        resultEntry = after.get(file.filename);
+      }
+    }
+    requireCondition(
+      resultEntry?.sha === file.sha,
+      'File-list and Git-tree identities disagree.',
+    );
+  }
+  return { before, after };
+}
+
+function salesforceTree(entries) {
+  const entry = entries.get('salesforce');
+  requireCondition(
+    entry?.type === 'tree' && entry.mode === '040000' && sha(entry.sha),
+    'A regular salesforce directory tree is required on both commits.',
+  );
+  return entry.sha;
 }
 function treeEntries(tree) {
   requireCondition(
@@ -178,6 +267,72 @@ export function classifyDocumentationDiff(input) {
     return fallback(error.message);
   }
 }
+
+export function classifyApexRequirement(input) {
+  const fallback = (reason) => ({
+    schemaVersion: 2,
+    decision: 'full-apex',
+    headSha: sha(input?.expectedHeadSha) ? input.expectedHeadSha : null,
+    baseSha: sha(input?.acceptedBaseSha) ? input.acceptedBaseSha : null,
+    reason,
+  });
+  try {
+    requireCondition(
+      ['pull_request', 'workflow_dispatch'].includes(input?.eventName),
+      'A supported trusted workflow event is required.',
+    );
+    const { before, after } = validateCompleteDiff(input);
+    if (input.eventName === 'workflow_dispatch')
+      return fallback(
+        'Manual dispatch always requires real Apex evidence for the reviewed head.',
+      );
+
+    const documentation = classifyDocumentationDiff(input);
+    if (documentation.decision === 'documentation-exemption')
+      return {
+        ...documentation,
+        schemaVersion: 2,
+        baseSha: input.acceptedBaseSha,
+      };
+
+    const changedPaths = input.files.flatMap((file) => [
+      file.filename,
+      file.previous_filename,
+    ]);
+    if (changedPaths.some(isVerificationBoundaryPath))
+      return fallback(
+        'Workflow and script trust-boundary changes require real Apex evidence.',
+      );
+    if (
+      changedPaths.some(
+        (path) => path === 'salesforce' || path?.startsWith('salesforce/'),
+      )
+    )
+      return fallback(
+        'The complete diff contains a Salesforce source-tree change.',
+      );
+
+    const acceptedSalesforceTree = salesforceTree(before);
+    const reviewedSalesforceTree = salesforceTree(after);
+    if (acceptedSalesforceTree !== reviewedSalesforceTree)
+      return fallback(
+        'The reviewed Salesforce tree differs from accepted main.',
+      );
+    return {
+      schemaVersion: 2,
+      decision: 'salesforce-identical-exemption',
+      headSha: input.expectedHeadSha,
+      baseSha: input.acceptedBaseSha,
+      salesforceTreeSha: acceptedSalesforceTree,
+      reason:
+        'The reviewed salesforce directory tree is byte-identical to accepted main.',
+      exemptionLabel: SALESFORCE_IDENTICAL_EXEMPTION_LABEL,
+    };
+  } catch (error) {
+    return fallback(error.message);
+  }
+}
+
 export function isUtf8Prose(bytes) {
   try {
     const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
@@ -303,13 +458,15 @@ export async function collectDocumentationEvidence(env, api) {
   const repositoryName = env.KUSANYA_POLICY_REPOSITORY;
   const number = env.KUSANYA_POLICY_PR_NUMBER;
   const expectedHeadSha = env.KUSANYA_POLICY_HEAD_SHA;
+  const eventName = env.KUSANYA_POLICY_EVENT_NAME;
   requireCondition(
     /^[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(
       repositoryName ?? '',
     ) &&
       /^[1-9][0-9]*$/.test(number ?? '') &&
-      sha(expectedHeadSha),
-    'Invalid repository, PR number, or full head SHA.',
+      sha(expectedHeadSha) &&
+      ['pull_request', 'workflow_dispatch'].includes(eventName),
+    'Invalid repository, PR number, full head SHA, or workflow event.',
   );
   const root = `repos/${repositoryName}`;
   const repository = await api(root);
@@ -317,13 +474,30 @@ export async function collectDocumentationEvidence(env, api) {
     repository.full_name === repositoryName,
     'Repository API identity mismatch.',
   );
+  requireCondition(
+    ordinaryPath(repository.default_branch),
+    'Repository default branch is malformed.',
+  );
+  const baseRefEndpoint = `${root}/git/ref/heads/${encodeURIComponent(
+    repository.default_branch,
+  )}`;
+  const acceptedBaseRef = await api(baseRefEndpoint);
+  requireCondition(
+    acceptedBaseRef?.ref === `refs/heads/${repository.default_branch}` &&
+      acceptedBaseRef.object?.type === 'commit' &&
+      sha(acceptedBaseRef.object.sha),
+    'Accepted default-branch ref is missing or malformed.',
+  );
+  const acceptedBaseSha = acceptedBaseRef.object.sha;
   const pr = await api(`${root}/pulls/${number}`);
   const input = {
     pr,
     repository,
     expectedHeadSha,
     checkoutSha: env.KUSANYA_POLICY_CHECKOUT_SHA,
+    acceptedBaseSha,
     baseRef: env.KUSANYA_POLICY_BASE_REF,
+    eventName,
   };
   verifyIdentity(input);
   requireCondition(
@@ -368,7 +542,7 @@ export async function collectDocumentationEvidence(env, api) {
     treeEntries(tree);
     return tree;
   }
-  const baseTree = await readTree(pr.base.sha);
+  const baseTree = await readTree(acceptedBaseSha);
   const headTree = await readTree(expectedHeadSha);
   const blobFacts = Object.create(null);
   const paths = new Set(
@@ -410,11 +584,15 @@ export async function collectDocumentationEvidence(env, api) {
     }
   }
   const finalPr = await api(`${root}/pulls/${number}`);
+  const finalAcceptedBaseRef = await api(baseRefEndpoint);
   verifyIdentity({ ...input, pr: finalPr });
   requireCondition(
     finalPr.base.sha === pr.base.sha &&
       finalPr.changed_files === pr.changed_files &&
-      finalPr.number === pr.number,
+      finalPr.number === pr.number &&
+      finalAcceptedBaseRef?.ref === acceptedBaseRef.ref &&
+      finalAcceptedBaseRef.object?.type === 'commit' &&
+      finalAcceptedBaseRef.object.sha === acceptedBaseSha,
     'Pull request changed during classification.',
   );
   return { ...input, files, baseTree, headTree, blobFacts };
@@ -439,18 +617,18 @@ if (
           stdio: ['ignore', 'pipe', 'pipe'],
         }),
       );
-    result = classifyDocumentationDiff(
+    result = classifyApexRequirement(
       await collectDocumentationEvidence(process.env, api),
     );
   } catch {
     result = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       decision: 'full-apex',
       headSha: sha(process.env.KUSANYA_POLICY_HEAD_SHA)
         ? process.env.KUSANYA_POLICY_HEAD_SHA
         : null,
       reason:
-        'Documentation exemption could not be established from complete trusted API evidence.',
+        'An exemption could not be established from complete trusted API evidence.',
     };
   }
   process.stdout.write(`${JSON.stringify(result)}\n`);

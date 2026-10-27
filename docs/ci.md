@@ -148,6 +148,30 @@ An exempt check explicitly reports `Apex not run—approved documentation-only
 exemption` for the exact head. This result cannot close a phase's Apex requirement.
 PR #3 is not exempt. Main's required check is still present for exempt PRs.
 
+### Trusted Salesforce-identical exception
+
+ADR 0051 adds a second explicit decision for ordinary application PRs. The pinned
+policy reads the live default-branch ref and the open same-repository PR through
+read-only GitHub APIs. The PR base must be that accepted-main commit. Complete,
+untruncated Git trees must contain an exact `salesforce` directory entry with mode
+`040000`, type `tree` and the same full tree SHA on accepted main and the reviewed
+head. The complete file list is also checked, and either side of any path under
+`salesforce/` forces full Apex even if contradictory synthetic tree data claimed the
+same parent SHA.
+
+The policy rereads both the PR and accepted-main ref before deciding. The final gate
+then rechecks the live PR head, base branch, base commit and accepted-main ref,
+requires the conditional Apex job to be `skipped`, validates the trusted Salesforce tree SHA and prints all identities with
+`Apex not run—trusted salesforce tree identical to accepted main`. No PR body,
+label, workflow input or artifact can request this decision.
+
+Changes under `.github/` or `scripts/` always require full Apex. Manual dispatch
+also always requires full Apex, so it remains the reviewed way to collect real
+exact-head evidence for a phase gate or C10 claim when an automatic PR check was
+exempt. A Salesforce-identical result is not coverage, namespace, phase-gate or C10
+evidence. Missing, moving, truncated, malformed or contradictory API evidence fails
+closed. The required `Salesforce verification gate` stays present and strict.
+
 ### Quota, retries and cleanup
 
 Read-only preflight checks both active and daily capacity before creation. Daily

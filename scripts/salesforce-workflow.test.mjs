@@ -63,11 +63,15 @@ if (process.platform === 'win32') {
   });
 }
 const sha = 'a'.repeat(40);
+const baseSha = 'b'.repeat(40);
+const salesforceTreeSha = 'c'.repeat(40);
 const fixtures = {
   PR_NUMBER: '3',
   REVIEWED_SHA: sha,
   POLICY_RESULT: 'success',
   POLICY_SHA: sha,
+  POLICY_BASE_SHA: baseSha,
+  POLICY_SALESFORCE_TREE_SHA: '',
   POLICY_DECISION: 'full-apex',
   BUDGET_ALLOWED: 'true',
   DEFAULT_BRANCH: 'main',
@@ -76,6 +80,10 @@ const fixtures = {
   GITHUB_BASE_REF: 'main',
   GITHUB_REF: 'refs/pull/3/merge',
   FAKE_HEAD: sha,
+  FAKE_BASE_SHA: baseSha,
+  FAKE_ACCEPTED_BASE_SHA: baseSha,
+  FAKE_ACCEPTED_BASE_REF: 'refs/heads/main',
+  FAKE_ACCEPTED_BASE_TYPE: 'commit',
   FAKE_CHECKOUT: sha,
   FAKE_SOURCE: 'kusanya-io/kusanya',
   FAKE_BASE: 'main',
@@ -95,8 +103,13 @@ const fixtures = {
 const doubles = `
 gh() {
   [[ "$FAKE_GH_RESULT" == 0 ]] || return "$FAKE_GH_RESULT"
+  if [[ "$2" == repos/*/git/ref/heads/* ]]; then
+    printf '%s\t%s\t%s\n' "$FAKE_ACCEPTED_BASE_REF" "$FAKE_ACCEPTED_BASE_TYPE" "$FAKE_ACCEPTED_BASE_SHA"
+    return 0
+  fi
   case "$4" in
     .head.sha) printf '%s\\n' "$FAKE_HEAD" ;;
+    .base.sha) printf '%s\\n' "$FAKE_BASE_SHA" ;;
     .head.repo.full_name) printf '%s\\n' "$FAKE_SOURCE" ;;
     .base.ref) printf '%s\\n' "$FAKE_BASE" ;;
     .state) printf '%s\\n' "$FAKE_STATE" ;;
@@ -696,7 +709,7 @@ test('Salesforce result guard rejects a head changed during tests', () => {
   assert.equal(runStep(step, { FAKE_HEAD: 'b'.repeat(40) }).status, 1);
 });
 test('Salesforce required gate rejects skipped, cancelled, failed and absent Apex', () => {
-  const step = 'Require exact-head Apex or explicit documentation exemption';
+  const step = 'Require exact-head Apex or trusted exemption';
   assert.equal(runStep(step, { APEX_RESULT: 'success' }).status, 0);
   for (const result of ['skipped', 'cancelled', 'failure', '']) {
     assert.equal(runStep(step, { APEX_RESULT: result }).status, 1);
@@ -717,6 +730,14 @@ test('Salesforce workflow keeps the pinned harness, source guard and uncondition
   assert.equal(immutableRefs.length, 2);
   assert.equal(immutableRefs[0], immutableRefs[1]);
   assert.match(workflow, /run: node trusted\/scripts\/verify-salesforce\.mjs/);
+  assert.match(
+    workflow,
+    /KUSANYA_POLICY_EVENT_NAME: \$\{\{ github\.event_name \}\}/,
+  );
+  assert.match(workflow, /\.schemaVersion \| select\(\. == 2\)/);
+  assert.match(workflow, /salesforce-identical-exemption/);
+  assert.match(workflow, /POLICY_BASE_SHA/);
+  assert.match(workflow, /POLICY_SALESFORCE_TREE_SHA/);
   assert.match(workflow, /needs: \[policy, apex\]\n    if: always\(\)/);
   assert.match(workflow, /cancel-in-progress: false/);
   assert.ok(
@@ -726,7 +747,7 @@ test('Salesforce workflow keeps the pinned harness, source guard and uncondition
 });
 
 test('documentation exemption is explicit, exact-head and cannot imply Apex ran', () => {
-  const step = 'Require exact-head Apex or explicit documentation exemption';
+  const step = 'Require exact-head Apex or trusted exemption';
   const result = runStep(step, {
     POLICY_DECISION: 'documentation-exemption',
     APEX_RESULT: 'skipped',
@@ -748,14 +769,57 @@ test('documentation exemption is explicit, exact-head and cannot imply Apex ran'
   }
 });
 
+test('Salesforce-identical exemption binds accepted main, exact head and one trusted tree', () => {
+  const step = 'Require exact-head Apex or trusted exemption';
+  const result = runStep(step, {
+    POLICY_DECISION: 'salesforce-identical-exemption',
+    POLICY_SALESFORCE_TREE_SHA: salesforceTreeSha,
+    APEX_RESULT: 'skipped',
+    BUDGET_ALLOWED: '',
+  });
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /Apex not run—trusted salesforce tree/);
+  assert.match(result.stdout, /Not phase-gate or C10 Apex evidence/);
+  assert.ok(result.stdout.includes(sha));
+  assert.ok(result.stdout.includes(baseSha));
+  assert.ok(result.stdout.includes(salesforceTreeSha));
+  for (const invalid of [
+    { APEX_RESULT: 'success' },
+    { APEX_RESULT: 'failure' },
+    { APEX_RESULT: 'cancelled' },
+    { APEX_RESULT: '' },
+    { APEX_RESULT: 'skipped', POLICY_SALESFORCE_TREE_SHA: '' },
+    {
+      APEX_RESULT: 'skipped',
+      POLICY_SALESFORCE_TREE_SHA: 'not-a-sha',
+    },
+  ]) {
+    assert.equal(
+      runStep(step, {
+        POLICY_DECISION: 'salesforce-identical-exemption',
+        POLICY_SALESFORCE_TREE_SHA: salesforceTreeSha,
+        ...invalid,
+      }).status,
+      1,
+    );
+  }
+});
+
 test('gate rejects policy failure, unknown exemption, stale head and missing retry eligibility', () => {
-  const step = 'Require exact-head Apex or explicit documentation exemption';
+  const step = 'Require exact-head Apex or trusted exemption';
   for (const invalid of [
     { POLICY_RESULT: 'skipped' },
     { POLICY_RESULT: 'failure' },
     { POLICY_RESULT: '' },
     { POLICY_SHA: 'b'.repeat(40) },
     { POLICY_SHA: '' },
+    { POLICY_BASE_SHA: 'c'.repeat(40) },
+    { POLICY_BASE_SHA: '' },
+    { FAKE_BASE_SHA: 'c'.repeat(40) },
+    { FAKE_BASE: 'other' },
+    { FAKE_ACCEPTED_BASE_SHA: 'c'.repeat(40) },
+    { FAKE_ACCEPTED_BASE_REF: 'refs/heads/other' },
+    { FAKE_ACCEPTED_BASE_TYPE: 'tag' },
     { POLICY_DECISION: 'unknown' },
     { FAKE_HEAD: 'b'.repeat(40) },
     { BUDGET_ALLOWED: '' },
