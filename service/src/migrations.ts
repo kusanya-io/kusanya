@@ -243,6 +243,39 @@ const migrations = Object.freeze([
           AND reconciled_at IS NOT NULL)
       )`,
   }),
+  Object.freeze({
+    id: '0008_administrator_lifecycle',
+    sql: `ALTER TABLE tenant_administrator_bindings
+      ADD COLUMN active boolean NOT NULL DEFAULT true,
+      ADD COLUMN deprovisioned_at timestamptz,
+      ADD CONSTRAINT tenant_administrator_bindings_lifecycle CHECK (
+        (active AND deprovisioned_at IS NULL)
+        OR
+        (NOT active AND deprovisioned_at IS NOT NULL)
+      );
+    CREATE INDEX tenant_administrator_bindings_tenant_actor
+      ON tenant_administrator_bindings(tenant_id, actor_id);
+    CREATE TABLE tenant_administrator_lifecycle_audits (
+      administrator_lifecycle_audit_id bigint
+        GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      tenant_id uuid NOT NULL
+        REFERENCES tenant_administrator_tenants(tenant_id),
+      performed_by_actor_id varchar(128) NOT NULL,
+      target_actor_id varchar(128) NOT NULL,
+      action varchar(16) NOT NULL,
+      occurred_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      CONSTRAINT tenant_administrator_lifecycle_audits_performer
+        FOREIGN KEY (performed_by_actor_id, tenant_id)
+        REFERENCES tenant_administrator_bindings(actor_id, tenant_id),
+      CONSTRAINT tenant_administrator_lifecycle_audits_target
+        FOREIGN KEY (target_actor_id, tenant_id)
+        REFERENCES tenant_administrator_bindings(actor_id, tenant_id),
+      CONSTRAINT tenant_administrator_lifecycle_audits_action
+        CHECK (action IN ('bootstrap', 'deprovision')),
+      CONSTRAINT tenant_administrator_lifecycle_audits_bootstrap_actor
+        CHECK (action <> 'bootstrap' OR performed_by_actor_id = target_actor_id)
+    )`,
+  }),
 ]);
 
 export class MigrationError extends Error {
@@ -262,7 +295,8 @@ export type MigrationTarget =
   | '0004_administrator_tenants'
   | '0005_salesforce_authorization_audits'
   | '0006_publication_attempts'
-  | '0007_publication_attempt_reconciliation';
+  | '0007_publication_attempt_reconciliation'
+  | '0008_administrator_lifecycle';
 
 /** Apply the checked plan through an optional exact target for upgrade verification. */
 export async function applyMigrations(

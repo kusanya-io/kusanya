@@ -43,6 +43,11 @@ live session's immutable tenant tuple feed the existing provisioning store. Atte
 pages stay capped at 100, repeat the full tenant authorization join and expose only
 an opaque continuation cursor. Initial tenant bootstrap and privileged connection
 lifecycle remain operator/deployment work outside these routes.
+ADR 0053 adds a server-only first-administrator bootstrap command and authenticated
+peer deprovisioning. Bootstrap reads one bounded JSON document from standard input,
+has no HTTP route and refuses replay. Deprovisioning keeps the immutable actor binding
+inactive, revokes all of its sessions and appends the lifecycle audit atomically;
+self-removal, last-administrator removal and cross-tenant removal share one refusal.
 
 Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.
 It has no HTTP route, Salesforce access or publishing authority. See
@@ -91,6 +96,22 @@ npm run migrate
 ```
 
 The service never migrates implicitly during HTTP startup.
+
+After migrations, bootstrap a tenant's first administrator only from the service
+host with its approved database environment and `ADMIN_OIDC_ISSUER`. Supply the
+initial tuple on standard input so it is not placed in process arguments:
+
+```sh
+printf '%s\n' '{"subject":"<oidc-subject>","tenantId":"<uuid>","expectedSalesforceOrgId":"<00D-id>","authorizationOrigin":"https://login.salesforce.com","namespacePrefix":""}' | npm run bootstrap-administrator
+```
+
+Use `https://test.salesforce.com` for a sandbox authorization origin when that is the
+tenant's reviewed binding. Use `"ksny__"` only after the namespace is linked and the
+namespaced suite has passed. The command has one winner: it refuses if that tenant
+already has any administrator or the issuer-derived actor has any binding. It never
+repairs, reactivates, moves or replaces an administrator. Do not edit the lifecycle
+tables manually; use the authenticated operator interface to remove a peer while
+retaining at least one active administrator.
 
 Before applying migration `0004_administrator_tenants` to a database created by PR
 #77, check the legacy bindings for namespace values that the current canonical rule

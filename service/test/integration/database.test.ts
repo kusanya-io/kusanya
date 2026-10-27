@@ -19,7 +19,10 @@ import {
   createBoundTenantSalesforceSession,
   createTenantSalesforceSession,
 } from '../../src/tenant/salesforce-session.js';
-import { AdministratorSessionStore } from '../../src/tenant/administrator-session.js';
+import {
+  AdministratorSessionError,
+  AdministratorSessionStore,
+} from '../../src/tenant/administrator-session.js';
 import {
   administratorProvisioningRoutePaths,
   registerAdministratorProvisioningRoutes,
@@ -1126,15 +1129,24 @@ void test(
     );
     assert.deepEqual(
       (
-        await legacyPool.query<{ actor_id: string; tenant_id: string }>(
-          `SELECT actor_id, tenant_id::text
+        await legacyPool.query<{
+          actor_id: string;
+          tenant_id: string;
+          active: boolean;
+          deprovisioned_at: string | null;
+        }>(
+          `SELECT actor_id, tenant_id::text, active,
+                  deprovisioned_at::text
            FROM tenant_administrator_bindings
            ORDER BY actor_id`,
         )
       ).rows,
-      actorIds
-        .toSorted()
-        .map((actor_id) => ({ actor_id, tenant_id: tenantId })),
+      actorIds.toSorted().map((actor_id) => ({
+        actor_id,
+        tenant_id: tenantId,
+        active: true,
+        deprovisioned_at: null,
+      })),
     );
     assert.deepEqual(
       (
@@ -1152,6 +1164,7 @@ void test(
         '0005_salesforce_authorization_audits',
         '0006_publication_attempts',
         '0007_publication_attempt_reconciliation',
+        '0008_administrator_lifecycle',
       ],
     );
   },
@@ -1180,6 +1193,7 @@ void test(
     const tenantId = randomUUID();
     const otherTenantId = randomUUID();
     const raceTenantId = randomUUID();
+    const bootstrapTenantId = randomUUID();
     const actorId = `administrator:${randomUUID()}`;
     const secondActorId = `administrator:${randomUUID()}`;
     const conflictActorId = `administrator:${randomUUID()}`;
@@ -1189,8 +1203,17 @@ void test(
       `administrator:${randomUUID()}`,
       `administrator:${randomUUID()}`,
     ];
+    const bootstrapActorIds = [
+      `administrator:${randomUUID()}`,
+      `administrator:${randomUUID()}`,
+    ];
     context.after(async () => {
       try {
+        await pool.query(
+          `DELETE FROM tenant_administrator_lifecycle_audits
+           WHERE tenant_id = ANY($1::uuid[])`,
+          [[tenantId, otherTenantId, raceTenantId, bootstrapTenantId]],
+        );
         await pool.query(
           `DELETE FROM tenant_administrator_bindings
            WHERE actor_id = ANY($1::varchar[])`,
@@ -1202,13 +1225,14 @@ void test(
               otherBoundActorId,
               enrolledActorId,
               ...raceActorIds,
+              ...bootstrapActorIds,
             ],
           ],
         );
         await pool.query(
           `DELETE FROM tenant_administrator_tenants
            WHERE tenant_id = ANY($1::uuid[])`,
-          [[tenantId, otherTenantId, raceTenantId]],
+          [[tenantId, otherTenantId, raceTenantId, bootstrapTenantId]],
         );
       } finally {
         await pool.end();
@@ -1226,7 +1250,7 @@ void test(
            ORDER BY column_name`,
         )
       ).rows.map((row) => row.column_name),
-      ['actor_id', 'created_at', 'tenant_id'],
+      ['active', 'actor_id', 'created_at', 'deprovisioned_at', 'tenant_id'],
     );
     const queryExecutor: QueryExecutor = {
       async query<Row>(text: string, values: unknown[] = []) {
@@ -1249,6 +1273,116 @@ void test(
       authorizationOrigin: 'https://login.salesforce.com',
       namespacePrefix: '',
     });
+    const bootstrapOrgStem = `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+    const bootstrapRace = await Promise.allSettled(
+      bootstrapActorIds.map((bootstrapActorId) =>
+        store.bootstrap({
+          actorId: bootstrapActorId,
+          tenantId: bootstrapTenantId,
+          expectedSalesforceOrgId: bootstrapOrgStem,
+          authorizationOrigin: 'https://login.salesforce.com',
+          namespacePrefix: '',
+        }),
+      ),
+    );
+    assert.equal(
+      bootstrapRace.filter((result) => result.status === 'fulfilled').length,
+      1,
+    );
+    assert.equal(
+      bootstrapRace.filter(
+        (result) =>
+          result.status === 'rejected' &&
+          result.reason instanceof AdministratorSessionError &&
+          result.reason.code === 'ADMINISTRATOR_SESSION_CONFLICT',
+      ).length,
+      1,
+    );
+    const bootstrappedActorId =
+      bootstrapActorIds[bootstrapRace[0]?.status === 'fulfilled' ? 0 : 1]!;
+    await assert.rejects(
+      store.bootstrap({
+        actorId: bootstrappedActorId,
+        tenantId: bootstrapTenantId,
+        expectedSalesforceOrgId: bootstrapOrgStem,
+        authorizationOrigin: 'https://login.salesforce.com',
+        namespacePrefix: '',
+      }),
+      { message: 'ADMINISTRATOR_SESSION_CONFLICT' },
+    );
+    assert.deepEqual(
+      (
+        await pool.query<{
+          performed_by_actor_id: string;
+          target_actor_id: string;
+          action: string;
+        }>(
+          `SELECT performed_by_actor_id, target_actor_id, action
+           FROM tenant_administrator_lifecycle_audits
+           WHERE tenant_id = $1::uuid`,
+          [bootstrapTenantId],
+        )
+      ).rows,
+      [
+        {
+          performed_by_actor_id: bootstrappedActorId,
+          target_actor_id: bootstrappedActorId,
+          action: 'bootstrap',
+        },
+      ],
+    );
+    const secondBootstrapActorId = bootstrapActorIds.find(
+      (candidate) => candidate !== bootstrappedActorId,
+    )!;
+    await store.provision({
+      actorId: secondBootstrapActorId,
+      tenantId: bootstrapTenantId,
+      expectedSalesforceOrgId: bootstrapOrgStem,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: '',
+    });
+    const bootstrapSessions = await Promise.all(
+      bootstrapActorIds.map((candidate) =>
+        store.issue(candidate, sessionConfiguration),
+      ),
+    );
+    const removalRace = await Promise.allSettled([
+      store.deprovision({
+        performedByActorId: bootstrapActorIds[0]!,
+        targetActorId: bootstrapActorIds[1]!,
+        tenantId: bootstrapTenantId,
+      }),
+      store.deprovision({
+        performedByActorId: bootstrapActorIds[1]!,
+        targetActorId: bootstrapActorIds[0]!,
+        tenantId: bootstrapTenantId,
+      }),
+    ]);
+    assert.equal(
+      removalRace.filter((result) => result.status === 'fulfilled').length,
+      1,
+    );
+    assert.equal(
+      (
+        await pool.query<{ count: number }>(
+          `SELECT count(*)::integer AS count
+           FROM tenant_administrator_bindings
+           WHERE tenant_id = $1::uuid AND active`,
+          [bootstrapTenantId],
+        )
+      ).rows[0]?.count,
+      1,
+    );
+    assert.equal(
+      (
+        await Promise.all(
+          bootstrapSessions.map((session) =>
+            store.authenticate(session.opaqueSession, sessionConfiguration),
+          ),
+        )
+      ).filter(Boolean).length,
+      1,
+    );
     await store.provision(provisioned);
     await store.provision({
       ...provisioned,
@@ -1459,6 +1593,8 @@ void test(
       actorIdForSubject: (subject) => {
         if (subject === 'already-other-tenant') return otherBoundActorId;
         if (subject === 'new-same-tenant') return enrolledActorId;
+        if (subject === 'departing-same-tenant') return secondActorId;
+        if (subject === 'current-administrator') return actorId;
         throw new Error('OIDC_SUBJECT');
       },
       sessionStore: store,
@@ -1517,6 +1653,103 @@ void test(
         { actor_id: enrolledActorId, tenant_id: tenantId },
         { actor_id: otherBoundActorId, tenant_id: otherTenantId },
       ].toSorted((left, right) => left.actor_id.localeCompare(right.actor_id)),
+    );
+    const departingSession = await store.issue(
+      secondActorId,
+      sessionConfiguration,
+    );
+    const selfRemoval = await app.inject({
+      method: 'DELETE',
+      url: administratorProvisioningRoutePaths.provision,
+      headers: {
+        origin: 'https://service.example',
+        cookie: `__Host-kusanya_admin_session=${browserSession.opaqueSession}`,
+        'x-csrf-token': browserSession.csrfToken,
+      },
+      payload: { subject: 'current-administrator' },
+    });
+    assert.equal(selfRemoval.statusCode, 503);
+    const removed = await app.inject({
+      method: 'DELETE',
+      url: administratorProvisioningRoutePaths.provision,
+      headers: {
+        origin: 'https://service.example',
+        cookie: `__Host-kusanya_admin_session=${browserSession.opaqueSession}`,
+        'x-csrf-token': browserSession.csrfToken,
+      },
+      payload: { subject: 'departing-same-tenant' },
+    });
+    assert.equal(removed.statusCode, 204);
+    assert.equal(
+      await store.authenticate(
+        departingSession.opaqueSession,
+        sessionConfiguration,
+      ),
+      undefined,
+    );
+    await assert.rejects(store.issue(secondActorId, sessionConfiguration), {
+      message: 'ADMINISTRATOR_SESSION_ABSENT',
+    });
+    await assert.rejects(
+      store.provision({ ...provisioned, actorId: secondActorId }),
+      { message: 'ADMINISTRATOR_SESSION_CONFLICT' },
+    );
+    await assert.rejects(
+      store.provision({
+        ...provisioned,
+        actorId: secondActorId,
+        tenantId: otherTenantId,
+        expectedSalesforceOrgId: otherBoundOrgId,
+      }),
+      { message: 'ADMINISTRATOR_SESSION_CONFLICT' },
+    );
+    assert.deepEqual(
+      (
+        await pool.query<{
+          actor_id: string;
+          active: boolean;
+          deprovisioned: boolean;
+          sessions: number;
+        }>(
+          `SELECT b.actor_id, b.active,
+                  (b.deprovisioned_at IS NOT NULL) AS deprovisioned,
+                  count(s.actor_id)::integer AS sessions
+           FROM tenant_administrator_bindings b
+           LEFT JOIN administrator_sessions s ON s.actor_id = b.actor_id
+           WHERE b.actor_id = $1
+           GROUP BY b.actor_id, b.active, b.deprovisioned_at`,
+          [secondActorId],
+        )
+      ).rows,
+      [
+        {
+          actor_id: secondActorId,
+          active: false,
+          deprovisioned: true,
+          sessions: 0,
+        },
+      ],
+    );
+    assert.deepEqual(
+      (
+        await pool.query<{
+          performed_by_actor_id: string;
+          target_actor_id: string;
+          action: string;
+        }>(
+          `SELECT performed_by_actor_id, target_actor_id, action
+           FROM tenant_administrator_lifecycle_audits
+           WHERE tenant_id = $1::uuid`,
+          [tenantId],
+        )
+      ).rows,
+      [
+        {
+          performed_by_actor_id: actorId,
+          target_actor_id: secondActorId,
+          action: 'deprovision',
+        },
+      ],
     );
     const logout = await app.inject({
       method: 'POST',

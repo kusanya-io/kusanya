@@ -254,6 +254,17 @@ OIDC issuer and subject, then reuses ADR 0043's serializable provisioning operat
 with the current session's complete tuple. It cannot create the initial tenant or
 move an existing actor.
 
+ADR 0053 adds `active` and `deprovisioned_at` to
+`tenant_administrator_bindings`. Active and timestamp states are mutually exclusive;
+deprovisioning retains the row as an immutable tenant tombstone instead of deleting
+identity. Session issuance and resolution require `active`, so removal revokes access
+even across concurrent requests, and enrolment cannot reactivate or move the actor.
+`tenant_administrator_lifecycle_audits` records `bootstrap` and `deprovision` events
+with the tenant, performing actor, target actor and database timestamp. Bootstrap is
+self-performed by constraint. Both principals retain foreign keys to the immutable
+binding; audit append-only behaviour is a Kusanya write-path guarantee, not tamper
+evidence against a privileged database role.
+
 ADR 0045 adds append-only `tenant_salesforce_authorization_audits`. Each successful
 grant records the tenant, its bound trusted administrator actor, normalized `00D`
 org, signed authorizing `005` user and resulting credential version. The audited

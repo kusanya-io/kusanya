@@ -33,6 +33,7 @@ function dependencies(): PublicationSurfaceDependencies {
     },
     sessionStore: {
       async provision() {},
+      async deprovision() {},
       async issue() {
         return { opaqueSession, csrfToken, expiresInSeconds: 3600 };
       },
@@ -161,15 +162,19 @@ void test('the real app mounts login, CSRF, publication and least-data presentat
   );
 });
 
-void test('mounted provisioning crosses identity, live session and immutable tenant exactly once', async (contextTest) => {
+void test('mounted administrator lifecycle crosses identity and live tenant exactly once', async (contextTest) => {
   const base = dependencies();
   const provisioned: unknown[] = [];
+  const deprovisioned: unknown[] = [];
   const app = createApp(config, { async ping() {}, async close() {} }, false, {
     ...base,
     sessionStore: {
       ...base.sessionStore,
       async provision(input) {
         provisioned.push(input);
+      },
+      async deprovision(input) {
+        deprovisioned.push(input);
       },
     },
   });
@@ -211,6 +216,27 @@ void test('mounted provisioning crosses identity, live session and immutable ten
   });
   assert.equal(widened.statusCode, 400);
   assert.equal(provisioned.length, 1);
+
+  const removed = await app.inject({
+    method: 'DELETE',
+    url: '/api/admin/administrators',
+    headers: {
+      origin,
+      cookie: `__Host-kusanya_admin_session=${opaqueSession}`,
+      'x-csrf-token': csrfToken,
+      'content-type': 'application/json',
+      'x-tenant-id': 'forged',
+    },
+    payload: { subject: 'departing-subject' },
+  });
+  assert.equal(removed.statusCode, 204);
+  assert.deepEqual(deprovisioned, [
+    {
+      performedByActorId: context.actorId,
+      targetActorId: 'oidc:departing-subject',
+      tenantId: context.tenantId,
+    },
+  ]);
 });
 
 void test('mounted login reports identity refusals as authentication failures', async (contextTest) => {

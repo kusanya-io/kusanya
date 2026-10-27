@@ -398,3 +398,14 @@ the tenant. A cursor can continue the least-data view but cannot select another
 tenant. Initial bootstrap, retention/deletion, scheduled reconciliation, privileged
 retry, disconnect/rebind and the publish CLI remain under note 34. Note 39 remains
 open, and no C10 or Phase 1 completion claim is made.
+
+ADR 0053 adds the tenant administrator lifecycle ends. A bounded server-only command
+bootstraps exactly one first OIDC-derived administrator and atomically audits it;
+there is no bootstrap HTTP route and replay is refused. A live administrator can
+deprovision a peer through the same origin/session/CSRF boundary. The binding remains
+as an inactive tombstone, all target sessions are revoked, the change is audited, and
+ordered locking prevents self, last-administrator and concurrent tenant lockout.
+Roles, invitations, retention/deletion of publication attempts, scheduled
+reconciliation, privileged retry, disconnect/rebind, the publish CLI and ODK Validate
+runtime assets remain under note 34. Note 39 remains open, and no C10 or Phase 1
+completion claim is made.
