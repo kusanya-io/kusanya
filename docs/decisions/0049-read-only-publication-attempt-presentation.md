@@ -1,6 +1,6 @@
 # ADR 0049: Read-only publication-attempt presentation
 
-- Status: Proposed; implementation awaiting independent verification
+- Status: Accepted; verified in PR #91, mounted by ADR 0050
 - Date: 2026-10-22
 - Brief sections: C1.3a, C2, C5 publish recovery, C8, C11 Phase 1
 - Decision owner: Cobitech Solutions
@@ -40,9 +40,9 @@ neither authorizes retry. Known terminal and reconciled evidence uses fixed stat
 The adapter's dependency surface is only authentication plus
 `listForOperator`. It imports neither the publisher nor the reconciler and exposes
 no mutation method. Storage failures become a fixed unavailable response. Global
-`Cache-Control: no-store` and hardened request logging remain mandatory. Production
-remains health-only until the separately approved external identity and deployment
-composition exists.
+`Cache-Control: no-store` and hardened request logging remain mandatory. ADR 0050
+supplies the separately approved external identity and deployment composition and
+mounts the route without widening its dependency surface.
 
 ## Consequences and verification
 

@@ -10,8 +10,9 @@ published package metadata; upstream licences/notices remain authoritative.
 | ----------------- | ------------------------------ | ----------------------------- | -------------------------------------------- |
 | Root tooling      | Prettier                       | 3.9.6                         | MIT                                          |
 | Root tooling      | prettier-plugin-apex           | 2.3.0                         | MIT                                          |
-| Service runtime   | Fastify                        | 5.12.3                        | MIT                                          |
+| Service runtime   | Fastify                        | 5.12.7                        | MIT                                          |
 | Service runtime   | pg                             | 8.23.0                        | MIT                                          |
+| Service runtime   | jose                           | 6.2.12                        | MIT                                          |
 | Service tooling   | TypeScript                     | 5.9.3                         | Apache-2.0                                   |
 | Service tooling   | ESLint                         | 10.10.0                       | MIT                                          |
 | Service tooling   | @eslint/js                     | 10.0.1                        | MIT                                          |

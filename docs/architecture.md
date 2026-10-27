@@ -231,7 +231,7 @@ one session per actor is replaced atomically, PostgreSQL is checked for every re
 and callback completion requires the exact initiating session to remain live. ADR
 0043 stores org/origin/namespace once per tenant, shares that tuple across approved
 actors, rejects noncanonical namespaces at provisioning and routing, and serializes
-conflicts without partial rows. ADR 0044 composes unmounted administrator login, a
+conflicts without partial rows. ADR 0044 composes administrator login, a
 live-session same-origin CSRF bootstrap and database-first logout. It issues only a
 `Secure`, `HttpOnly`, `SameSite=Lax`, host-only cookie and makes disabled automatic
 request logging a runtime registration requirement for both browser adapters, closing
@@ -246,11 +246,9 @@ the encrypted connection and ADR 0036 publisher. Exact org/origin/namespace drif
 refuses before refresh or Salesforce I/O; the attempt-scoped session is the only
 credential path, refresh consumes the shared publication deadline, and a failure
 after artifact attestation has the explicit partial-publication outcome rather than
-a rollback claim. The external identity verifier, approved
-provisioning workflow and secret wiring are still absent, so `main.ts` does not mount
-the adapter and the deployed API remains health-only. The publish CLI also remains.
+a rollback claim. The publish CLI remains.
 
-ADR 0047 places an unmounted administrator HTTP boundary around that composition.
+ADR 0047 places an administrator HTTP boundary around that composition.
 It derives authority only from the live opaque session plus same-origin CSRF and
 writes a tenant-bound PostgreSQL attempt before OAuth. Known terminal outcomes are
 one-way; an uncertain commit stores the package digest and uploaded ContentVersion
@@ -264,12 +262,17 @@ bounded GET requests. The result records committed, unlinked or artifacts-missin
 without changing the original attempt outcome. It has no upload, commit, delete or
 publisher capability, and it does not authorize retry.
 
-ADR 0049 adds an unmounted, read-only administrator presentation adapter for those
+ADR 0049 adds a read-only administrator presentation adapter for those
 attempts. One bounded tenant-scoped SELECT maps ledger states to fixed operator
 statuses; unresolved and indeterminate states explicitly require human judgement.
 The response excludes credentials, provider material, publication digests, Files,
 failure details and request counts. The adapter has no reconciler, publisher,
-retention, retry or deletion capability and keeps the deployed API health-only.
+retention, retry or deletion capability. ADR 0050 mounts the session, publication
+and presentation adapters through one fail-closed composition. A short-lived OIDC
+access token for the Kusanya API is verified against exact issuer, audience, RS256
+signature and time bounds, then only the digest-derived issuer/subject actor reaches
+the immutable tenant binding. `main.ts` refuses missing identity, session, encrypted
+credential, Salesforce OAuth, timeout or validator configuration before listening.
 
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure

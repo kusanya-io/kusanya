@@ -1,9 +1,10 @@
 openapi: 3.1.0
 info:
-  title: Kusanya Phase 0 operational API
+  title: Kusanya service API
   version: 0.0.0
   description: >-
-    Health probes only. No tenant, authentication or OpenRosa API is implemented.
+    Operational probes and the mounted tenant-bound administrator publication
+    surface. Collector, submission and OpenRosa APIs are not implemented.
     Request parsing errors retain integer 4xx HTTP statuses (including 400, 413
     and 415) with only {"error":"Request rejected"}. Other unhandled errors
     return 500 with only {"error":"Internal server error"}. Error responses
@@ -80,3 +81,208 @@ paths:
           headers:
             Cache-Control:
               schema: { type: string, const: no-store }
+  /api/admin/session/login:
+    post:
+      operationId: createAdministratorSession
+      summary: Exchange one verified OIDC API access token for an opaque administrator session
+      security: [{ oidcAccessToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      responses:
+        '204':
+          description: Session issued; response body is empty
+          headers:
+            Set-Cookie:
+              description: Secure HttpOnly host-only SameSite=Lax administrator session
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string, const: no-store }
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/admin/session/csrf:
+    post:
+      operationId: getAdministratorCsrf
+      summary: Return the CSRF value derived from one live administrator session
+      security: [{ administratorSession: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      responses:
+        '200':
+          description: Session-derived CSRF value
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [csrfToken]
+                properties:
+                  csrfToken: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/admin/session/logout:
+    post:
+      operationId: revokeAdministratorSession
+      summary: Revoke the live session before clearing its host-only cookie
+      security: [{ administratorSession: [], csrfToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      responses:
+        '204':
+          description: Session revoked and cookie expired; response body is empty
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string, const: no-store }
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Rejected' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/admin/salesforce/publications:
+    post:
+      operationId: publishSalesforceDefinition
+      summary: Publish one tenant-bound Salesforce Form Version
+      security: [{ administratorSession: [], csrfToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [formVersionId]
+              properties:
+                formVersionId:
+                  type: string
+                  pattern: '^[A-Za-z0-9]{15}([A-Za-z0-9]{3})?$'
+      responses:
+        '200':
+          description: Publication committed or already committed
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Rejected' }
+        '409':
+          description: Partial or unresolved outcome requiring reconciliation
+        '422':
+          description: Publication rejected with bounded diagnostics
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/admin/salesforce/publication-attempts:
+    get:
+      operationId: listPublicationAttempts
+      summary: List the newest 100 tenant-scoped publication attempts read-only
+      security: [{ administratorSession: [], csrfToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      responses:
+        '200':
+          description: Least-data operator presentation
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [attempts]
+                properties:
+                  attempts:
+                    type: array
+                    maxItems: 100
+                    items:
+                      $ref: '#/components/schemas/PublicationAttemptSummary'
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Rejected' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+components:
+  securitySchemes:
+    oidcAccessToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Short-lived access token issued for the Kusanya API; never persisted
+    administratorSession:
+      type: apiKey
+      in: cookie
+      name: __Host-kusanya_admin_session
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+  parameters:
+    ExactOrigin:
+      name: Origin
+      in: header
+      required: true
+      schema: { type: string, format: uri }
+      description: Must exactly equal the configured HTTPS application origin
+  responses:
+    Rejected:
+      description: Request rejected without reflecting supplied data
+      headers:
+        Cache-Control:
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/FixedError' }
+    AuthenticationRequired:
+      description: A live administrator session is required
+      headers:
+        Cache-Control:
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/FixedError' }
+    Unavailable:
+      description: Operation unavailable without internal details
+      headers:
+        Cache-Control:
+          schema: { type: string, const: no-store }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/FixedError' }
+  schemas:
+    FixedError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: { type: string }
+    PublicationAttemptSummary:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          attemptId,
+          formVersionId,
+          operatorStatus,
+          startedAt,
+          completedAt,
+          reconciledAt,
+        ]
+      properties:
+        attemptId: { type: string, format: uuid }
+        formVersionId: { type: string }
+        operatorStatus:
+          type: string
+          enum:
+            - human_judgement_required_unresolved
+            - human_judgement_required_indeterminate
+            - published
+            - rejected
+            - published_confirmed
+            - unlinked_artifacts_confirmed
+            - artifacts_missing_confirmed
+        startedAt: { type: string, format: date-time }
+        completedAt:
+          anyOf: [{ type: string, format: date-time }, { type: 'null' }]
+        reconciledAt:
+          anyOf: [{ type: string, format: date-time }, { type: 'null' }]

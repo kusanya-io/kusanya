@@ -18,8 +18,9 @@
     "test:integration": "npm run build && node --test \"dist/test/integration/*.test.js\""
   },
   "dependencies": {
-    "fastify": "5.12.3",
+    "fastify": "5.12.7",
     "fflate": "0.8.3",
+    "jose": "6.2.12",
     "pg": "8.23.0",
     "saxes": "6.0.0"
   },

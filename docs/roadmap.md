@@ -327,8 +327,8 @@ Deployment secret wiring, disconnect/rebind, final publisher composition and the
 publish CLI remain under note 34; note 39 remains open, and no C10 or Phase 1
 completion claim is made.
 
-The trusted-administrator route contract (ADR 0041) adds a Fastify adapter without
-mounting it. An injected verifier turns only an opaque host cookie into the immutable
+The trusted-administrator route contract (ADR 0041) adds a Fastify adapter. An
+injected verifier turns only an opaque host cookie into the immutable
 actor/tenant/org context; exact-origin CSRF protects start, and a separate HMAC
 cookie binds callback state to the initiating browser. Forged tenant headers cannot
 select a connection. The signed provider response now authenticates before org
@@ -343,10 +343,9 @@ session, closing note 95. ADR 0043 makes org, authorization origin and namespace
 single immutable tenant tuple shared by approved actors, aligns namespace validation
 at provisioning and routing, and serializes conflicting provisioning without residue,
 closing notes 96 and 97. ADR 0044 adds secure cookie/login/logout composition and
-closes note 94 by rejecting hosts with automatic request logging. The external
-identity verifier and stable actor mapping, approved provisioning interface,
-deployment secret wiring, privileged disconnect and rebind, final publisher
-composition and publish CLI remain. ADR 0045 commits the encrypted connection and an
+closes note 94 by rejecting hosts with automatic request logging. Privileged
+disconnect and rebind, self-service provisioning and the publish CLI remain. ADR
+0045 commits the encrypted connection and an
 append-only trusted-actor/Salesforce-`005` audit in one transaction, preserves prior
 reauthorizations, and rolls back both writes for an unbound actor. It also centralizes
 the authenticated-context decoder, closing note 98, while documenting note 99's
@@ -364,7 +363,7 @@ sharing and metadata are unchanged. Note 34 remains open for operator provisioni
 deployment wiring, external identity, privileged connection lifecycle and the
 publish CLI; note 39 remains open, and no C10 or Phase 1 completion claim is made.
 
-ADR 0047 adds the unmounted administrator publish route and PostgreSQL attempt
+ADR 0047 adds the administrator publish route and PostgreSQL attempt
 ledger. A live session and same-origin CSRF token are the only operator authority;
 request data cannot select a tenant. Every attempt is written before OAuth and
 transitions once to succeeded, failed or partial. Partial rows retain the exact
@@ -385,5 +384,8 @@ ADR 0049 adds the corresponding read-only operator presentation boundary. A live
 administrator session plus exact origin and CSRF may read only the newest 100
 tenant-scoped attempt summaries. Fixed wording keeps unresolved and indeterminate
 outcomes as human-judgement states rather than failures or pending work. The adapter
-cannot reconcile, retry, publish, retain or delete and remains unmounted pending the
-approved deployment composition. Retention and operator actions remain later units.
+cannot reconcile, retry, publish, retain or delete. ADR 0050 selects provider-neutral
+OIDC with Microsoft Entra ID first, derives the stable actor only from a verified
+Kusanya-API access token's exact issuer and subject, and mounts session, publication
+and presentation in `app.ts`/`main.ts`. Retention, operator UI, self-service
+provisioning, connection lifecycle and the CLI remain later units.

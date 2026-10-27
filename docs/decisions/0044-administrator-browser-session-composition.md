@@ -1,6 +1,6 @@
 # ADR 0044: Administrator browser session composition and logging guard
 
-- Status: Accepted; verified in PR #81
+- Status: Accepted; verified in PR #81, mounted by ADR 0050
 - Date: 2026-10-20
 - Brief sections: C1.3a, C2, C8, C11 Phase 1
 - Decision owner: Cobitech Solutions
@@ -21,8 +21,8 @@ default request logger includes the callback URL, which contains the one-time OA
 code and state. Documentation cannot make that host property travel with the
 adapter.
 
-The external administrator identity provider is still undecided. This unit must not
-choose one or turn a request header into identity.
+At the time of this decision the external administrator identity provider was still
+undecided. ADR 0050 records Bill's later OIDC/Entra decision and mounts this adapter.
 
 ## Decision
 
@@ -38,8 +38,8 @@ random session. It never accepts an actor or tenant identifier from request data
 Successful login returns no CSRF value or identity data. It sets only
 `__Host-kusanya_admin_session` with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`,
 an explicit bounded `Max-Age`, and no `Domain`. Any old browser value is replaced;
-failed login expires it. The adapter remains unmounted until Bill selects and reviews
-the external identity verifier and deployment secret wiring.
+failed login expires it. The adapter remained unmounted until ADR 0050 recorded
+Bill's OIDC selection and supplied the reviewed deployment-secret wiring.
 
 ### Bootstrap CSRF only through a live same-origin session
 
@@ -70,7 +70,8 @@ actual installed log controller and requires its own non-accessor
 one with logging output disabled only for a test, is rejected with the fixed
 `HTTP_LOGGING_CONFIGURATION` error before any route exists.
 
-The guard deliberately depends on the installed Fastify 5.12.3 controller shape.
+The guard deliberately depends on the installed Fastify controller shape. It was
+first verified on 5.12.3 and is re-proved on the security-patched 5.12.7 in ADR 0050.
 That makes a framework upgrade fail closed rather than silently weakening the logging
 boundary; every Fastify upgrade must re-prove the controller inspection and both
 default-host refusal tests.
@@ -102,7 +103,7 @@ consequence from note 99 without choosing the provider.
 
 ## Revisit when
 
-Bill selects the external identity provider, especially one requiring a form-post
-assertion, the routes are mounted, session-secret
+The selected identity provider changes, especially to one requiring a form-post
+assertion, session-secret
 rotation is operationalized, multiple sessions per actor are needed, or a separate
 HTTP host is introduced.

@@ -1,6 +1,10 @@
 import Fastify, { LogController } from 'fastify';
 import type { Config } from './config.js';
 import type { Database } from './database.js';
+import {
+  registerPublicationSurface,
+  type PublicationSurfaceDependencies,
+} from './publication-surface.js';
 
 const statusSchema = (status: string) => ({
   type: 'object',
@@ -10,7 +14,12 @@ const statusSchema = (status: string) => ({
 });
 
 /** Construct the HTTP service without opening a socket, enabling isolated tests. */
-export function createApp(config: Config, database: Database, logging = true) {
+export function createApp(
+  config: Config,
+  database: Database,
+  logging = true,
+  publicationSurface?: PublicationSurfaceDependencies,
+) {
   const app = Fastify({
     logger: logging
       ? {
@@ -81,5 +90,7 @@ export function createApp(config: Config, database: Database, logging = true) {
       }
     },
   );
+  if (publicationSurface !== undefined)
+    registerPublicationSurface(app, publicationSurface);
   return app;
 }

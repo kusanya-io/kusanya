@@ -39,9 +39,10 @@ the verified session. Missing/invalid sessions return a fixed 401; origin, CSRF 
 request-shape refusals reveal no context. The external origin must exactly own the
 configured callback URL before routes can register.
 
-This is a composition contract, not an identity provider. `main.ts` does not mount
-these routes. A later unit must implement the session issuer/verifier and tenant
-provisioning, wire deployment secrets, and then register the adapter. It may not
+This began as a composition contract, not an identity provider. ADR 0050 later
+selects OIDC, wires the session issuer/verifier and mounts the approved publication
+surface; the separate Salesforce connection adapter remains outside that surface.
+The composition may not
 derive context from a reverse-proxy header unless that header has a separately
 reviewed, cryptographically authenticated boundary.
 

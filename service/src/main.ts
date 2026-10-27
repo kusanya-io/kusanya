@@ -1,13 +1,44 @@
 import { createApp } from './app.js';
 import { ConfigurationError, readConfig } from './config.js';
-import { createDatabase } from './database.js';
+import { createPostgresPool, createQueryExecutor } from './database.js';
+import { createOdkValidateValidator } from './publication/odk-validate.js';
+import { PublicationAttemptStore } from './publication/publication-attempt-store.js';
+import { readPublicationSurfaceRuntimeConfig } from './runtime-config.js';
+import { AdministratorSessionStore } from './tenant/administrator-session.js';
+import { TenantConnectionStore } from './tenant/connection-store.js';
+import { createAdministratorOidcLoginVerifier } from './tenant/oidc-login.js';
 
 async function main(): Promise<void> {
   const config = readConfig();
-  const database = createDatabase(config, () => {
+  const runtime = readPublicationSurfaceRuntimeConfig();
+  const verifyLoginRequest = createAdministratorOidcLoginVerifier(runtime.oidc);
+  const pool = createPostgresPool(config, () => {
     process.stderr.write('Database connection became unavailable\n');
   });
-  const app = createApp(config, database);
+  const database = {
+    async ping() {
+      await pool.query('SELECT 1');
+    },
+    async close() {
+      await pool.end();
+    },
+  };
+  const executor = createQueryExecutor(pool);
+  const sessionStore = new AdministratorSessionStore(executor);
+  const attemptStore = new PublicationAttemptStore(executor);
+  const app = createApp(config, database, true, {
+    verifyLoginRequest,
+    sessionStore,
+    sessionConfiguration: runtime.session,
+    connectionStore: new TenantConnectionStore(
+      executor,
+      runtime.credentialVault,
+    ),
+    attemptStore,
+    publisherConfiguration: runtime.publisher,
+    validateXForm: createOdkValidateValidator(runtime.validator),
+    externalOrigin: runtime.externalOrigin,
+  });
   let closing = false;
   const shutdown = async (): Promise<void> => {
     if (closing) return;
