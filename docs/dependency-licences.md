@@ -189,7 +189,7 @@ Includes runtime, development and optional platform packages. Preserve upstream 
 | service       | atomic-sleep                                    | 1.0.0   | MIT                       |
 | service       | avvio                                           | 9.3.0   | MIT                       |
 | service       | balanced-match                                  | 4.0.4   | MIT                       |
-| service       | brace-expansion                                 | 5.0.9   | MIT                       |
+| service       | brace-expansion                                 | 5.0.12  | MIT                       |
 | service       | cacheable                                       | 2.5.0   | MIT                       |
 | service       | cookie                                          | 1.1.1   | MIT                       |
 | service       | cross-spawn                                     | 7.0.6   | MIT                       |
@@ -212,11 +212,11 @@ Includes runtime, development and optional platform packages. Preserve upstream 
 | service       | fast-json-stringify                             | 7.0.1   | MIT                       |
 | service       | fast-levenshtein                                | 2.0.6   | MIT                       |
 | service       | fast-querystring                                | 1.1.2   | MIT                       |
-| service       | fast-uri                                        | 3.1.7   | BSD-3-Clause              |
-| service       | fast-uri                                        | 3.1.7   | BSD-3-Clause              |
-| service       | fast-uri                                        | 3.1.7   | BSD-3-Clause              |
-| service       | fast-uri                                        | 4.1.4   | BSD-3-Clause              |
-| service       | fastify                                         | 5.12.3  | MIT                       |
+| service       | fast-uri                                        | 3.1.9   | BSD-3-Clause              |
+| service       | fast-uri                                        | 3.1.9   | BSD-3-Clause              |
+| service       | fast-uri                                        | 3.1.9   | BSD-3-Clause              |
+| service       | fast-uri                                        | 4.2.3   | BSD-3-Clause              |
+| service       | fastify                                         | 5.12.7  | MIT                       |
 | service       | fastq                                           | 1.20.3  | ISC                       |
 | service       | fdir                                            | 6.5.0   | MIT                       |
 | service       | fflate                                          | 0.8.3   | MIT                       |
@@ -236,6 +236,7 @@ Includes runtime, development and optional platform packages. Preserve upstream 
 | service       | is-extglob                                      | 2.1.1   | MIT                       |
 | service       | is-glob                                         | 4.0.3   | MIT                       |
 | service       | isexe                                           | 2.0.0   | ISC                       |
+| service       | jose                                            | 6.2.12  | MIT                       |
 | service       | json-schema-ref-resolver                        | 3.0.0   | MIT                       |
 | service       | json-schema-traverse                            | 0.4.1   | MIT                       |
 | service       | json-schema-traverse                            | 1.0.0   | MIT                       |

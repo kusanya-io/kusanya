@@ -18,22 +18,21 @@ transport ignores its abort signal. ADR 0040 adds the internal one-time OAuth st
 and callback protocol. ADR 0041 adds an unmounted HTTP adapter with an injected
 trusted-session contract, same-origin CSRF and browser-bound callback state. ADR 0042
 adds the internal opaque session issuer, live revocation and immutable actor-to-tenant
-provisioning. A concrete external identity verifier, approved provisioning workflow,
-deployment wiring, final publisher composition and the publish CLI remain. ADR 0044
-adds the unmounted browser login/CSRF/logout composition and makes hardened request
-logging a runtime prerequisite for both administrator adapters.
-ADR 0047 adds an unmounted, live-session and same-origin-CSRF administrator publish
+provisioning. ADR 0044 adds the browser login/CSRF/logout composition and makes
+hardened request logging a runtime prerequisite for administrator adapters.
+ADR 0047 adds a live-session and same-origin-CSRF administrator publish
 adapter plus a durable tenant-scoped attempt ledger. A partial Salesforce commit is
 surfaced distinctly and stores the exact uploaded artifact identities for future
-reconciliation; interrupted attempts remain unresolved. `main.ts` does not mount
-the route until external identity and deployment-secret wiring are approved.
+reconciliation; interrupted attempts remain unresolved.
 ADR 0048 adds an internal read-only reconciler for those attempt rows. It records
 indeterminate, committed, unlinked or artifacts-missing evidence through a one-way
 tenant-scoped transition. It cannot publish, upload or delete and exposes no route.
-ADR 0049 adds an unmounted, read-only administrator listing adapter. It returns a
+ADR 0049 adds a read-only administrator listing adapter. It returns a
 bounded least-data attempt summary under the same live-session, exact-origin and
 CSRF controls. Unresolved and indeterminate attempts explicitly require human
-judgement; the adapter cannot reconcile, retry, publish or delete.
+judgement; the adapter cannot reconcile, retry, publish or delete. ADR 0050 records
+Bill's OIDC/Entra identity decision and mounts login, CSRF, logout, publication and
+attempt presentation as one fail-closed production composition.
 
 Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.
 It has no HTTP route, Salesforce access or publishing authority. See
@@ -152,6 +151,16 @@ no row still names it, then remove it. These settings are consumed by the intern
 vault, not accepted from requests, and no key belongs in PostgreSQL or `.env` under
 version control.
 
+The mounted administrator surface also requires `ADMIN_EXTERNAL_ORIGIN`, the exact
+HTTPS origin; `ADMIN_OIDC_ISSUER`, `ADMIN_OIDC_AUDIENCE` and
+`ADMIN_OIDC_JWKS_URI`; canonical 32-byte `ADMIN_SESSION_SECRET` and bounded
+`ADMIN_SESSION_TTL_SECONDS`; `SALESFORCE_OAUTH_CLIENT_ID` and
+`SALESFORCE_OAUTH_CLIENT_SECRET`; all three bounded Salesforce timeout settings;
+and absolute `ODK_VALIDATE_JAVA_EXECUTABLE` and `ODK_VALIDATE_JAR_PATH` values.
+There are no development fallbacks. Missing or malformed values stop `main.ts`
+before it opens PostgreSQL. The committed `.env.example` names every setting but
+contains placeholders only.
+
 The internal ADR 0040 authorization boundary creates a short-lived Salesforce
 authorization URL and completes its callback. ADR 0041 adds an unmounted HTTP route
 adapter that can be registered only with a concrete trusted administrator-session
@@ -188,11 +197,13 @@ registration unless the host's actual Fastify log controller disables automatic
 request logging, so callback codes, state and cookies cannot enter default request
 logs (note 94).
 
-`main.ts` does not register these routes yet. The external administrator identity
-verifier, approved provisioning workflow and deployment secret wiring remain
-required; the health-only OpenAPI description therefore stays accurate. The login
-route's empty query/body contract also excludes SAML HTTP POST binding and OIDC
-`form_post` unless a later reviewed provider composition changes the route.
+`main.ts` registers these routes only after every ADR 0050 setting validates. The
+browser obtains a short-lived access token for the Kusanya API through an OIDC
+Authorization Code plus PKCE client and sends it only in the redacted Authorization
+header of the empty-body login POST. The service validates RS256 signature, exact
+issuer and audience, time bounds and subject through pinned `jose`, derives the
+stable actor from issuer plus subject, and persists no identity-provider token. A
+missing immutable actor/tenant provisioning row still refuses session issuance.
 
 ## Salesforce namespace configuration
 

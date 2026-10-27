@@ -16,14 +16,14 @@ row would conceal that uncertainty.
 
 ## Decision
 
-Add an unmounted, hardened `POST /api/admin/salesforce/publications` adapter. It
+Add a hardened `POST /api/admin/salesforce/publications` adapter. It
 accepts exactly one Form Version ID. Tenant, actor, expected org, authorization
 origin and namespace come only from the live opaque administrator session. The
 route requires the exact configured origin and session-derived CSRF token; request
 query, tenant headers and body fields cannot select a tenant. Registration refuses
-a host whose automatic request logging could serialize URLs or cookies. Production
-remains health-only until external identity and deployment-secret composition is
-separately approved.
+a host whose automatic request logging could serialize URLs or cookies. ADR 0050
+later supplies the separately approved external identity and deployment-secret
+composition and mounts this adapter without changing its authority.
 
 Migration `0006_publication_attempts` adds one tenant- and actor-bound attempt row.
 The route inserts `started` before OAuth. A one-way, same-tenant conditional update

@@ -89,13 +89,13 @@ inspects raw rows for token absence, races two issuances to one active digest, a
 measures replacement, conflict, expiry and revocation against the real database.
 
 This advances note 34 but does not close it. ADR 0045 adds the atomic audit tying the
-trusted actor to Salesforce's validated `005` user. The external identity verifier
-and its stable actor mapping, approved provisioning interface, deployment secret wiring, privileged
-disconnect/rebind, final publisher composition and publish CLI remain. ADR 0044 adds
+trusted actor to Salesforce's validated `005` user. ADR 0050 later supplies OIDC
+identity, stable actor mapping and deployment wiring. Approved self-service
+provisioning, privileged disconnect/rebind and the publish CLI remain. ADR 0044 adds
 the secure cookie/login/logout adapter and closes note 94 with a runtime hardened-host
-registration check. Nothing is mounted in `main.ts`; OpenAPI remains health-only. No
-live Salesforce grant, C10 acceptance test, publish-ready state or Phase 1 completion
-is claimed.
+registration check; ADR 0050 later mounts the publication surface and updates
+OpenAPI. No live Salesforce grant, C10 acceptance test, publish-ready state or Phase
+1 completion was claimed by this decision.
 
 ## Revisit when
 

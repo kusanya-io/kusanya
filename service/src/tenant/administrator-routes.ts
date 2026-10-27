@@ -7,7 +7,11 @@ import type {
   AdministratorSessionConfiguration,
   AdministratorSessionStore,
 } from './administrator-session.js';
-import { decodeTrustedAdministratorContext } from './administrator-session.js';
+import {
+  AdministratorSessionError,
+  decodeTrustedAdministratorContext,
+} from './administrator-session.js';
+import { AdministratorOidcError } from './oidc-login.js';
 
 const loginPath = '/api/admin/session/login';
 const csrfPath = '/api/admin/session/csrf';
@@ -135,6 +139,15 @@ function sameOrigin(request: FastifyRequest, origin: string): boolean {
   return request.headers.origin === origin;
 }
 
+function isLoginRejection(error: unknown): boolean {
+  return (
+    error instanceof AdministratorHttpInputError ||
+    error instanceof AdministratorOidcError ||
+    (error instanceof AdministratorSessionError &&
+      error.code === 'ADMINISTRATOR_SESSION_ABSENT')
+  );
+}
+
 /** Register only on the hardened Kusanya host and behind a trusted login verifier. */
 export function registerAdministratorSessionRoutes(
   app: FastifyInstance,
@@ -162,15 +175,11 @@ export function registerAdministratorSessionRoutes(
       );
       return reply.code(204).send();
     } catch (error) {
+      const rejected = isLoginRejection(error);
       reply.header('Set-Cookie', clearSessionCookie());
-      return reply
-        .code(error instanceof AdministratorHttpInputError ? 401 : 503)
-        .send({
-          error:
-            error instanceof AdministratorHttpInputError
-              ? 'Authentication required'
-              : 'Login unavailable',
-        });
+      return reply.code(rejected ? 401 : 503).send({
+        error: rejected ? 'Authentication required' : 'Login unavailable',
+      });
     }
   });
 
