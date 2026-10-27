@@ -12,6 +12,13 @@ export interface AdministratorOidcConfiguration {
   readonly jwksUri: string;
 }
 
+export interface AdministratorOidcIdentity {
+  readonly verifyLoginRequest: (
+    request: FastifyRequest,
+  ) => Promise<{ readonly actorId: string }>;
+  readonly actorIdForSubject: (subject: string) => string;
+}
+
 export class AdministratorOidcError extends Error {
   constructor() {
     super('ADMINISTRATOR_OIDC_AUTHENTICATION');
@@ -126,25 +133,35 @@ export async function verifyAdministratorOidcToken(
 }
 
 /** Create the injected verifier consumed by the reviewed administrator login route. */
-export function createAdministratorOidcLoginVerifier(
+export function createAdministratorOidcIdentity(
   configuration: AdministratorOidcConfiguration,
-): (request: FastifyRequest) => Promise<{ readonly actorId: string }> {
+): AdministratorOidcIdentity {
   const decoded = decodeConfiguration(configuration);
   const key = createRemoteJWKSet(decoded.jwksUri, {
     timeoutDuration: 3_000,
     cooldownDuration: 30_000,
     cacheMaxAge: 600_000,
   });
-  return async (request) =>
-    await verifyAdministratorOidcToken(
-      bearerToken(request),
-      {
-        issuer: decoded.issuer,
-        audience: decoded.audience,
-        jwksUri: decoded.jwksUri.href,
-      },
-      key,
-    );
+  return Object.freeze({
+    verifyLoginRequest: async (request: FastifyRequest) =>
+      await verifyAdministratorOidcToken(
+        bearerToken(request),
+        {
+          issuer: decoded.issuer,
+          audience: decoded.audience,
+          jwksUri: decoded.jwksUri.href,
+        },
+        key,
+      ),
+    actorIdForSubject: (subject: string) => actorId(decoded.issuer, subject),
+  });
+}
+
+/** Backwards-compatible verifier factory for adapters that need login only. */
+export function createAdministratorOidcLoginVerifier(
+  configuration: AdministratorOidcConfiguration,
+): (request: FastifyRequest) => Promise<{ readonly actorId: string }> {
+  return createAdministratorOidcIdentity(configuration).verifyLoginRequest;
 }
 
 /** Stable provisioning key for an already verified issuer/subject pair. */

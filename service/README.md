@@ -1,9 +1,10 @@
 # Kusanya service
 
-Phase 0 supplies an operational scaffold: TypeScript on Node.js 24, Fastify 5,
-and PostgreSQL 17. Tenant authentication, OpenRosa, submission storage, Salesforce
-mapping and the durable queue belong to later phases. No collector Salesforce
-account is created or required. See the architecture and ADRs in `../docs/`.
+Phase 0 supplied an operational scaffold: TypeScript on Node.js 24, Fastify 5,
+and PostgreSQL 17. Collector authentication, OpenRosa, submission storage,
+Salesforce mapping execution and the durable queue belong to later phases. No
+collector Salesforce account is created or required. See the architecture and ADRs
+in `../docs/`.
 
 ADR 0038 adds a service-internal tenant connection vault and the first product
 table. It stores one normalized Salesforce org binding per tenant and only an
@@ -33,6 +34,15 @@ CSRF controls. Unresolved and indeterminate attempts explicitly require human
 judgement; the adapter cannot reconcile, retry, publish or delete. ADR 0050 records
 Bill's OIDC/Entra identity decision and mounts login, CSRF, logout, publication and
 attempt presentation as one fail-closed production composition.
+ADR 0052 adds `GET /admin`, a dependency-free static operator shell over those APIs,
+plus same-tenant administrator enrolment and keyset pagination. The shell embeds no
+tenant data, uses no external assets or browser storage, clears the short-lived login
+token immediately and renders API data only as text under a hash-pinned CSP. The
+enrolment request accepts only an OIDC subject; issuer-derived actor identity and the
+live session's immutable tenant tuple feed the existing provisioning store. Attempt
+pages stay capped at 100, repeat the full tenant authorization join and expose only
+an opaque continuation cursor. Initial tenant bootstrap and privileged connection
+lifecycle remain operator/deployment work outside these routes.
 
 Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.
 It has no HTTP route, Salesforce access or publishing authority. See

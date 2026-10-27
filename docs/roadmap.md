@@ -389,3 +389,12 @@ OIDC with Microsoft Entra ID first, derives the stable actor only from a verifie
 Kusanya-API access token's exact issuer and subject, and mounts session, publication
 and presentation in `app.ts`/`main.ts`. Retention, operator UI, self-service
 provisioning, connection lifecycle and the CLI remain later units.
+
+ADR 0052 adds the first self-contained operator interface, same-tenant administrator
+enrolment and bounded keyset pagination. Authority still comes only from a live
+session, exact origin and its derived CSRF value. An enrolment supplies only the OIDC
+subject; the configured issuer derives the actor and the live immutable tuple selects
+the tenant. A cursor can continue the least-data view but cannot select another
+tenant. Initial bootstrap, retention/deletion, scheduled reconciliation, privileged
+retry, disconnect/rebind and the publish CLI remain under note 34. Note 39 remains
+open, and no C10 or Phase 1 completion claim is made.

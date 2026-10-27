@@ -1,25 +1,28 @@
 /** Production composition root for the mounted administrator publication surface. */
 import { types } from 'node:util';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { requireHardenedRequestLogging } from './http-security.js';
+import { registerOperatorInterfaceRoutes } from './operator-interface-routes.js';
 import { registerPublicationAttemptPresentationRoutes } from './publication/publication-attempt-presentation-routes.js';
 import type { PublicationAttemptStore } from './publication/publication-attempt-store.js';
 import { registerPublicationRoutes } from './publication/publication-routes.js';
 import type { TenantSalesforcePublisherConfiguration } from './publication/tenant-salesforce-publisher.js';
 import type { ValidateXForm } from './publication/odk-validate.js';
 import { registerAdministratorSessionRoutes } from './tenant/administrator-routes.js';
+import { registerAdministratorProvisioningRoutes } from './tenant/administrator-provisioning-routes.js';
 import type {
   AdministratorSessionConfiguration,
   AdministratorSessionStore,
 } from './tenant/administrator-session.js';
 import { AdministratorSessionError } from './tenant/administrator-session.js';
+import type { AdministratorOidcIdentity } from './tenant/oidc-login.js';
 import type { TenantConnectionSessionStore } from './tenant/salesforce-session.js';
 
 export interface PublicationSurfaceDependencies {
-  readonly verifyLoginRequest: (request: FastifyRequest) => Promise<unknown>;
+  readonly administratorIdentity: AdministratorOidcIdentity;
   readonly sessionStore: Pick<
     AdministratorSessionStore,
-    'issue' | 'authenticate' | 'revoke'
+    'issue' | 'authenticate' | 'revoke' | 'provision'
   >;
   readonly sessionConfiguration: AdministratorSessionConfiguration;
   readonly connectionStore: TenantConnectionSessionStore;
@@ -61,6 +64,7 @@ function checkedDependencies(
 ): PublicationSurfaceDependencies {
   const decoded = ownDataRecord(value);
   const keys = [
+    'administratorIdentity',
     'attemptStore',
     'connectionStore',
     'externalOrigin',
@@ -68,18 +72,24 @@ function checkedDependencies(
     'sessionConfiguration',
     'sessionStore',
     'validateXForm',
-    'verifyLoginRequest',
   ];
   if (Object.keys(decoded).sort().join(',') !== keys.join(','))
     throw new Error('PUBLICATION_SURFACE_CONFIGURATION');
   if (
-    typeof decoded.verifyLoginRequest !== 'function' ||
     typeof decoded.validateXForm !== 'function' ||
     typeof decoded.externalOrigin !== 'string'
   )
     throw new Error('PUBLICATION_SURFACE_CONFIGURATION');
+  const identity = ownDataRecord(decoded.administratorIdentity);
+  if (
+    Object.keys(identity).sort().join(',') !==
+      ['actorIdForSubject', 'verifyLoginRequest'].join(',') ||
+    typeof identity.verifyLoginRequest !== 'function' ||
+    typeof identity.actorIdForSubject !== 'function'
+  )
+    throw new Error('PUBLICATION_SURFACE_CONFIGURATION');
   for (const [store, methods] of [
-    [decoded.sessionStore, ['issue', 'authenticate', 'revoke']],
+    [decoded.sessionStore, ['issue', 'authenticate', 'provision', 'revoke']],
     [decoded.connectionStore, ['withRefreshLock']],
     [decoded.attemptStore, ['start', 'complete', 'listForOperator']],
   ] as const) {
@@ -118,9 +128,15 @@ export function registerPublicationSurface(
   // Session issuance is registered first; every protected adapter receives only
   // the single live-session resolver constructed above.
   registerAdministratorSessionRoutes(app, {
-    verifyLoginRequest: dependencies.verifyLoginRequest,
+    verifyLoginRequest: dependencies.administratorIdentity.verifyLoginRequest,
     sessionStore: dependencies.sessionStore,
     sessionConfiguration: dependencies.sessionConfiguration,
+    externalOrigin: dependencies.externalOrigin,
+  });
+  registerAdministratorProvisioningRoutes(app, {
+    authenticateAdministrator,
+    actorIdForSubject: dependencies.administratorIdentity.actorIdForSubject,
+    sessionStore: dependencies.sessionStore,
     externalOrigin: dependencies.externalOrigin,
   });
   registerPublicationRoutes(app, {
@@ -136,4 +152,5 @@ export function registerPublicationSurface(
     attemptStore: dependencies.attemptStore,
     externalOrigin: dependencies.externalOrigin,
   });
+  registerOperatorInterfaceRoutes(app);
 }

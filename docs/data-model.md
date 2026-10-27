@@ -245,6 +245,14 @@ actor/tenant provisioning tuple. Its operator projection deliberately excludes
 credentials, provider data, actor/org identifiers, digests, ContentVersion IDs,
 failure codes and request counts. Unresolved and indeterminate rows are labelled as
 requiring human judgement, never as failed, pending or retryable.
+ADR 0052 continues that same ordered projection with an opaque keyset cursor made
+from the exact microsecond `created_at` value and attempt UUID. Every page rechecks
+the live actor and immutable tenant/org/origin/namespace tuple; the cursor contains
+no tenant and is never authority. The fixed page size remains 100. The new
+same-tenant enrolment route creates no table: it derives an actor from the configured
+OIDC issuer and subject, then reuses ADR 0043's serializable provisioning operation
+with the current session's complete tuple. It cannot create the initial tenant or
+move an existing actor.
 
 ADR 0045 adds append-only `tenant_salesforce_authorization_audits`. Each successful
 grant records the tenant, its bound trusted administrator actor, normalized `00D`

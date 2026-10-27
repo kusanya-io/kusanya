@@ -21,6 +21,10 @@ import {
 } from '../../src/tenant/salesforce-session.js';
 import { AdministratorSessionStore } from '../../src/tenant/administrator-session.js';
 import {
+  administratorProvisioningRoutePaths,
+  registerAdministratorProvisioningRoutes,
+} from '../../src/tenant/administrator-provisioning-routes.js';
+import {
   administratorSessionRoutePaths,
   registerAdministratorSessionRoutes,
 } from '../../src/tenant/administrator-routes.js';
@@ -160,11 +164,11 @@ void test(
     const tenantView = await store.listForOperator(trusted);
     const otherTenantView = await store.listForOperator(otherTrusted);
     assert.deepEqual(
-      tenantView.map((attempt) => attempt.attemptId),
+      tenantView.attempts.map((attempt) => attempt.attemptId),
       [attemptId],
     );
     assert.deepEqual(
-      otherTenantView.map((attempt) => ({
+      otherTenantView.attempts.map((attempt) => ({
         attemptId: attempt.attemptId,
         formVersionId: attempt.formVersionId,
         operatorStatus: attempt.operatorStatus,
@@ -177,6 +181,44 @@ void test(
         },
       ],
     );
+    const pageAttemptIds = Array.from({ length: 101 }, () => randomUUID());
+    await pool.query(
+      `UPDATE tenant_publication_attempts
+       SET created_at = clock_timestamp() - interval '1 day'
+       WHERE publication_attempt_id = $1`,
+      [attemptId],
+    );
+    await pool.query(
+      `INSERT INTO tenant_publication_attempts (
+         publication_attempt_id, tenant_id, actor_id, salesforce_org_id,
+         form_version_id, created_at
+       )
+       SELECT generated.attempt_id, $2, $3, $4,
+              'a0B000000000003AAA',
+              statement_timestamp() - generated.ordinal * interval '1 microsecond'
+       FROM unnest($1::uuid[]) WITH ORDINALITY
+         AS generated(attempt_id, ordinal)`,
+      [pageAttemptIds, tenantId, actorId, orgId],
+    );
+    const firstPage = await store.listForOperator(trusted);
+    assert.equal(firstPage.attempts.length, 100);
+    assert.ok(firstPage.nextCursor);
+    const secondPage = await store.listForOperator(
+      trusted,
+      firstPage.nextCursor,
+    );
+    assert.equal(secondPage.attempts.length, 2);
+    assert.equal(secondPage.nextCursor, null);
+    const pagedIds = [
+      ...firstPage.attempts.map((attempt) => attempt.attemptId),
+      ...secondPage.attempts.map((attempt) => attempt.attemptId),
+    ];
+    assert.equal(new Set(pagedIds).size, 102);
+    assert.deepEqual(
+      new Set(pagedIds),
+      new Set([attemptId, ...pageAttemptIds]),
+    );
+    assert.equal(pagedIds.includes(otherAttemptId), false);
     await assert.rejects(
       store.loadReconcilable(
         {
@@ -1141,6 +1183,8 @@ void test(
     const actorId = `administrator:${randomUUID()}`;
     const secondActorId = `administrator:${randomUUID()}`;
     const conflictActorId = `administrator:${randomUUID()}`;
+    const otherBoundActorId = `administrator:${randomUUID()}`;
+    const enrolledActorId = `administrator:${randomUUID()}`;
     const raceActorIds = [
       `administrator:${randomUUID()}`,
       `administrator:${randomUUID()}`,
@@ -1150,7 +1194,16 @@ void test(
         await pool.query(
           `DELETE FROM tenant_administrator_bindings
            WHERE actor_id = ANY($1::varchar[])`,
-          [[actorId, secondActorId, conflictActorId, ...raceActorIds]],
+          [
+            [
+              actorId,
+              secondActorId,
+              conflictActorId,
+              otherBoundActorId,
+              enrolledActorId,
+              ...raceActorIds,
+            ],
+          ],
         );
         await pool.query(
           `DELETE FROM tenant_administrator_tenants
@@ -1188,6 +1241,7 @@ void test(
     });
     const orgStem = `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`;
     const orgId = normalizeSalesforceOrgId(orgStem);
+    const otherBoundOrgId = normalizeSalesforceOrgId('00D000000000003');
     const provisioned = Object.freeze({
       actorId,
       tenantId,
@@ -1216,6 +1270,12 @@ void test(
       ).rows[0]?.count,
       0,
     );
+    await store.provision({
+      ...provisioned,
+      actorId: otherBoundActorId,
+      tenantId: otherTenantId,
+      expectedSalesforceOrgId: otherBoundOrgId,
+    });
     for (const changed of [
       { expectedSalesforceOrgId: '00D000000000002EAA' },
       { authorizationOrigin: 'https://test.salesforce.com' },
@@ -1255,6 +1315,13 @@ void test(
     assert.equal(
       race.filter((result) => result.status === 'fulfilled').length,
       1,
+      JSON.stringify(
+        race.map((result) =>
+          result.status === 'fulfilled'
+            ? result.status
+            : [result.status, String(result.reason)],
+        ),
+      ),
     );
     assert.equal(
       race.filter(
@@ -1379,6 +1446,24 @@ void test(
 
     const browserSession = await store.issue(actorId, sessionConfiguration);
     const app = createApp(config, { async ping() {}, async close() {} }, false);
+    registerAdministratorProvisioningRoutes(app, {
+      authenticateAdministrator: async (opaqueSession) => {
+        const authenticated = await store.authenticate(
+          opaqueSession,
+          sessionConfiguration,
+        );
+        if (authenticated === undefined)
+          throw new Error('ADMINISTRATOR_SESSION_AUTHENTICATION');
+        return authenticated;
+      },
+      actorIdForSubject: (subject) => {
+        if (subject === 'already-other-tenant') return otherBoundActorId;
+        if (subject === 'new-same-tenant') return enrolledActorId;
+        throw new Error('OIDC_SUBJECT');
+      },
+      sessionStore: store,
+      externalOrigin: 'https://service.example',
+    });
     registerAdministratorSessionRoutes(app, {
       verifyLoginRequest: async () => ({ actorId }),
       sessionStore: store,
@@ -1395,6 +1480,44 @@ void test(
     });
     assert.equal(csrf.statusCode, 200);
     assert.deepEqual(csrf.json(), { csrfToken: browserSession.csrfToken });
+    const crossTenant = await app.inject({
+      method: 'POST',
+      url: administratorProvisioningRoutePaths.provision,
+      headers: {
+        origin: 'https://service.example',
+        cookie: `__Host-kusanya_admin_session=${browserSession.opaqueSession}`,
+        'x-csrf-token': browserSession.csrfToken,
+      },
+      payload: { subject: 'already-other-tenant' },
+    });
+    assert.equal(crossTenant.statusCode, 503);
+    assert.deepEqual(crossTenant.json(), { error: 'Provisioning unavailable' });
+    const enrolled = await app.inject({
+      method: 'POST',
+      url: administratorProvisioningRoutePaths.provision,
+      headers: {
+        origin: 'https://service.example',
+        cookie: `__Host-kusanya_admin_session=${browserSession.opaqueSession}`,
+        'x-csrf-token': browserSession.csrfToken,
+      },
+      payload: { subject: 'new-same-tenant' },
+    });
+    assert.equal(enrolled.statusCode, 204);
+    assert.deepEqual(
+      (
+        await pool.query<{ actor_id: string; tenant_id: string }>(
+          `SELECT actor_id, tenant_id::text
+           FROM tenant_administrator_bindings
+           WHERE actor_id = ANY($1::varchar[])
+           ORDER BY actor_id`,
+          [[otherBoundActorId, enrolledActorId]],
+        )
+      ).rows,
+      [
+        { actor_id: enrolledActorId, tenant_id: tenantId },
+        { actor_id: otherBoundActorId, tenant_id: otherTenantId },
+      ].toSorted((left, right) => left.actor_id.localeCompare(right.actor_id)),
+    );
     const logout = await app.inject({
       method: 'POST',
       url: administratorSessionRoutePaths.logout,

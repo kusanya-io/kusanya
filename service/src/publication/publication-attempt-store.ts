@@ -1,6 +1,7 @@
 /** Durable, tenant-scoped record of every administrator publication attempt. */
 import { randomUUID } from 'node:crypto';
 import { types } from 'node:util';
+import { TextDecoder } from 'node:util';
 import type { TrustedAdministratorContext } from '../tenant/administrator-session.js';
 import { decodeTrustedAdministratorContext } from '../tenant/administrator-session.js';
 import type { QueryExecutor } from '../tenant/connection-store.js';
@@ -11,6 +12,8 @@ const digestPattern = /^[0-9a-f]{64}$/;
 const failurePattern = /^[A-Z][A-Z0-9_]{0,127}$/;
 const attemptIdPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const operatorCursorPattern = /^[A-Za-z0-9_-]{86}$/;
+const cursorTimestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 
 export type PublicationAttemptOutcome = 'succeeded' | 'failed' | 'partial';
 export type PublicationReconciliationStatus =
@@ -52,6 +55,11 @@ export interface PublicationAttemptOperatorSummary {
   readonly reconciledAt: string | null;
 }
 
+export interface PublicationAttemptOperatorPage {
+  readonly attempts: readonly PublicationAttemptOperatorSummary[];
+  readonly nextCursor: string | null;
+}
+
 export interface PublicationAttemptCompletion {
   readonly outcome: PublicationAttemptOutcome;
   readonly salesforceRequestCount: number;
@@ -66,6 +74,56 @@ export class PublicationAttemptError extends Error {
     super('PUBLICATION_ATTEMPT_STORAGE');
     this.name = 'PublicationAttemptError';
   }
+}
+
+interface DecodedOperatorCursor {
+  readonly createdAt: string;
+  readonly attemptId: string;
+}
+
+function decodeOperatorCursor(value: unknown): DecodedOperatorCursor | null {
+  if (value === undefined) return null;
+  try {
+    if (typeof value !== 'string' || !operatorCursorPattern.test(value))
+      throw new Error();
+    const bytes = Buffer.from(value, 'base64url');
+    if (bytes.toString('base64url') !== value) throw new Error();
+    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    const separator = decoded.indexOf('\0');
+    if (
+      separator < 1 ||
+      separator !== decoded.lastIndexOf('\0') ||
+      decoded.length !== 64
+    )
+      throw new Error();
+    const createdAt = decoded.slice(0, separator);
+    const attemptId = decoded.slice(separator + 1);
+    if (
+      !cursorTimestampPattern.test(createdAt) ||
+      new Date(`${createdAt.slice(0, 23)}Z`).toISOString() !==
+        `${createdAt.slice(0, 23)}Z` ||
+      !attemptIdPattern.test(attemptId)
+    )
+      throw new Error();
+    return Object.freeze({ createdAt, attemptId });
+  } catch {
+    throw new PublicationAttemptError();
+  }
+}
+
+/** Strictly validate an opaque operator cursor without granting it authority. */
+export function publicationAttemptOperatorCursor(value: unknown): string {
+  if (value === undefined || decodeOperatorCursor(value) === null)
+    throw new PublicationAttemptError();
+  return value as string;
+}
+
+function encodeOperatorCursor(createdAt: string, attemptId: string): string {
+  const encoded = Buffer.from(`${createdAt}\0${attemptId}`, 'utf8').toString(
+    'base64url',
+  );
+  if (!operatorCursorPattern.test(encoded)) throw new PublicationAttemptError();
+  return encoded;
 }
 
 function exactCompletion(value: PublicationAttemptCompletion) {
@@ -412,10 +470,13 @@ export class PublicationAttemptStore {
   /** Return a bounded, least-data operator view; this method performs one SELECT. */
   async listForOperator(
     contextValue: TrustedAdministratorContext,
-  ): Promise<readonly PublicationAttemptOperatorSummary[]> {
+    cursorValue?: string,
+  ): Promise<PublicationAttemptOperatorPage> {
     let context: TrustedAdministratorContext;
+    let cursor: DecodedOperatorCursor | null;
     try {
       context = decodeTrustedAdministratorContext(contextValue);
+      cursor = decodeOperatorCursor(cursorValue);
     } catch {
       throw new PublicationAttemptError();
     }
@@ -427,6 +488,7 @@ export class PublicationAttemptStore {
       created_at: unknown;
       completed_at: unknown;
       reconciled_at: unknown;
+      created_cursor_at: unknown;
     }
     const timestamp = (
       value: unknown,
@@ -452,7 +514,11 @@ export class PublicationAttemptStore {
                 attempt.form_version_id, attempt.outcome,
                 attempt.reconciliation_status,
                 attempt.created_at, attempt.completed_at,
-                attempt.reconciled_at
+                attempt.reconciled_at,
+                to_char(
+                  attempt.created_at AT TIME ZONE 'UTC',
+                  'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+                ) AS created_cursor_at
          FROM tenant_publication_attempts AS attempt
          JOIN tenant_administrator_bindings AS binding
            ON binding.actor_id = $1 AND binding.tenant_id = attempt.tenant_id
@@ -463,6 +529,11 @@ export class PublicationAttemptStore {
            AND tenant.expected_salesforce_org_id = $3
            AND tenant.authorization_origin = $4
            AND tenant.namespace_prefix = $5
+           AND (
+             $6::timestamptz IS NULL OR
+             (attempt.created_at, attempt.publication_attempt_id) <
+               ($6::timestamptz, $7::uuid)
+           )
          ORDER BY attempt.created_at DESC,
                   attempt.publication_attempt_id DESC
          LIMIT 100`,
@@ -472,17 +543,22 @@ export class PublicationAttemptStore {
           context.expectedSalesforceOrgId,
           context.authorizationOrigin,
           context.namespacePrefix,
+          cursor?.createdAt ?? null,
+          cursor?.attemptId ?? null,
         ],
       );
       if (result.rowCount !== result.rows.length || result.rows.length > 100)
         throw new Error();
-      return Object.freeze(
+      let priorCursor = cursor;
+      const attempts = Object.freeze(
         result.rows.map((row) => {
           if (
             typeof row.publication_attempt_id !== 'string' ||
             !attemptIdPattern.test(row.publication_attempt_id) ||
             typeof row.form_version_id !== 'string' ||
-            !idPattern.test(row.form_version_id)
+            !idPattern.test(row.form_version_id) ||
+            typeof row.created_cursor_at !== 'string' ||
+            !cursorTimestampPattern.test(row.created_cursor_at)
           )
             throw new Error();
           const created = timestamp(row.created_at);
@@ -500,6 +576,20 @@ export class PublicationAttemptStore {
               reconciled.milliseconds < completed.milliseconds)
           )
             throw new Error();
+          if (
+            `${row.created_cursor_at.slice(0, 23)}Z` !== created.iso ||
+            (priorCursor !== null &&
+              !(
+                row.created_cursor_at < priorCursor.createdAt ||
+                (row.created_cursor_at === priorCursor.createdAt &&
+                  row.publication_attempt_id < priorCursor.attemptId)
+              ))
+          )
+            throw new Error();
+          priorCursor = Object.freeze({
+            createdAt: row.created_cursor_at,
+            attemptId: row.publication_attempt_id,
+          });
 
           let operatorStatus: PublicationAttemptOperatorStatus;
           if (row.outcome === 'started' && completed === null) {
@@ -556,6 +646,13 @@ export class PublicationAttemptStore {
           });
         }),
       );
+      return Object.freeze({
+        attempts,
+        nextCursor:
+          result.rows.length === 100 && priorCursor !== null
+            ? encodeOperatorCursor(priorCursor.createdAt, priorCursor.attemptId)
+            : null,
+      });
     } catch {
       throw new PublicationAttemptError();
     }
