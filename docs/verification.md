@@ -13,7 +13,7 @@ Kusanya is built by a coding agent and verified by a second, independent agent w
 ## What the verifier does on every pull request
 
 - Pull the branch; read the whole diff against the relevant brief sections.
-- Run the Salesforce package tests in a fresh scratch org from the Dev Hub; Apex coverage must be 85 percent or better and every test must pass.
+- Run the Salesforce package tests in a fresh scratch org from the Dev Hub; Apex coverage must be 85 percent or better and every test must pass. ADR 0051 permits an ordinary non-C10, non-phase-gate PR to use the trusted Salesforce-identical exemption instead: independently confirm that the pinned policy bound the exact head to accepted `main` and the same complete `salesforce/` tree, and report explicitly that Apex did not run.
 - Run the service test suite locally in the container.
 - Run every acceptance test the pull request claims, from a clean state.
 - Try to break it with the real forms in `seed/`: the 144-question observation, the HWWS observation with mixed once-only questions and repeats, the interview with exactly five repeat instances.
@@ -24,6 +24,7 @@ Kusanya is built by a coding agent and verified by a second, independent agent w
 ## What the verifier does at a phase gate
 
 - Runs the full acceptance list for the phase, plus every earlier phase's list, so nothing has regressed.
+- Requires a real exact-head Apex run; neither trusted exemption is phase-gate or C10 evidence.
 - Reviews the ADRs written during the phase against the brief's "decide" and "ask" rules.
 - Publishes a short gate report in `docs/verification-log.md`: date, commit, tests run, results, open findings, and a pass or hold verdict.
 

@@ -5,7 +5,9 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   DOCUMENTATION_EXEMPTION_LABEL,
+  SALESFORCE_IDENTICAL_EXEMPTION_LABEL,
   isOrdinaryDocumentation,
+  classifyApexRequirement,
   classifyDocumentationDiff,
   collectDocumentationEvidence,
   isUtf8Prose,
@@ -32,25 +34,44 @@ function fixture(paths = ['docs/guide.md']) {
     blobFacts[hash] = { text: true };
     return hash;
   }
+  const salesforceTreeSha = 'e'.repeat(40);
+  const baseEntries = paths.map((path) => ({
+    path,
+    mode: '100644',
+    type: 'blob',
+    sha: blob(`Old ${path}\n`),
+  }));
+  const headEntries = paths.map((path) => ({
+    path,
+    mode: '100644',
+    type: 'blob',
+    sha: blob(`New ${path}\n`),
+  }));
   const baseTree = {
     sha: 'c'.repeat(40),
     truncated: false,
-    tree: paths.map((path) => ({
-      path,
-      mode: '100644',
-      type: 'blob',
-      sha: blob(`Old ${path}\n`),
-    })),
+    tree: [
+      {
+        path: 'salesforce',
+        mode: '040000',
+        type: 'tree',
+        sha: salesforceTreeSha,
+      },
+      ...baseEntries,
+    ],
   };
   const headTree = {
     sha: 'd'.repeat(40),
     truncated: false,
-    tree: paths.map((path) => ({
-      path,
-      mode: '100644',
-      type: 'blob',
-      sha: blob(`New ${path}\n`),
-    })),
+    tree: [
+      {
+        path: 'salesforce',
+        mode: '040000',
+        type: 'tree',
+        sha: salesforceTreeSha,
+      },
+      ...headEntries,
+    ],
   };
   const repository = {
     full_name: 'kusanya-io/kusanya',
@@ -69,7 +90,9 @@ function fixture(paths = ['docs/guide.md']) {
     pr,
     expectedHeadSha: HEAD,
     checkoutSha: HEAD,
-    files: headTree.tree.map((entry) => ({
+    acceptedBaseSha: BASE,
+    eventName: 'pull_request',
+    files: headEntries.map((entry) => ({
       filename: entry.path,
       status: 'modified',
       sha: entry.sha,
@@ -81,6 +104,7 @@ function fixture(paths = ['docs/guide.md']) {
   };
 }
 const decision = (value) => classifyDocumentationDiff(value).decision;
+const apexDecision = (value) => classifyApexRequirement(value).decision;
 function apiFixture(value) {
   const calls = [];
   const root = 'repos/kusanya-io/kusanya';
@@ -90,11 +114,17 @@ function apiFixture(value) {
     KUSANYA_POLICY_HEAD_SHA: HEAD,
     KUSANYA_POLICY_CHECKOUT_SHA: HEAD,
     KUSANYA_POLICY_BASE_REF: 'main',
+    KUSANYA_POLICY_EVENT_NAME: 'pull_request',
   };
   const api = async (endpoint) => {
     calls.push(endpoint);
     if (endpoint === root) return structuredClone(value.repository);
     if (endpoint === `${root}/pulls/9`) return structuredClone(value.pr);
+    if (endpoint === `${root}/git/ref/heads/main`)
+      return {
+        ref: 'refs/heads/main',
+        object: { type: 'commit', sha: BASE },
+      };
     const page = endpoint.match(/\/files\?per_page=100&page=(\d+)$/);
     if (page)
       return structuredClone(
@@ -134,6 +164,59 @@ test('exempts ordinary prose with exact full-SHA N/A label and no coverage claim
   );
   assert.equal('coverage' in result, false);
 });
+test('exempts application changes only when the Salesforce tree matches accepted main', () => {
+  const value = fixture([
+    'service/src/app.ts',
+    'service/test/unit/app.test.ts',
+    'docs/decisions/0051-example.md',
+  ]);
+  const result = classifyApexRequirement(value);
+  assert.equal(result.schemaVersion, 2);
+  assert.equal(result.decision, 'salesforce-identical-exemption');
+  assert.equal(result.headSha, HEAD);
+  assert.equal(result.baseSha, BASE);
+  assert.equal(result.salesforceTreeSha, 'e'.repeat(40));
+  assert.equal(result.exemptionLabel, SALESFORCE_IDENTICAL_EXEMPTION_LABEL);
+  assert.equal('coverage' in result, false);
+});
+test('any Salesforce, workflow or script change requires real Apex', () => {
+  for (const path of [
+    'salesforce/main/default/classes/Changed.cls',
+    '.github',
+    '.github/workflows/ci.yml',
+    '.github/workflows/salesforce-verify.yml',
+    'scripts',
+    'scripts/apex-pr-policy.mjs',
+    'scripts/check-compiler-odk.mjs',
+  ])
+    assert.equal(apexDecision(fixture([path])), 'full-apex', path);
+
+  const hiddenSalesforceDifference = fixture(['service/src/app.ts']);
+  hiddenSalesforceDifference.headTree.tree.find(
+    (entry) => entry.path === 'salesforce',
+  ).sha = 'f'.repeat(40);
+  assert.equal(apexDecision(hiddenSalesforceDifference), 'full-apex');
+
+  const missingSalesforceTree = fixture(['service/src/app.ts']);
+  missingSalesforceTree.headTree.tree =
+    missingSalesforceTree.headTree.tree.filter(
+      (entry) => entry.path !== 'salesforce',
+    );
+  assert.equal(apexDecision(missingSalesforceTree), 'full-apex');
+});
+test('manual dispatch and an untrusted or stale accepted base cannot exempt', () => {
+  const dispatch = fixture(['service/src/app.ts']);
+  dispatch.eventName = 'workflow_dispatch';
+  assert.equal(apexDecision(dispatch), 'full-apex');
+
+  const staleBase = fixture(['service/src/app.ts']);
+  staleBase.acceptedBaseSha = '9'.repeat(40);
+  assert.equal(apexDecision(staleBase), 'full-apex');
+
+  const unknownEvent = fixture(['service/src/app.ts']);
+  unknownEvent.eventName = 'push';
+  assert.equal(apexDecision(unknownEvent), 'full-apex');
+});
 test('critical policy, contracts, code, workflows and unknown files require Apex', () => {
   for (const path of [
     'docs/brief.md',
@@ -168,18 +251,18 @@ test('renames check old and new path, and additions and deletions check their ex
   const renamed = fixture();
   renamed.files[0].status = 'renamed';
   renamed.files[0].previous_filename = 'docs/old-guide.md';
-  renamed.baseTree.tree[0].path = 'docs/old-guide.md';
+  renamed.baseTree.tree[1].path = 'docs/old-guide.md';
   assert.equal(decision(renamed), 'documentation-exemption');
   renamed.files[0].previous_filename = 'scripts/old.md';
-  renamed.baseTree.tree[0].path = 'scripts/old.md';
+  renamed.baseTree.tree[1].path = 'scripts/old.md';
   assert.equal(decision(renamed), 'full-apex');
   for (const status of ['added', 'removed']) {
     const value = fixture(['README.md']);
     value.files[0].status = status;
-    if (status === 'added') value.baseTree.tree = [];
+    if (status === 'added') value.baseTree.tree.splice(1, 1);
     else {
-      value.files[0].sha = value.baseTree.tree[0].sha;
-      value.headTree.tree = [];
+      value.files[0].sha = value.baseTree.tree[1].sha;
+      value.headTree.tree.splice(1, 1);
     }
     assert.equal(decision(value), 'documentation-exemption', status);
   }
@@ -188,11 +271,11 @@ test('symlinks, executable files, binary blobs and missing blob evidence require
   for (const side of ['baseTree', 'headTree']) {
     for (const mode of ['120000', '100755', '160000', '040000']) {
       const value = fixture();
-      value[side].tree[0].mode = mode;
+      value[side].tree[1].mode = mode;
       assert.equal(decision(value), 'full-apex', `${side} ${mode}`);
     }
     const value = fixture();
-    value.blobFacts[value[side].tree[0].sha].text = false;
+    value.blobFacts[value[side].tree[1].sha].text = false;
     assert.equal(decision(value), 'full-apex');
   }
   const value = fixture();
@@ -293,6 +376,10 @@ test('read-only API adapter exhausts every page and verifies actual blob bytes',
   );
   assert(calls.some((path) => path.endsWith('page=2')));
   assert.equal(calls.filter((path) => path.endsWith('/pulls/9')).length, 2);
+  assert.equal(
+    calls.filter((path) => path.endsWith('/git/ref/heads/main')).length,
+    2,
+  );
 });
 test('exactly full page requests the following empty page', async () => {
   const { env, api, calls } = apiFixture(
@@ -328,6 +415,23 @@ test('API failure, file truncation, excessive counts and changed PR cannot exemp
       return response;
     }),
     /exact SHA/,
+  );
+  let refReads = 0;
+  await assert.rejects(
+    collectDocumentationEvidence(env, async (path) => {
+      const response = await api(path);
+      if (path.endsWith('/git/ref/heads/main') && ++refReads === 2)
+        response.object.sha = '9'.repeat(40);
+      return response;
+    }),
+    /changed during classification/,
+  );
+  await assert.rejects(
+    collectDocumentationEvidence(
+      { ...env, KUSANYA_POLICY_EVENT_NAME: 'push' },
+      api,
+    ),
+    /workflow event/,
   );
 });
 test('API adapter rejects mismatched or incomplete base64 blob data', async () => {
