@@ -43,6 +43,12 @@ subject text from colliding across issuers. Provisioning remains the authorizati
 decision: a correctly signed token whose derived actor has no immutable tenant
 binding cannot receive a Kusanya session.
 
+The HTTP boundary reports a rejected or malformed OIDC token and a verified but
+unprovisioned actor as the same generic `401 Authentication required`. It reserves
+`503 Login unavailable` for unexpected verifier, session-store or infrastructure
+failures, so clients do not retry credentials that cannot succeed and monitoring can
+distinguish authentication refusal from service unavailability.
+
 ### Mount one fail-closed composition
 
 `registerPublicationSurface` accepts the OIDC verifier, session store, encrypted

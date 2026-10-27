@@ -7,6 +7,8 @@ import {
   registerPublicationSurface,
   type PublicationSurfaceDependencies,
 } from '../../src/publication-surface.js';
+import { AdministratorSessionError } from '../../src/tenant/administrator-session.js';
+import { AdministratorOidcError } from '../../src/tenant/oidc-login.js';
 
 const config = readConfig({
   DATABASE_URL: 'postgresql://kusanya@localhost:5432/kusanya',
@@ -139,6 +141,63 @@ void test('the real app mounts login, CSRF, publication and least-data presentat
     ).statusCode,
     404,
   );
+});
+
+void test('mounted login reports identity refusals as authentication failures', async (contextTest) => {
+  const rejectedDependencies = dependencies();
+  const rejectedApp = createApp(
+    config,
+    { async ping() {}, async close() {} },
+    false,
+    {
+      ...rejectedDependencies,
+      verifyLoginRequest: async () => {
+        throw new AdministratorOidcError();
+      },
+    },
+  );
+  contextTest.after(() => rejectedApp.close());
+  const rejected = await rejectedApp.inject({
+    method: 'POST',
+    url: '/api/admin/session/login',
+    headers: {
+      origin,
+      authorization: 'Bearer rejected.synthetic.token',
+    },
+  });
+  assert.equal(rejected.statusCode, 401);
+  assert.deepEqual(rejected.json(), { error: 'Authentication required' });
+  assert.match(
+    String(rejected.headers['set-cookie'] ?? ''),
+    /Max-Age=0; Secure; HttpOnly; SameSite=Lax/,
+  );
+
+  const absentDependencies = dependencies();
+  const absentApp = createApp(
+    config,
+    { async ping() {}, async close() {} },
+    false,
+    {
+      ...absentDependencies,
+      sessionStore: {
+        ...absentDependencies.sessionStore,
+        async issue() {
+          throw new AdministratorSessionError('ADMINISTRATOR_SESSION_ABSENT');
+        },
+      },
+    },
+  );
+  contextTest.after(() => absentApp.close());
+  const absent = await absentApp.inject({
+    method: 'POST',
+    url: '/api/admin/session/login',
+    headers: {
+      origin,
+      authorization: 'Bearer valid.but.unprovisioned',
+    },
+  });
+  assert.equal(absent.statusCode, 401);
+  assert.deepEqual(absent.json(), { error: 'Authentication required' });
 });
 
 void test('mounted presentation keeps origin, session and CSRF boundaries in the real app', async (contextTest) => {
