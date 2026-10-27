@@ -281,11 +281,12 @@ void test('lists a bounded least-data operator view with human-judgement states'
         rows: states.map(
           ([outcome, reconciliation, completedAt, reconciledAt], index) =>
             ({
-              publication_attempt_id: `10000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+              publication_attempt_id: `10000000-0000-4000-8000-${String(states.length - index).padStart(12, '0')}`,
               form_version_id: 'a0B000000000001AAA',
               outcome,
               reconciliation_status: reconciliation,
               created_at: started,
+              created_cursor_at: '2026-10-22T10:00:00.000000Z',
               completed_at: completedAt,
               reconciled_at: reconciledAt,
             }) as Row,
@@ -295,12 +296,14 @@ void test('lists a bounded least-data operator view with human-judgement states'
   });
   const result = await store.listForOperator(context);
   assert.deepEqual(
-    result.map((attempt) => attempt.operatorStatus),
+    result.attempts.map((attempt) => attempt.operatorStatus),
     states.map((state) => state[4]),
   );
   assert.equal(Object.isFrozen(result), true);
+  assert.equal(Object.isFrozen(result.attempts), true);
+  assert.equal(result.nextCursor, null);
   assert.equal(
-    result.every((attempt) => Object.isFrozen(attempt)),
+    result.attempts.every((attempt) => Object.isFrozen(attempt)),
     true,
   );
   assert.deepEqual(queryValues, [
@@ -309,6 +312,8 @@ void test('lists a bounded least-data operator view with human-judgement states'
     context.expectedSalesforceOrgId,
     context.authorizationOrigin,
     context.namespacePrefix,
+    null,
+    null,
   ]);
   assert.match(queryText, /LIMIT 100/);
   assert.match(queryText, /binding\.actor_id = \$1/);
@@ -357,6 +362,7 @@ void test('operator view fails closed on contradictory rows and timestamps', asy
               publication_attempt_id: '10000000-0000-4000-8000-000000000009',
               form_version_id: 'a0B000000000001AAA',
               created_at: new Date('2026-10-22T10:00:00.000Z'),
+              created_cursor_at: '2026-10-22T10:00:00.000000Z',
               ...variant,
             } as Row,
           ],
@@ -390,6 +396,7 @@ void test('operator view refuses executable timestamp properties without invokin
             outcome: 'started',
             reconciliation_status: null,
             created_at: hostileDate,
+            created_cursor_at: '2026-10-22T10:00:00.000000Z',
             completed_at: null,
             reconciled_at: null,
           } as Row,
@@ -399,4 +406,63 @@ void test('operator view refuses executable timestamp properties without invokin
   });
   await assert.rejects(store.listForOperator(context), PublicationAttemptError);
   assert.equal(calls, 0);
+});
+
+void test('operator pagination is opaque, keyset-bounded and cannot widen tenant scope', async () => {
+  const createdAt = new Date('2026-10-22T10:00:00.123Z');
+  const createdCursorAt = '2026-10-22T10:00:00.123456Z';
+  const rows = Array.from({ length: 100 }, (_, index) => ({
+    publication_attempt_id: `10000000-0000-4000-8000-${String(100 - index).padStart(12, '0')}`,
+    form_version_id: 'a0B000000000001AAA',
+    outcome: 'failed',
+    reconciliation_status: null,
+    created_at: createdAt,
+    completed_at: createdAt,
+    reconciled_at: null,
+    created_cursor_at: createdCursorAt,
+  }));
+  const calls: Array<{ text: string; values: unknown[] }> = [];
+  const store = new PublicationAttemptStore({
+    async query<Row>(text: string, values: unknown[] = []) {
+      calls.push({ text, values });
+      return {
+        rowCount: calls.length === 1 ? rows.length : 0,
+        rows: (calls.length === 1 ? rows : []) as Row[],
+      };
+    },
+  });
+  const first = await store.listForOperator(context);
+  assert.equal(first.attempts.length, 100);
+  assert.match(first.nextCursor ?? '', /^[A-Za-z0-9_-]{86}$/);
+  assert.match(calls[0]!.text, /LIMIT 100/);
+  assert.match(calls[0]!.text, /attempt\.tenant_id = \$2/);
+  assert.match(calls[0]!.text, /binding\.actor_id = \$1/);
+  assert.match(calls[0]!.text, /\$6::timestamptz/);
+
+  const second = await store.listForOperator(context, first.nextCursor!);
+  assert.deepEqual(second, { attempts: [], nextCursor: null });
+  assert.deepEqual(calls[1]!.values, [
+    context.actorId,
+    context.tenantId,
+    context.expectedSalesforceOrgId,
+    context.authorizationOrigin,
+    context.namespacePrefix,
+    createdCursorAt,
+    '10000000-0000-4000-8000-000000000001',
+  ]);
+
+  const before = calls.length;
+  for (const invalid of [
+    '',
+    'x'.repeat(86),
+    Buffer.from(
+      `${createdCursorAt}\0${'20000000-0000-2000-8000-000000000001'}`,
+    ).toString('base64url'),
+    `${first.nextCursor}=`,
+  ])
+    await assert.rejects(
+      store.listForOperator(context, invalid),
+      PublicationAttemptError,
+    );
+  assert.equal(calls.length, before);
 });

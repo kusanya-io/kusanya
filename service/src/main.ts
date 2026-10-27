@@ -6,12 +6,12 @@ import { PublicationAttemptStore } from './publication/publication-attempt-store
 import { readPublicationSurfaceRuntimeConfig } from './runtime-config.js';
 import { AdministratorSessionStore } from './tenant/administrator-session.js';
 import { TenantConnectionStore } from './tenant/connection-store.js';
-import { createAdministratorOidcLoginVerifier } from './tenant/oidc-login.js';
+import { createAdministratorOidcIdentity } from './tenant/oidc-login.js';
 
 async function main(): Promise<void> {
   const config = readConfig();
   const runtime = readPublicationSurfaceRuntimeConfig();
-  const verifyLoginRequest = createAdministratorOidcLoginVerifier(runtime.oidc);
+  const administratorIdentity = createAdministratorOidcIdentity(runtime.oidc);
   const pool = createPostgresPool(config, () => {
     process.stderr.write('Database connection became unavailable\n');
   });
@@ -27,7 +27,7 @@ async function main(): Promise<void> {
   const sessionStore = new AdministratorSessionStore(executor);
   const attemptStore = new PublicationAttemptStore(executor);
   const app = createApp(config, database, true, {
-    verifyLoginRequest,
+    administratorIdentity,
     sessionStore,
     sessionConfiguration: runtime.session,
     connectionStore: new TenantConnectionStore(

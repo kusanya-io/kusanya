@@ -11,6 +11,20 @@ info:
     use Cache-Control no-store and do not reflect request or internal details.
     Unsupported routes return 404 unless request parsing rejects them first.
 paths:
+  /admin:
+    get:
+      operationId: getAdministratorInterface
+      summary: Load the self-contained administrator operator interface
+      responses:
+        '200':
+          description: Static HTML shell; no tenant data or credential is embedded
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+            Content-Security-Policy:
+              schema: { type: string }
+            X-Content-Type-Options:
+              schema: { type: string, const: nosniff }
   /healthz:
     get:
       operationId: getLiveness
@@ -143,6 +157,30 @@ paths:
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Rejected' }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /api/admin/administrators:
+    post:
+      operationId: provisionTenantAdministrator
+      summary: Enrol one OIDC subject into the live administrator's immutable tenant
+      security: [{ administratorSession: [], csrfToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [subject]
+              properties:
+                subject: { type: string, minLength: 1, maxLength: 512 }
+      responses:
+        '204':
+          description: Subject enrolled in the current immutable tenant; response body is empty
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Rejected' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /api/admin/salesforce/publications:
     post:
       operationId: publishSalesforceDefinition
@@ -180,6 +218,13 @@ paths:
       security: [{ administratorSession: [], csrfToken: [] }]
       parameters:
         - $ref: '#/components/parameters/ExactOrigin'
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque keyset cursor returned by the previous page
+          schema:
+            type: string
+            pattern: '^[A-Za-z0-9_-]{86}$'
       responses:
         '200':
           description: Least-data operator presentation
@@ -191,13 +236,17 @@ paths:
               schema:
                 type: object
                 additionalProperties: false
-                required: [attempts]
+                required: [attempts, nextCursor]
                 properties:
                   attempts:
                     type: array
                     maxItems: 100
                     items:
                       $ref: '#/components/schemas/PublicationAttemptSummary'
+                  nextCursor:
+                    anyOf:
+                      - { type: string, pattern: '^[A-Za-z0-9_-]{86}$' }
+                      - { type: 'null' }
         '400': { $ref: '#/components/responses/Rejected' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Rejected' }

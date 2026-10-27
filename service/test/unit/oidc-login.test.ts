@@ -4,6 +4,7 @@ import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import {
   administratorOidcActorId,
   AdministratorOidcError,
+  createAdministratorOidcIdentity,
   verifyAdministratorOidcToken,
 } from '../../src/tenant/oidc-login.js';
 
@@ -12,6 +13,20 @@ const configuration = {
   audience: '11111111-2222-3333-4444-555555555555',
   jwksUri: 'https://login.microsoftonline.com/tenant-id/discovery/v2.0/keys',
 };
+
+void test('one configured identity capability uses the same actor mapping for provisioning', () => {
+  const identity = createAdministratorOidcIdentity(configuration);
+  assert.equal(Object.isFrozen(identity), true);
+  assert.equal(
+    identity.actorIdForSubject('stable-subject'),
+    administratorOidcActorId(configuration.issuer, 'stable-subject'),
+  );
+  for (const subject of ['', 'x'.repeat(513), 'line\nbreak'])
+    assert.throws(
+      () => identity.actorIdForSubject(subject),
+      AdministratorOidcError,
+    );
+});
 
 void test('OIDC verification binds a recent RS256 token to issuer plus subject', async () => {
   const { privateKey, publicKey } = await generateKeyPair('RS256');

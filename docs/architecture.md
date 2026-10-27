@@ -273,6 +273,14 @@ access token for the Kusanya API is verified against exact issuer, audience, RS2
 signature and time bounds, then only the digest-derived issuer/subject actor reaches
 the immutable tenant binding. `main.ts` refuses missing identity, session, encrypted
 credential, Salesforce OAuth, timeout or validator configuration before listening.
+ADR 0052 extends that composition with a static no-store operator shell, same-tenant
+administrator enrolment and keyset pagination. The enrolment request supplies only
+an OIDC subject; the configured issuer derives its actor and the live session supplies
+the complete immutable tenant/org/origin/namespace tuple. Each attempt page repeats
+that full database authorization join and returns at most 100 least-data summaries;
+the opaque continuation cursor grants no authority. Initial tenant bootstrap,
+privileged connection lifecycle, retention, scheduled reconciliation and CLI work
+remain outside this boundary.
 
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure

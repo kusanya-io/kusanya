@@ -15,6 +15,11 @@ const otherTenantId = '20000000-0000-4000-8000-000000000002';
 const session = 's'.repeat(43);
 const csrf = 'c'.repeat(43);
 const config = readConfig({ DATABASE_URL: 'postgresql://localhost/kusanya' });
+const cursor = Buffer.from(
+  ['2026-10-22T10:00:00.000000Z', '10000000-0000-4000-8000-000000000009'].join(
+    '\0',
+  ),
+).toString('base64url');
 
 const trusted = (selectedTenant = tenantId) => ({
   actorId: `oidc:${selectedTenant.slice(0, 8)}`,
@@ -48,19 +53,22 @@ function dependencies(
       return trusted(selectedTenant);
     },
     attemptStore: {
-      async listForOperator(context) {
-        events.push(['list', context]);
-        return [
-          {
-            attemptId: '10000000-0000-4000-8000-000000000009',
-            formVersionId: 'a0B000000000001AAA',
-            operatorStatus: 'human_judgement_required_indeterminate',
-            startedAt: '2026-10-22T10:00:00.000Z',
-            completedAt: null,
-            reconciledAt: '2026-10-22T10:01:00.000Z',
-            credential: 'must-never-serialize',
-          } as never,
-        ];
+      async listForOperator(context, cursor) {
+        events.push(['list', context, cursor]);
+        return {
+          attempts: [
+            {
+              attemptId: '10000000-0000-4000-8000-000000000009',
+              formVersionId: 'a0B000000000001AAA',
+              operatorStatus: 'human_judgement_required_indeterminate',
+              startedAt: '2026-10-22T10:00:00.000Z',
+              completedAt: null,
+              reconciledAt: '2026-10-22T10:01:00.000Z',
+              credential: 'must-never-serialize',
+            } as never,
+          ],
+          nextCursor: null,
+        };
       },
     },
   };
@@ -77,7 +85,11 @@ void test('lists only the live session tenant through a least-data schema', asyn
     url: publicationAttemptPresentationRoutePaths.list,
     headers: headers({ 'x-tenant-id': tenantId }),
   });
-  assert.equal(response.statusCode, 200);
+  assert.equal(
+    response.statusCode,
+    200,
+    `${response.body}; events=${JSON.stringify(setup.events)}`,
+  );
   assert.deepEqual(response.json(), {
     attempts: [
       {
@@ -89,6 +101,7 @@ void test('lists only the live session tenant through a least-data schema', asyn
         reconciledAt: '2026-10-22T10:01:00.000Z',
       },
     ],
+    nextCursor: null,
   });
   assert.equal(response.headers['cache-control'], 'no-store');
   assert.deepEqual(setup.events[0], ['authenticate', session]);
@@ -137,6 +150,42 @@ void test('requires exact origin, session and CSRF before the single read', asyn
     setup.events.some((event) => Array.isArray(event) && event[0] === 'list'),
     false,
   );
+});
+
+void test('accepts only one opaque cursor after authentication and keeps the page bounded', async (t) => {
+  const setup = dependencies();
+  const app = createApp(config, { async ping() {}, async close() {} }, false);
+  t.after(() => app.close());
+  registerPublicationAttemptPresentationRoutes(app, setup);
+  const response = await app.inject({
+    method: 'GET',
+    url: `${publicationAttemptPresentationRoutePaths.list}?cursor=${cursor}`,
+    headers: headers(),
+  });
+  assert.equal(
+    response.statusCode,
+    200,
+    `${response.body}; events=${JSON.stringify(setup.events)}`,
+  );
+  assert.equal((setup.events[1] as unknown[])[2], cursor);
+
+  for (const query of [
+    'cursor=x',
+    `cursor=${cursor}&cursor=${cursor}`,
+    `cursor=${cursor}&tenant=${tenantId}`,
+  ]) {
+    setup.events.length = 0;
+    const refused = await app.inject({
+      method: 'GET',
+      url: `${publicationAttemptPresentationRoutePaths.list}?${query}`,
+      headers: headers(),
+    });
+    assert.equal(refused.statusCode, 400);
+    assert.deepEqual(
+      setup.events.map((event) => (event as unknown[])[0]),
+      ['authenticate'],
+    );
+  }
 });
 
 void test('has no mutation method and normalizes storage failures', async (t) => {

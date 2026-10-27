@@ -27,8 +27,12 @@ const context = {
 
 function dependencies(): PublicationSurfaceDependencies {
   return {
-    verifyLoginRequest: async () => ({ actorId: context.actorId }),
+    administratorIdentity: {
+      verifyLoginRequest: async () => ({ actorId: context.actorId }),
+      actorIdForSubject: (subject) => `oidc:${subject}`,
+    },
     sessionStore: {
+      async provision() {},
       async issue() {
         return { opaqueSession, csrfToken, expiresInSeconds: 3600 };
       },
@@ -56,16 +60,19 @@ function dependencies(): PublicationSurfaceDependencies {
         throw new Error('not reached');
       },
       async listForOperator() {
-        return [
-          {
-            attemptId: '11111111-1111-4111-8111-111111111111',
-            formVersionId: 'a01000000000001AAA',
-            operatorStatus: 'human_judgement_required_unresolved' as const,
-            startedAt: '2026-10-27T00:00:00.000Z',
-            completedAt: null,
-            reconciledAt: null,
-          },
-        ];
+        return {
+          attempts: [
+            {
+              attemptId: '11111111-1111-4111-8111-111111111111',
+              formVersionId: 'a01000000000001AAA',
+              operatorStatus: 'human_judgement_required_unresolved' as const,
+              startedAt: '2026-10-27T00:00:00.000Z',
+              completedAt: null,
+              reconciledAt: null,
+            },
+          ],
+          nextCursor: null,
+        };
       },
     },
     publisherConfiguration: {
@@ -122,7 +129,9 @@ void test('the real app mounts login, CSRF, publication and least-data presentat
   assert.equal(attempts.statusCode, 200);
   const attemptsBody = attempts.json<{
     attempts: Array<Record<string, unknown>>;
+    nextCursor: string | null;
   }>();
+  assert.equal(attemptsBody.nextCursor, null);
   assert.deepEqual(Object.keys(attemptsBody.attempts[0]!), [
     'attemptId',
     'formVersionId',
@@ -132,6 +141,15 @@ void test('the real app mounts login, CSRF, publication and least-data presentat
     'reconciledAt',
   ]);
   assert.equal(attempts.headers['cache-control'], 'no-store');
+  const operatorInterface = await app.inject({
+    method: 'GET',
+    url: '/admin',
+  });
+  assert.equal(operatorInterface.statusCode, 200);
+  assert.match(
+    String(operatorInterface.headers['content-security-policy']),
+    /default-src 'none'/,
+  );
   assert.equal(
     (
       await app.inject({
@@ -143,6 +161,58 @@ void test('the real app mounts login, CSRF, publication and least-data presentat
   );
 });
 
+void test('mounted provisioning crosses identity, live session and immutable tenant exactly once', async (contextTest) => {
+  const base = dependencies();
+  const provisioned: unknown[] = [];
+  const app = createApp(config, { async ping() {}, async close() {} }, false, {
+    ...base,
+    sessionStore: {
+      ...base.sessionStore,
+      async provision(input) {
+        provisioned.push(input);
+      },
+    },
+  });
+  contextTest.after(() => app.close());
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/admin/administrators',
+    headers: {
+      origin,
+      cookie: `__Host-kusanya_admin_session=${opaqueSession}`,
+      'x-csrf-token': csrfToken,
+      'content-type': 'application/json',
+      'x-actor-id': 'forged',
+      'x-tenant-id': 'forged',
+    },
+    payload: { subject: 'new-subject' },
+  });
+  assert.equal(response.statusCode, 204);
+  assert.deepEqual(provisioned, [
+    {
+      actorId: 'oidc:new-subject',
+      tenantId: context.tenantId,
+      expectedSalesforceOrgId: context.expectedSalesforceOrgId,
+      authorizationOrigin: context.authorizationOrigin,
+      namespacePrefix: context.namespacePrefix,
+    },
+  ]);
+
+  const widened = await app.inject({
+    method: 'POST',
+    url: '/api/admin/administrators',
+    headers: {
+      origin,
+      cookie: `__Host-kusanya_admin_session=${opaqueSession}`,
+      'x-csrf-token': csrfToken,
+      'content-type': 'application/json',
+    },
+    payload: { subject: 'other', tenantId: 'forged' },
+  });
+  assert.equal(widened.statusCode, 400);
+  assert.equal(provisioned.length, 1);
+});
+
 void test('mounted login reports identity refusals as authentication failures', async (contextTest) => {
   const rejectedDependencies = dependencies();
   const rejectedApp = createApp(
@@ -151,8 +221,11 @@ void test('mounted login reports identity refusals as authentication failures', 
     false,
     {
       ...rejectedDependencies,
-      verifyLoginRequest: async () => {
-        throw new AdministratorOidcError();
+      administratorIdentity: {
+        ...rejectedDependencies.administratorIdentity,
+        verifyLoginRequest: async () => {
+          throw new AdministratorOidcError();
+        },
       },
     },
   );
@@ -309,6 +382,24 @@ void test('composition refuses an unhardened host and any missing capability', a
           app,
           broken as unknown as PublicationSurfaceDependencies,
         ),
+      /PUBLICATION_SURFACE_CONFIGURATION/,
+      key,
+    );
+    await app.close();
+  }
+  for (const key of ['verifyLoginRequest', 'actorIdForSubject']) {
+    const app = createApp(config, { async ping() {}, async close() {} }, false);
+    const base = dependencies();
+    const identity = {
+      ...base.administratorIdentity,
+    } as Record<string, unknown>;
+    delete identity[key];
+    assert.throws(
+      () =>
+        registerPublicationSurface(app, {
+          ...base,
+          administratorIdentity: identity as never,
+        }),
       /PUBLICATION_SURFACE_CONFIGURATION/,
       key,
     );

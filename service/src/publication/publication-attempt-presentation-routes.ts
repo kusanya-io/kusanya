@@ -8,7 +8,10 @@ import {
   decodeTrustedAdministratorContext,
   type TrustedAdministratorContext,
 } from '../tenant/administrator-session.js';
-import type { PublicationAttemptStore } from './publication-attempt-store.js';
+import {
+  publicationAttemptOperatorCursor,
+  type PublicationAttemptStore,
+} from './publication-attempt-store.js';
 
 const attemptsPath = '/api/admin/salesforce/publication-attempts';
 const cookieName = '__Host-kusanya_admin_session';
@@ -39,12 +42,7 @@ function origin(value: string): string {
 }
 
 function plainRecord(value: unknown): Record<string, unknown> {
-  if (
-    value === null ||
-    typeof value !== 'object' ||
-    types.isProxy(value) ||
-    Object.getPrototypeOf(value) !== Object.prototype
-  )
+  if (value === null || typeof value !== 'object' || types.isProxy(value))
     throw new PublicationAttemptPresentationInputError();
   const descriptors = Object.getOwnPropertyDescriptors(value);
   if (
@@ -62,13 +60,25 @@ function plainRecord(value: unknown): Record<string, unknown> {
   );
 }
 
-function emptyRequest(request: FastifyRequest): boolean {
+function bodyAbsent(request: FastifyRequest): boolean {
   return (
-    Object.keys(plainRecord(request.query)).length === 0 &&
     request.body === undefined &&
     request.headers['content-length'] === undefined &&
     request.headers['transfer-encoding'] === undefined
   );
+}
+
+function requestCursor(request: FastifyRequest): string | undefined {
+  const query = plainRecord(request.query);
+  const keys = Object.keys(query);
+  if (keys.length === 0) return undefined;
+  if (keys.length !== 1 || keys[0] !== 'cursor')
+    throw new PublicationAttemptPresentationInputError();
+  try {
+    return publicationAttemptOperatorCursor(query.cursor);
+  } catch {
+    throw new PublicationAttemptPresentationInputError();
+  }
 }
 
 function cookieValue(request: FastifyRequest): string | undefined {
@@ -98,7 +108,7 @@ const nullableTimestamp = {
 const responseSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['attempts'],
+  required: ['attempts', 'nextCursor'],
   properties: {
     attempts: {
       type: 'array',
@@ -135,6 +145,9 @@ const responseSchema = {
         },
       },
     },
+    nextCursor: {
+      anyOf: [{ type: 'string' }, { type: 'null' }],
+    },
   },
 } as const;
 
@@ -168,7 +181,7 @@ export function registerPublicationAttemptPresentationRoutes(
     },
     async (request, reply) => {
       try {
-        if (request.headers.origin !== expectedOrigin || !emptyRequest(request))
+        if (request.headers.origin !== expectedOrigin || !bodyAbsent(request))
           throw new PublicationAttemptPresentationInputError();
       } catch {
         return reply.code(400).send({ error: 'Request rejected' });
@@ -203,10 +216,15 @@ export function registerPublicationAttemptPresentationRoutes(
         return reply.code(403).send({ error: 'Request rejected' });
 
       try {
-        const attempts =
-          await dependencies.attemptStore.listForOperator(context);
-        return reply.code(200).send({ attempts });
-      } catch {
+        const cursor = requestCursor(request);
+        const page = await dependencies.attemptStore.listForOperator(
+          context,
+          cursor,
+        );
+        return reply.code(200).send(page);
+      } catch (error) {
+        if (error instanceof PublicationAttemptPresentationInputError)
+          return reply.code(400).send({ error: 'Request rejected' });
         return reply
           .code(503)
           .send({ error: 'Publication history unavailable' });
