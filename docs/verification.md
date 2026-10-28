@@ -43,10 +43,11 @@ Kusanya is built by a coding agent and verified by a second, independent agent w
 
 ## Hand-off between builder and verifier
 
-The builder and the verifier do not share a session. Bill relays between them. So the builder must make every hand-off explicit:
+The builder and the verifier do not share a session, and neither reads the other's messages. **The pull request is the only transport between them.** The builder writes its verification request into the pull request body; the verifier reads it there and replies in pull request comments. Bill is not a copy-paste channel: he approves protected runs and merges, and nothing in the hand-off depends on him relaying text.
 
 1. When a pull request is ready, the builder ends its message to Bill with one line in this exact form, so it is never missed:
    `READY FOR CLAUDE VERIFICATION: PR #<number> <title> — claims tests <list>`
+   Bill's whole instruction to the verifier is then `verify PR #<number>`. The builder must not expect anything else to be carried across.
 2. The builder may continue on the next branch while a review is pending, but it never merges its own pull request and never opens more than two pull requests awaiting review at once.
 3. At a phase gate the builder stops entirely and ends with:
    `PHASE <n> GATE: awaiting Claude verification` and waits for the verdict.
@@ -54,17 +55,25 @@ The builder and the verifier do not share a session. Bill relays between them. S
    `READY FOR CLAUDE RE-VERIFICATION: PR #<number>`
 5. When the builder must ask a question under the brief's "ask" rules, it ends with:
    `QUESTION FOR BILL:` followed by the question and the options it sees.
+6. The verifier's comments on the pull request are the verdict of record. Before answering a finding, re-verification or a merge, the builder reads them from the pull request itself, for example with `gh pr view <number> --comments`. A verdict relayed in chat is a convenience copy; the comment is the artefact.
 
 The verifier, in turn, posts findings as pull request review comments and ends its report to Bill with either `PASS: PR #<number> may be merged` or `HOLD: PR #<number>, <count> findings`, and at a gate with `PHASE <n>: PASS` or `PHASE <n>: HOLD`.
 
+## What stays with Bill, and why
+
+Two actions are deliberately his and are never automated:
+
+- **Approving a protected Salesforce run.** It is the only human gate on credentialed execution against the Dev Hub, and ADR 0006 places it there on purpose.
+- **Merging.** `main` is strict and enforced for administrators, and the merge order between a source pull request and its verification log matters.
+
+Neither agent may approve a run, merge, or run the verifier inside the pipeline it verifies. A verifier holding repository or organisation credentials inside CI would lose the independence that is the whole point of the role.
+
 ## The verification request the builder writes
 
-The hand-off line is the trigger. Beneath it, the builder writes a verification request that Bill copies whole and pastes to the verifier. It must be self-contained: the verifier starts from it with no other context from the builder's session. Exact shape:
+The hand-off line is the trigger. The request itself goes in the **pull request body**, where the verifier reads it directly; it is not pasted into chat. It must be self-contained: the verifier starts from it with no other context from the builder's session. Exact shape:
 
 ```
 VERIFICATION REQUEST
-Pull request: #<number> <title>, <url>
-Branch: <name>, head commit <sha>
 Phase: <n> of brief C11
 Brief sections implemented: <list, e.g. C4 data model (Form, Form_Version, Question), C5 print view>
 Acceptance tests claimed (brief C10): <numbers and one line each on how each was exercised>
@@ -73,10 +82,18 @@ How to run it:
   - service: <command, with the Compose project name on cobitech-edge if deployed there>
   - tests: <commands for Apex tests, service tests, acceptance tests>
 What changed: <five to fifteen lines, by folder>
+Trust-boundary declaration:
+  - .github/: <"unchanged", or every file and why>
+  - scripts/: <"unchanged", or every file and why>
+  - salesforce/: <"unchanged", or every file and why>
+  - manifests and lockfiles: <"unchanged", or every change and why>
+  - permission sets, profiles, namespace: <"unchanged", or every change and why>
 Decisions recorded: <ADR numbers and titles>
 Known gaps and deviations from the brief: <list, or "none">
 What the verifier should look at hardest: <the two or three riskiest parts, in the builder's own judgement>
 Questions for Bill: <list, or "none">
 ```
 
-Rules for the request: every path and command must be real and copy-pasteable; every test claimed must have been run by the builder before the request is written; a deviation from the brief that is not listed under "known gaps" is a blocker when the verifier finds it. Re-verification requests use the same shape with a first line `RE-VERIFICATION REQUEST` and a section `Findings answered:` listing each finding and what changed.
+The pull request number, title, branch and head commit are deliberately absent: the verifier takes them from the pull request, not from a claim in its body. A head sha written into prose is stale the moment the builder pushes again, and the verifier would then be reviewing one commit while believing it reviewed another.
+
+Rules for the request: every path and command must be real and copy-pasteable; every test claimed must have been run by the builder before the request is written; a deviation from the brief that is not listed under "known gaps" is a blocker when the verifier finds it; an undeclared change inside the trust boundary is a blocker, because the declaration is what the verifier checks the repository against. Re-verification requests keep the same shape, with the heading `RE-VERIFICATION REQUEST`, a section `Findings answered:` listing each finding and what changed, and a refreshed trust-boundary declaration. The builder updates the request in place by editing the pull request body; it does not open a new pull request to restate it.
