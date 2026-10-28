@@ -467,3 +467,99 @@ void test('operator pagination is opaque, keyset-bounded and cannot widen tenant
     );
   assert.equal(calls.length, before);
 });
+
+void test('retention is transactional, tenant-bound and exposes no caller cutoff', async () => {
+  const calls: Array<{ text: string; values: unknown[] }> = [];
+  let released = false;
+  const store = new PublicationAttemptStore({
+    async query<Row>() {
+      return { rowCount: 0, rows: [] as Row[] };
+    },
+    async connect() {
+      return {
+        async query<Row>(text: string, values: unknown[] = []) {
+          calls.push({ text, values });
+          if (text === 'BEGIN' || text === 'COMMIT')
+            return { rowCount: null, rows: [] as Row[] };
+          if (text.includes('set_config'))
+            return {
+              rowCount: 1,
+              rows: [{ set_config: context.actorId }] as Row[],
+            };
+          return {
+            rowCount: 1,
+            rows: [{ deleted_count: 100 }] as Row[],
+          };
+        },
+        release() {
+          released = true;
+        },
+      };
+    },
+  });
+  assert.deepEqual(await store.applyRetention(context), { deletedCount: 100 });
+  assert.equal(released, true);
+  assert.deepEqual(
+    calls.map((call) =>
+      call.text === 'BEGIN' || call.text === 'COMMIT' ? call.text : 'SQL',
+    ),
+    ['BEGIN', 'SQL', 'SQL', 'COMMIT'],
+  );
+  assert.deepEqual(calls[1]!.values, [context.actorId]);
+  assert.deepEqual(calls[2]!.values, [
+    context.actorId,
+    context.tenantId,
+    context.expectedSalesforceOrgId,
+    context.authorizationOrigin,
+    context.namespacePrefix,
+  ]);
+  assert.match(calls[2]!.text, /LIMIT 100/);
+  assert.match(calls[2]!.text, /binding\.role = 'administrator'/);
+  assert.match(calls[2]!.text, /publication_attempt_retention_days/);
+  assert.match(calls[2]!.text, /'committed', 'artifacts_missing'/);
+  assert.doesNotMatch(calls[2]!.text, /'unlinked'/);
+});
+
+void test('retention refuses non-administrators and rolls back malformed storage results', async () => {
+  let connected = 0;
+  const publisher = { ...context, role: 'publisher' as const };
+  const denied = new PublicationAttemptStore({
+    async query<Row>() {
+      return { rowCount: 0, rows: [] as Row[] };
+    },
+    async connect() {
+      connected++;
+      throw new Error('must not connect');
+    },
+  });
+  await assert.rejects(
+    denied.applyRetention(publisher),
+    PublicationAttemptError,
+  );
+  assert.equal(connected, 0);
+
+  const calls: string[] = [];
+  const malformed = new PublicationAttemptStore({
+    async query<Row>() {
+      return { rowCount: 0, rows: [] as Row[] };
+    },
+    async connect() {
+      return {
+        async query<Row>(text: string) {
+          calls.push(text);
+          if (text.includes('set_config'))
+            return { rowCount: 1, rows: [{}] as Row[] };
+          if (text.includes('WITH candidates'))
+            return { rowCount: 1, rows: [{ deleted_count: 101 }] as Row[] };
+          return { rowCount: null, rows: [] as Row[] };
+        },
+        release() {},
+      };
+    },
+  });
+  await assert.rejects(
+    malformed.applyRetention(context),
+    PublicationAttemptError,
+  );
+  assert.equal(calls.at(-1), 'ROLLBACK');
+});

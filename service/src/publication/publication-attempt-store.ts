@@ -60,6 +60,10 @@ export interface PublicationAttemptOperatorPage {
   readonly nextCursor: string | null;
 }
 
+export interface PublicationAttemptRetentionResult {
+  readonly deletedCount: number;
+}
+
 export interface PublicationAttemptCompletion {
   readonly outcome: PublicationAttemptOutcome;
   readonly salesforceRequestCount: number;
@@ -655,6 +659,106 @@ export class PublicationAttemptStore {
       });
     } catch {
       throw new PublicationAttemptError();
+    }
+  }
+
+  /** Delete one database-policy-selected batch and audit every row atomically. */
+  async applyRetention(
+    contextValue: TrustedAdministratorContext,
+  ): Promise<PublicationAttemptRetentionResult> {
+    let context: TrustedAdministratorContext;
+    try {
+      context = decodeTrustedAdministratorContext(contextValue);
+      if (context.role !== 'administrator') throw new Error();
+      if (typeof this.database.connect !== 'function') throw new Error();
+    } catch {
+      throw new PublicationAttemptError();
+    }
+    let client;
+    try {
+      client = await this.database.connect.call(this.database);
+    } catch {
+      throw new PublicationAttemptError();
+    }
+    let transaction = false;
+    try {
+      await client.query('BEGIN');
+      transaction = true;
+      const actor = await client.query(
+        `SELECT set_config(
+           'kusanya.publication_retention_actor', $1, true
+         )`,
+        [context.actorId],
+      );
+      if (actor.rowCount !== 1 || actor.rows.length !== 1) throw new Error();
+      const result = await client.query<{ deleted_count: unknown }>(
+        `WITH candidates AS (
+           SELECT attempt.publication_attempt_id
+           FROM tenant_publication_attempts AS attempt
+           JOIN tenant_administrator_tenants AS tenant
+             ON tenant.tenant_id = attempt.tenant_id
+           JOIN tenant_administrator_bindings AS binding
+             ON binding.tenant_id = attempt.tenant_id
+            AND binding.actor_id = $1
+            AND binding.active
+            AND binding.role = 'administrator'
+           WHERE attempt.tenant_id = $2
+             AND attempt.salesforce_org_id = $3
+             AND tenant.expected_salesforce_org_id = $3
+             AND tenant.authorization_origin = $4
+             AND tenant.namespace_prefix = $5
+             AND COALESCE(attempt.reconciled_at, attempt.completed_at)
+               <= clock_timestamp()
+                 - (tenant.publication_attempt_retention_days
+                   * interval '1 day')
+             AND (
+               (attempt.outcome IN ('succeeded', 'failed')
+                 AND attempt.reconciliation_status IS NULL)
+               OR
+               (attempt.outcome = 'partial'
+                 AND attempt.reconciliation_status IN (
+                   'committed', 'artifacts_missing'
+                 ))
+             )
+           ORDER BY COALESCE(
+                      attempt.reconciled_at, attempt.completed_at
+                    ),
+                    attempt.publication_attempt_id
+           LIMIT 100
+           FOR UPDATE OF attempt
+         ), deleted AS (
+           DELETE FROM tenant_publication_attempts AS attempt
+           USING candidates
+           WHERE attempt.publication_attempt_id =
+             candidates.publication_attempt_id
+             AND attempt.tenant_id = $2
+           RETURNING attempt.publication_attempt_id
+         )
+         SELECT count(*)::integer AS deleted_count FROM deleted`,
+        [
+          context.actorId,
+          context.tenantId,
+          context.expectedSalesforceOrgId,
+          context.authorizationOrigin,
+          context.namespacePrefix,
+        ],
+      );
+      if (result.rowCount !== 1 || result.rows.length !== 1) throw new Error();
+      const deletedCount = result.rows[0]!.deleted_count;
+      if (
+        !Number.isSafeInteger(deletedCount) ||
+        (deletedCount as number) < 0 ||
+        (deletedCount as number) > 100
+      )
+        throw new Error();
+      await client.query('COMMIT');
+      transaction = false;
+      return Object.freeze({ deletedCount: deletedCount as number });
+    } catch {
+      if (transaction) await client.query('ROLLBACK').catch(() => undefined);
+      throw new PublicationAttemptError();
+    } finally {
+      client.release();
     }
   }
 }

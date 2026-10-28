@@ -418,3 +418,12 @@ wrong identity, replay and cross-tenant conflicts fail closed. Invitation delive
 retention/deletion, scheduled reconciliation, privileged retry, disconnect/rebind,
 the publish CLI and ODK Validate runtime assets remain under note 34. Note 39 remains
 open, and no C10 or Phase 1 completion claim is made.
+
+ADR 0056 closes note 34's publication-attempt retention/deletion strand. A live
+full administrator can request one selector-free batch; PostgreSQL applies the
+tenant's 90-day policy to at most 100 old safely terminal attempts and atomically
+keeps one surviving audit per deletion. Started, unresolved, indeterminate,
+unlinked and young rows remain protected. Scheduled reconciliation and retention,
+unlinked Salesforce File cleanup, privileged retry, disconnect/rebind, the publish
+CLI and ODK Validate runtime assets remain future units. Note 39 remains open, and
+no C10 or Phase 1 completion claim is made.

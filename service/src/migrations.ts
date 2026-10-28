@@ -404,6 +404,99 @@ const migrations = Object.freeze([
       FOR EACH ROW
       EXECUTE FUNCTION kusanya_guard_administrator_invitation_immutable()`,
   }),
+  Object.freeze({
+    id: '0011_publication_attempt_retention',
+    sql: `ALTER TABLE tenant_administrator_tenants
+      ADD COLUMN publication_attempt_retention_days smallint
+        NOT NULL DEFAULT 90,
+      ADD CONSTRAINT tenant_administrator_tenants_attempt_retention
+        CHECK (publication_attempt_retention_days BETWEEN 30 AND 3650);
+    CREATE TABLE tenant_publication_attempt_retention_audits (
+      publication_attempt_retention_audit_id bigint
+        GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      tenant_id uuid NOT NULL
+        REFERENCES tenant_administrator_tenants(tenant_id),
+      publication_attempt_id uuid NOT NULL,
+      performed_by_actor_id varchar(128) NOT NULL,
+      outcome varchar(16) NOT NULL,
+      reconciliation_status varchar(32),
+      terminal_at timestamptz NOT NULL,
+      retention_days smallint NOT NULL,
+      deleted_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      CONSTRAINT tenant_publication_attempt_retention_audits_actor
+        FOREIGN KEY (performed_by_actor_id, tenant_id)
+        REFERENCES tenant_administrator_bindings(actor_id, tenant_id),
+      CONSTRAINT tenant_publication_attempt_retention_audits_attempt
+        UNIQUE (tenant_id, publication_attempt_id),
+      CONSTRAINT tenant_publication_attempt_retention_audits_outcome
+        CHECK (outcome IN ('succeeded', 'failed', 'partial')),
+      CONSTRAINT tenant_publication_attempt_retention_audits_resolution
+        CHECK (
+          (outcome IN ('succeeded', 'failed')
+            AND reconciliation_status IS NULL)
+          OR
+          (outcome = 'partial'
+            AND reconciliation_status IN ('committed', 'artifacts_missing'))
+        ),
+      CONSTRAINT tenant_publication_attempt_retention_audits_days
+        CHECK (retention_days BETWEEN 30 AND 3650),
+      CONSTRAINT tenant_publication_attempt_retention_audits_time
+        CHECK (deleted_at >= terminal_at)
+    );
+    CREATE FUNCTION kusanya_guard_publication_attempt_retention()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+    DECLARE
+      retention_actor varchar(128);
+      retained_days smallint;
+      terminal_time timestamptz;
+    BEGIN
+      retention_actor := current_setting(
+        'kusanya.publication_retention_actor', true
+      );
+      SELECT tenant.publication_attempt_retention_days
+        INTO retained_days
+      FROM tenant_administrator_tenants AS tenant
+      JOIN tenant_administrator_bindings AS binding
+        ON binding.tenant_id = tenant.tenant_id
+       AND binding.actor_id = retention_actor
+       AND binding.active
+       AND binding.role = 'administrator'
+      WHERE tenant.tenant_id = OLD.tenant_id;
+      terminal_time := COALESCE(OLD.reconciled_at, OLD.completed_at);
+      IF retained_days IS NULL
+        OR terminal_time IS NULL
+        OR terminal_time > clock_timestamp()
+          - (retained_days * interval '1 day')
+        OR NOT (
+          (OLD.outcome IN ('succeeded', 'failed')
+            AND OLD.reconciliation_status IS NULL)
+          OR
+          (OLD.outcome = 'partial'
+            AND OLD.reconciliation_status IN (
+              'committed', 'artifacts_missing'
+            ))
+        )
+      THEN
+        RAISE EXCEPTION 'publication attempt is not retention eligible'
+          USING ERRCODE = '23514';
+      END IF;
+      INSERT INTO tenant_publication_attempt_retention_audits (
+        tenant_id, publication_attempt_id, performed_by_actor_id,
+        outcome, reconciliation_status, terminal_at, retention_days
+      ) VALUES (
+        OLD.tenant_id, OLD.publication_attempt_id, retention_actor,
+        OLD.outcome, OLD.reconciliation_status, terminal_time, retained_days
+      );
+      RETURN OLD;
+    END;
+    $$;
+    CREATE TRIGGER tenant_publication_attempts_retention_guard
+      BEFORE DELETE ON tenant_publication_attempts
+      FOR EACH ROW
+      EXECUTE FUNCTION kusanya_guard_publication_attempt_retention()`,
+  }),
 ]);
 
 export class MigrationError extends Error {
@@ -426,7 +519,8 @@ export type MigrationTarget =
   | '0007_publication_attempt_reconciliation'
   | '0008_administrator_lifecycle'
   | '0009_administrator_roles'
-  | '0010_administrator_invitations';
+  | '0010_administrator_invitations'
+  | '0011_publication_attempt_retention';
 
 /** Apply the checked plan through an optional exact target for upgrade verification. */
 export async function applyMigrations(

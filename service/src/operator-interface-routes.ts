@@ -38,6 +38,7 @@ const script = `
     csrf: '/api/admin/session/csrf',
     logout: '/api/admin/session/logout',
     attempts: '/api/admin/salesforce/publication-attempts',
+    retention: '/api/admin/publication-attempts/retention',
     invitations: '/api/admin/administrator-invitations',
     provision: '/api/admin/administrators',
     publish: '/api/admin/salesforce/publications'
@@ -58,6 +59,7 @@ const script = `
     formVersion: document.getElementById('form-version'),
     logout: document.getElementById('logout'),
     more: document.getElementById('more'),
+    retention: document.getElementById('apply-retention'),
     rows: document.getElementById('attempt-rows'),
     status: document.getElementById('status'),
     workspace: document.getElementById('workspace')
@@ -222,6 +224,18 @@ const script = `
     try { await loadAttempts(false); }
     catch (error) { setStatus(error.message); }
   });
+  elements.retention.addEventListener('click', async () => {
+    try {
+      const response = await request(endpoints.retention, {
+        method: 'POST',
+        headers: protectedHeaders()
+      });
+      if (!response.ok) throw new Error(fixedFailure(response));
+      const result = await response.json();
+      setStatus('Deleted ' + result.deletedCount + ' retention-eligible publication attempts.');
+      await loadAttempts(true);
+    } catch (error) { setStatus(error.message); }
+  });
   elements.logout.addEventListener('click', async () => {
     clearInvitationSecret();
     try {
@@ -300,7 +314,7 @@ const html = `<!doctype html>
       <section class="card" aria-labelledby="attempts-title">
         <h2 id="attempts-title">Publication attempts</h2>
         <div class="scroll"><table><thead><tr><th>Form version</th><th>Status</th><th>Started</th><th>Completed</th><th>Attempt</th></tr></thead><tbody id="attempt-rows"></tbody></table></div>
-        <p><button id="more" class="secondary" type="button" disabled>Load older attempts</button></p>
+        <p class="actions"><button id="more" class="secondary" type="button" disabled>Load older attempts</button><button id="apply-retention" class="secondary" type="button">Delete expired safe attempts</button></p>
       </section>
     </div>
   </main>
