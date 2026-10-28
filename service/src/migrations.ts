@@ -436,6 +436,7 @@ const migrations = Object.freeze([
             AND reconciliation_status IS NULL)
           OR
           (outcome = 'partial'
+            AND reconciliation_status IS NOT NULL
             AND reconciliation_status IN ('committed', 'artifacts_missing'))
         ),
       CONSTRAINT tenant_publication_attempt_retention_audits_days
@@ -470,13 +471,16 @@ const migrations = Object.freeze([
         OR terminal_time > clock_timestamp()
           - (retained_days * interval '1 day')
         OR NOT (
-          (OLD.outcome IN ('succeeded', 'failed')
-            AND OLD.reconciliation_status IS NULL)
-          OR
-          (OLD.outcome = 'partial'
-            AND OLD.reconciliation_status IN (
-              'committed', 'artifacts_missing'
-            ))
+          (
+            (OLD.outcome IN ('succeeded', 'failed')
+              AND OLD.reconciliation_status IS NULL)
+            OR
+            (OLD.outcome = 'partial'
+              AND OLD.reconciliation_status IS NOT NULL
+              AND OLD.reconciliation_status IN (
+                'committed', 'artifacts_missing'
+              ))
+          ) IS TRUE
         )
       THEN
         RAISE EXCEPTION 'publication attempt is not retention eligible'

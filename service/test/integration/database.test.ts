@@ -600,24 +600,39 @@ void test(
       ),
       true,
     );
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO tenant_publication_attempt_retention_audits (
+           tenant_id, publication_attempt_id, performed_by_actor_id,
+           outcome, reconciliation_status, terminal_at, retention_days
+         ) VALUES (
+           $1, $2, $3, 'partial', NULL,
+           clock_timestamp() - interval '120 days', 90
+         )`,
+        [tenantId, randomUUID(), actorId],
+      ),
+      { code: '23514' },
+    );
     const direct = await pool.connect();
     try {
-      await direct.query('BEGIN');
-      await direct.query(
-        `SELECT set_config(
-           'kusanya.publication_retention_actor', $1, true
-         )`,
-        [actorId],
-      );
-      await assert.rejects(
-        direct.query(
-          `DELETE FROM tenant_publication_attempts
-           WHERE publication_attempt_id = $1`,
-          [protectedAttempts[0]],
-        ),
-        { code: '23514' },
-      );
-      await direct.query('ROLLBACK');
+      for (const protectedAttempt of protectedAttempts) {
+        await direct.query('BEGIN');
+        await direct.query(
+          `SELECT set_config(
+             'kusanya.publication_retention_actor', $1, true
+           )`,
+          [actorId],
+        );
+        await assert.rejects(
+          direct.query(
+            `DELETE FROM tenant_publication_attempts
+             WHERE publication_attempt_id = $1`,
+            [protectedAttempt],
+          ),
+          { code: '23514' },
+        );
+        await direct.query('ROLLBACK');
+      }
     } finally {
       direct.release();
     }
