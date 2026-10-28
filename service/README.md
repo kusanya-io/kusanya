@@ -116,6 +116,23 @@ initial tuple on standard input so it is not placed in process arguments:
 printf '%s\n' '{"subject":"<oidc-subject>","tenantId":"<uuid>","expectedSalesforceOrgId":"<00D-id>","authorizationOrigin":"https://login.salesforce.com","namespacePrefix":""}' | npm run bootstrap-administrator
 ```
 
+Before deploying migration `0012_bootstrap_uniqueness`, check for damage from the
+pre-existing warm-pool race described by issue #108:
+
+```sql
+SELECT tenant_id, count(*) AS bootstrap_count
+FROM tenant_administrator_lifecycle_audits
+WHERE action = 'bootstrap'
+GROUP BY tenant_id
+HAVING count(*) > 1;
+```
+
+No rows is the required result. If rows are returned, stop the deployment, preserve
+the audit and binding evidence, and investigate under the approved audited change
+process. Migration `0012` deliberately fails and rolls back without choosing a
+winner or deleting history. Do not remove duplicate records merely to make the
+index build.
+
 Use `https://test.salesforce.com` for a sandbox authorization origin when that is the
 tenant's reviewed binding. Use `"ksny__"` only after the namespace is linked and the
 namespaced suite has passed. The command has one winner: it refuses if that tenant

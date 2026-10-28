@@ -33,12 +33,33 @@ issuer-plus-subject mapper as login and accepts the initial tenant UUID, normali
 Salesforce org ID, authorization origin and namespace tuple only at this explicit
 server-operator boundary.
 
-One PostgreSQL statement takes ordered tenant and actor advisory locks, refuses if
-the tenant already has any administrator or the actor has any binding, inserts or
-confirms the immutable tenant tuple, creates the first active binding and appends a
-`bootstrap` lifecycle audit. Repetition and concurrent first-actor attempts have one
-winner and a fixed refusal. No input document, subject, actor, tenant or database
-detail is printed on failure.
+One PostgreSQL statement refuses if the tenant already has any administrator or the
+actor has any binding, inserts or confirms the immutable tenant tuple, creates the
+first active binding and appends a `bootstrap` lifecycle audit. Migration
+`0012_bootstrap_uniqueness` owns the concurrency invariant with a partial unique
+index permitting exactly one `bootstrap` audit per tenant. A losing statement rolls
+back its tenant and binding writes and maps SQLSTATE `23505` to the existing fixed
+conflict. Repetition and concurrent first-actor attempts therefore have one winner
+and a fixed refusal. No input document, subject, actor, tenant or database detail is
+printed on failure.
+
+The original implementation tried to serialize bootstrap with transaction-scoped
+advisory locks acquired in materialized CTEs. Issue #108 established that this was
+not a concurrency boundary: under `READ COMMITTED`, PostgreSQL fixed the implicit
+transaction's statement snapshot before a waiting CTE acquired the lock. A warm
+pool could therefore let the second statement resume with a snapshot predating the
+winner's commit. The database index supersedes that lock discipline and remains
+enforced if the query is later reorganized.
+
+Migration `0012` first checks for tenants with more than one historical `bootstrap`
+audit. If any exist, it fails and rolls back without deleting, rewriting or choosing
+between security audit records. An operator must investigate and repair such damage
+under an approved audited process before retrying the migration.
+
+A read-only inventory of `cobitech-edge` on 2026-10-28 found no running or stopped
+Kusanya containers, so there was no deployed development or staging database on
+that host to query for historical damage. The migration preflight remains mandatory
+for any database introduced or restored later.
 
 ### Deactivate; never delete or rebind
 
@@ -99,8 +120,10 @@ the closed administrator/publisher/reviewer model.
 
 Unit tests cover bounded bootstrap parsing, issuer-derived identities, replay,
 origin/session/CSRF ordering, request selectors, generic refusals, self-removal,
-composition and OpenAPI least-data drift. PostgreSQL 17 tests prove concurrent
-bootstrap has one winner, concurrent cross-removal leaves exactly one active
+composition and OpenAPI least-data drift. PostgreSQL 17 tests pre-warm two pool
+connections and prove concurrent bootstrap has one winner under the partial unique
+index. They also prove migration refuses pre-existing duplicate bootstrap audits
+without changing them, concurrent cross-removal leaves exactly one active
 administrator, removal revokes the target session immediately, inactive bindings
 cannot log in or be rebound, and bootstrap/deprovision audits commit with their
 state changes.
