@@ -56,9 +56,10 @@ access token with exact OIDC issuer, audience, RS256 signature and time bounds,
 derives a non-disclosing actor from issuer plus subject, and mounts the surface only
 after all secrets and capabilities validate. ADR 0052 permits same-tenant peer
 enrolment only from that live context. ADR 0053 keeps initial bootstrap off HTTP,
-retains removed actors as inactive tenant-bound tombstones, revokes sessions in the
-same transaction as its lifecycle audit and locks active bindings so concurrent
-removals cannot orphan a tenant. ADR 0054 assigns a checked live role to every
+enforces one bootstrap per tenant with a partial unique audit index, retains removed
+actors as inactive tenant-bound tombstones, revokes sessions in the same transaction
+as its lifecycle audit and locks active bindings so concurrent removals cannot
+orphan a tenant. ADR 0054 assigns a checked live role to every
 binding, centralizes the route-capability matrix and serializes role changes so
 concurrent demotions cannot remove the last full administrator. Request fields never
 select the caller's role, and an existing session is re-scoped on its next database

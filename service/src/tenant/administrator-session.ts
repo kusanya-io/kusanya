@@ -385,18 +385,8 @@ export class AdministratorSessionStore {
     let result;
     try {
       result = await this.database.query(
-        `WITH tenant_lock AS MATERIALIZED (
-           SELECT pg_advisory_xact_lock(
-             hashtextextended('tenant:' || $2::text, 0)
-           )
-         ), actor_lock AS MATERIALIZED (
-           SELECT pg_advisory_xact_lock(
-             hashtextextended('actor:' || $1, 0)
-           )
-           FROM tenant_lock
-         ), eligible AS MATERIALIZED (
+        `WITH eligible AS MATERIALIZED (
            SELECT $2::uuid AS tenant_id
-           FROM actor_lock
            WHERE NOT EXISTS (
              SELECT 1 FROM tenant_administrator_bindings
              WHERE tenant_id = $2::uuid OR actor_id = $1

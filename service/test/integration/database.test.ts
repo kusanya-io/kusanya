@@ -1573,7 +1573,119 @@ void test(
         '0009_administrator_roles',
         '0010_administrator_invitations',
         '0011_publication_attempt_retention',
+        '0012_bootstrap_uniqueness',
       ],
+    );
+  },
+);
+
+void test(
+  'migration 0012 refuses existing duplicate bootstrap audits without rewriting them',
+  {
+    timeout: 15000,
+    skip:
+      !databaseUrl && !databaseRequired
+        ? 'Set DATABASE_URL to a disposable PostgreSQL 17 database'
+        : false,
+  },
+  async (context) => {
+    assert.ok(
+      databaseUrl,
+      'DATABASE_URL is required when REQUIRE_DATABASE_TESTS=true',
+    );
+    const config = readConfig({
+      ...process.env,
+      NODE_ENV: 'test',
+      DATABASE_URL: databaseUrl,
+    });
+    const controlPool = createPostgresPool(config, () => {});
+    const schema = `bootstrap_damage_${randomUUID().replaceAll('-', '')}`;
+    assert.match(schema, /^[a-z0-9_]+$/);
+    await controlPool.query(`CREATE SCHEMA ${schema}`);
+    const damagedPool = new Pool({
+      connectionString: config.databaseUrl,
+      ssl: config.databaseSsl ? { rejectUnauthorized: true } : false,
+      options: `-c search_path=${schema}`,
+      max: 2,
+      connectionTimeoutMillis: config.databaseTimeoutMs,
+      query_timeout: config.databaseTimeoutMs,
+      statement_timeout: config.databaseTimeoutMs,
+      application_name: 'kusanya-bootstrap-damage-test',
+    });
+    context.after(async () => {
+      await damagedPool.end();
+      try {
+        await controlPool.query(`DROP SCHEMA ${schema} CASCADE`);
+      } finally {
+        await controlPool.end();
+      }
+    });
+
+    await applyMigrations(damagedPool, '0011_publication_attempt_retention');
+    const tenantId = randomUUID();
+    const actorIds = [
+      `administrator:${randomUUID()}`,
+      `administrator:${randomUUID()}`,
+    ];
+    const orgId = normalizeSalesforceOrgId(
+      `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+    );
+    await damagedPool.query(
+      `INSERT INTO tenant_administrator_tenants (
+         tenant_id, expected_salesforce_org_id,
+         authorization_origin, namespace_prefix
+       ) VALUES ($1::uuid, $2, $3, '')`,
+      [tenantId, orgId, 'https://login.salesforce.com'],
+    );
+    await damagedPool.query(
+      `INSERT INTO tenant_administrator_bindings (
+         actor_id, tenant_id, active, role
+       ) VALUES
+         ($1, $3::uuid, true, 'administrator'),
+         ($2, $3::uuid, true, 'administrator')`,
+      [actorIds[0], actorIds[1], tenantId],
+    );
+    await damagedPool.query(
+      `INSERT INTO tenant_administrator_lifecycle_audits (
+         tenant_id, performed_by_actor_id, target_actor_id, action
+       ) VALUES
+         ($1::uuid, $2, $2, 'bootstrap'),
+         ($1::uuid, $3, $3, 'bootstrap')`,
+      [tenantId, actorIds[0], actorIds[1]],
+    );
+
+    await assert.rejects(applyMigrations(damagedPool), {
+      message: 'DATABASE_MIGRATION_FAILED',
+    });
+    assert.equal(
+      (
+        await damagedPool.query(
+          `SELECT 1
+           FROM tenant_administrator_lifecycle_audits
+           WHERE tenant_id = $1::uuid AND action = 'bootstrap'`,
+          [tenantId],
+        )
+      ).rowCount,
+      2,
+    );
+    assert.equal(
+      (
+        await damagedPool.query(
+          `SELECT 1 FROM kusanya_schema_migrations
+           WHERE migration_id = '0012_bootstrap_uniqueness'`,
+        )
+      ).rowCount,
+      0,
+    );
+    assert.equal(
+      (
+        await damagedPool.query(
+          `SELECT 1 FROM pg_indexes
+           WHERE schemaname = current_schema()
+             AND indexname = 'kusanya_one_bootstrap_per_tenant'`,
+        )
+      ).rowCount,
+      0,
     );
   },
 );
@@ -1718,6 +1830,25 @@ void test(
       role: 'administrator' as const,
     });
     const bootstrapOrgStem = `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+    const warmConnections = await Promise.all([
+      pool.query<{ backend_pid: number }>(
+        `SELECT pg_backend_pid() AS backend_pid
+         FROM pg_sleep(0.1)`,
+      ),
+      pool.query<{ backend_pid: number }>(
+        `SELECT pg_backend_pid() AS backend_pid
+         FROM pg_sleep(0.1)`,
+      ),
+    ]);
+    assert.equal(
+      new Set(
+        warmConnections.flatMap((result) =>
+          result.rows.map((row) => row.backend_pid),
+        ),
+      ).size,
+      2,
+      'bootstrap race requires two pre-warmed pool connections',
+    );
     const bootstrapRace = await Promise.allSettled(
       bootstrapActorIds.map((bootstrapActorId) =>
         store.bootstrap({
@@ -1774,6 +1905,26 @@ void test(
           action: 'bootstrap',
         },
       ],
+    );
+    assert.equal(
+      (
+        await pool.query(
+          `SELECT 1 FROM tenant_administrator_bindings
+           WHERE tenant_id = $1::uuid`,
+          [bootstrapTenantId],
+        )
+      ).rowCount,
+      1,
+    );
+    assert.equal(
+      (
+        await pool.query(
+          `SELECT 1 FROM pg_indexes
+           WHERE schemaname = current_schema()
+             AND indexname = 'kusanya_one_bootstrap_per_tenant'`,
+        )
+      ).rowCount,
+      1,
     );
     const secondBootstrapActorId = bootstrapActorIds.find(
       (candidate) => candidate !== bootstrappedActorId,
