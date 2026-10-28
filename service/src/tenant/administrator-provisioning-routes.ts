@@ -4,8 +4,14 @@ import { types } from 'node:util';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { requireHardenedRequestLogging } from '../http-security.js';
 import {
+  administratorHasCapability,
+  administratorRoutePolicy,
+} from './administrator-authorization.js';
+import {
+  administratorRole,
   AdministratorSessionError,
   decodeTrustedAdministratorContext,
+  type AdministratorRole,
   type AdministratorSessionStore,
   type TrustedAdministratorContext,
 } from './administrator-session.js';
@@ -24,7 +30,7 @@ export interface AdministratorProvisioningRouteDependencies {
   readonly actorIdForSubject: (subject: string) => string;
   readonly sessionStore: Pick<
     AdministratorSessionStore,
-    'deprovision' | 'provision'
+    'changeRole' | 'deprovision' | 'provision'
   >;
   readonly externalOrigin: string;
 }
@@ -74,6 +80,23 @@ function requestedSubject(value: unknown): string {
   )
     throw new AdministratorProvisioningInputError();
   return body.subject;
+}
+
+function requestedSubjectRole(value: unknown): {
+  subject: string;
+  role: AdministratorRole;
+} {
+  const body = plainRecord(value);
+  if (
+    Object.keys(body).sort().join(',') !== 'role,subject' ||
+    typeof body.subject !== 'string'
+  )
+    throw new AdministratorProvisioningInputError();
+  try {
+    return { subject: body.subject, role: administratorRole(body.role) };
+  } catch {
+    throw new AdministratorProvisioningInputError();
+  }
 }
 
 function emptyQuery(request: FastifyRequest): boolean {
@@ -156,17 +179,21 @@ export function registerAdministratorProvisioningRoutes(
       if (
         typeof suppliedCsrf !== 'string' ||
         !csrfPattern.test(suppliedCsrf) ||
-        !safeEqual(suppliedCsrf, context.csrfToken)
+        !safeEqual(suppliedCsrf, context.csrfToken) ||
+        !administratorHasCapability(
+          context,
+          administratorRoutePolicy.administratorLifecycle,
+        )
       )
         return reply.code(403).send({ error: 'Request rejected' });
 
-      let subject: string;
+      let requested: { subject: string; role: AdministratorRole };
       let actorId: string;
       try {
         if (!emptyQuery(request))
           throw new AdministratorProvisioningInputError();
-        subject = requestedSubject(request.body);
-        actorId = dependencies.actorIdForSubject(subject);
+        requested = requestedSubjectRole(request.body);
+        actorId = dependencies.actorIdForSubject(requested.subject);
       } catch {
         return reply.code(400).send({ error: 'Request rejected' });
       }
@@ -174,10 +201,12 @@ export function registerAdministratorProvisioningRoutes(
       try {
         await dependencies.sessionStore.provision({
           actorId,
+          performedByActorId: context.actorId,
           tenantId: context.tenantId,
           expectedSalesforceOrgId: context.expectedSalesforceOrgId,
           authorizationOrigin: context.authorizationOrigin,
           namespacePrefix: context.namespacePrefix,
+          role: requested.role,
         });
         return reply.code(204).send();
       } catch {
@@ -227,7 +256,11 @@ export function registerAdministratorProvisioningRoutes(
       if (
         typeof suppliedCsrf !== 'string' ||
         !csrfPattern.test(suppliedCsrf) ||
-        !safeEqual(suppliedCsrf, context.csrfToken)
+        !safeEqual(suppliedCsrf, context.csrfToken) ||
+        !administratorHasCapability(
+          context,
+          administratorRoutePolicy.administratorLifecycle,
+        )
       )
         return reply.code(403).send({ error: 'Request rejected' });
 
@@ -247,6 +280,80 @@ export function registerAdministratorProvisioningRoutes(
           performedByActorId: context.actorId,
           targetActorId,
           tenantId: context.tenantId,
+        });
+        return reply.code(204).send();
+      } catch {
+        return reply.code(503).send({ error: 'Provisioning unavailable' });
+      }
+    },
+  );
+
+  app.patch(
+    provisionPath,
+    {
+      schema: {
+        response: {
+          204: { type: 'null' },
+          400: errorSchema,
+          401: errorSchema,
+          403: errorSchema,
+          503: errorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      if (request.headers.origin !== expectedOrigin)
+        return reply.code(400).send({ error: 'Request rejected' });
+
+      let context: TrustedAdministratorContext;
+      try {
+        const opaqueSession = cookieValue(request);
+        if (opaqueSession === undefined || !sessionPattern.test(opaqueSession))
+          throw new AdministratorProvisioningInputError();
+        context = decodeTrustedAdministratorContext(
+          await dependencies.authenticateAdministrator(opaqueSession),
+        );
+      } catch (error) {
+        const authenticationFailure =
+          error instanceof AdministratorProvisioningInputError ||
+          (error instanceof AdministratorSessionError &&
+            error.code !== 'ADMINISTRATOR_SESSION_STORAGE');
+        return reply.code(authenticationFailure ? 401 : 503).send({
+          error: authenticationFailure
+            ? 'Authentication required'
+            : 'Provisioning unavailable',
+        });
+      }
+
+      const suppliedCsrf = request.headers['x-csrf-token'];
+      if (
+        typeof suppliedCsrf !== 'string' ||
+        !csrfPattern.test(suppliedCsrf) ||
+        !safeEqual(suppliedCsrf, context.csrfToken) ||
+        !administratorHasCapability(
+          context,
+          administratorRoutePolicy.administratorLifecycle,
+        )
+      )
+        return reply.code(403).send({ error: 'Request rejected' });
+
+      let requested: { subject: string; role: AdministratorRole };
+      let targetActorId: string;
+      try {
+        if (!emptyQuery(request))
+          throw new AdministratorProvisioningInputError();
+        requested = requestedSubjectRole(request.body);
+        targetActorId = dependencies.actorIdForSubject(requested.subject);
+      } catch {
+        return reply.code(400).send({ error: 'Request rejected' });
+      }
+
+      try {
+        await dependencies.sessionStore.changeRole({
+          performedByActorId: context.actorId,
+          targetActorId,
+          tenantId: context.tenantId,
+          role: requested.role,
         });
         return reply.code(204).send();
       } catch {

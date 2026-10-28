@@ -5,7 +5,7 @@ import { createPostgresPool, createQueryExecutor } from './database.js';
 import {
   AdministratorSessionError,
   AdministratorSessionStore,
-  type AdministratorProvisioningInput,
+  type AdministratorBindingInput,
 } from './tenant/administrator-session.js';
 import {
   administratorOidcActorId,
@@ -75,7 +75,7 @@ export async function bootstrapAdministratorFromInput(
   const document = bootstrapDocument(await readBoundedInput(input));
   if (typeof document.subject !== 'string')
     throw new AdministratorSessionError('ADMINISTRATOR_SESSION_INPUT');
-  const provisioning: AdministratorProvisioningInput = {
+  const provisioning: AdministratorBindingInput = {
     actorId: administratorOidcActorId(issuer, document.subject),
     tenantId: document.tenantId as string,
     expectedSalesforceOrgId: document.expectedSalesforceOrgId as string,

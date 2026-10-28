@@ -20,24 +20,29 @@ const csrf = 'c'.repeat(43);
 const digest = 'd'.repeat(64);
 const config = readConfig({ DATABASE_URL: 'postgresql://localhost/kusanya' });
 
-const context = (selectedTenant = tenantId) => ({
+const context = (
+  selectedTenant = tenantId,
+  role: 'administrator' | 'publisher' | 'reviewer' = 'administrator',
+) => ({
   actorId: 'oidc:synthetic',
   tenantId: selectedTenant,
   expectedSalesforceOrgId: orgId,
   authorizationOrigin: 'https://login.salesforce.com',
   namespacePrefix: 'ksny__',
+  role,
   csrfToken: csrf,
 });
 
 function dependencies(
   publisher: typeof publishTenantSalesforceDefinition,
   selectedTenant = tenantId,
+  role: 'administrator' | 'publisher' | 'reviewer' = 'administrator',
 ) {
   const events: unknown[] = [];
   const value: PublicationRouteDependencies = {
     authenticateAdministrator: async (opaque) => {
       events.push(['authenticate', opaque]);
-      return context(selectedTenant);
+      return context(selectedTenant, role);
     },
     connectionStore: {} as PublicationRouteDependencies['connectionStore'],
     attemptStore: {
@@ -114,6 +119,62 @@ void test('publishes only from the live session tenant and durably completes suc
       },
     ],
   ]);
+});
+
+void test('permits publishers and refuses reviewers before starting an attempt', async (t) => {
+  let calls = 0;
+  const publisher = (async () => {
+    calls++;
+    return {
+      ok: true,
+      publicationDigest: digest,
+      alreadyCommitted: false,
+      requestCount: 1,
+    } as const;
+  }) as typeof publishTenantSalesforceDefinition;
+  const publisherSetup = dependencies(publisher, tenantId, 'publisher');
+  const publisherApp = createApp(
+    config,
+    { async ping() {}, async close() {} },
+    false,
+  );
+  t.after(() => publisherApp.close());
+  registerPublicationRoutes(publisherApp, publisherSetup.value);
+  assert.equal(
+    (
+      await publisherApp.inject({
+        method: 'POST',
+        url: publicationRoutePaths.publish,
+        headers: requestHeaders(),
+        payload: { formVersionId },
+      })
+    ).statusCode,
+    200,
+  );
+
+  const reviewerSetup = dependencies(publisher, tenantId, 'reviewer');
+  const reviewerApp = createApp(
+    config,
+    { async ping() {}, async close() {} },
+    false,
+  );
+  t.after(() => reviewerApp.close());
+  registerPublicationRoutes(reviewerApp, reviewerSetup.value);
+  const refused = await reviewerApp.inject({
+    method: 'POST',
+    url: publicationRoutePaths.publish,
+    headers: requestHeaders(),
+    payload: { formVersionId },
+  });
+  assert.equal(refused.statusCode, 403);
+  assert.deepEqual(refused.json(), { error: 'Request rejected' });
+  assert.equal(
+    reviewerSetup.events.some(
+      (event) => Array.isArray(event) && event[0] === 'start',
+    ),
+    false,
+  );
+  assert.equal(calls, 1);
 });
 
 void test('records exact artifacts and gives partial publication a distinct operator state', async (t) => {

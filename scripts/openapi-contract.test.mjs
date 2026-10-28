@@ -57,7 +57,16 @@ void test('operator OpenAPI remains least-data and documents the lifecycle surfa
   )?.[1];
   assert.ok(administratorPath, 'administrator lifecycle path is documented');
   assert.match(administratorPath, /^    post:$/m);
+  assert.match(administratorPath, /^    patch:$/m);
   assert.match(administratorPath, /^    delete:$/m);
+  assert.equal(
+    (
+      administratorPath.match(
+        /^                  enum: \[administrator, publisher, reviewer\]$/gm,
+      ) ?? []
+    ).length,
+    2,
+  );
   assert.doesNotMatch(
     administratorPath,
     /tenantId|actorId|salesforceOrgId|authorizationOrigin|namespacePrefix/,

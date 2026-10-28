@@ -21,12 +21,16 @@ const cursor = Buffer.from(
   ),
 ).toString('base64url');
 
-const trusted = (selectedTenant = tenantId) => ({
+const trusted = (
+  selectedTenant = tenantId,
+  role: 'administrator' | 'publisher' | 'reviewer' = 'administrator',
+) => ({
   actorId: `oidc:${selectedTenant.slice(0, 8)}`,
   tenantId: selectedTenant,
   expectedSalesforceOrgId: '00D000000000001EAA',
   authorizationOrigin: 'https://login.salesforce.com',
   namespacePrefix: 'ksny__',
+  role,
   csrfToken: csrf,
 });
 
@@ -41,6 +45,7 @@ function headers(extra: Record<string, string> = {}) {
 
 function dependencies(
   selectedTenant = tenantId,
+  role: 'administrator' | 'publisher' | 'reviewer' = 'administrator',
 ): PublicationAttemptPresentationRouteDependencies & {
   events: unknown[];
 } {
@@ -50,7 +55,7 @@ function dependencies(
     externalOrigin: 'https://service.example',
     async authenticateAdministrator(value) {
       events.push(['authenticate', value]);
-      return trusted(selectedTenant);
+      return trusted(selectedTenant, role);
     },
     attemptStore: {
       async listForOperator(context, cursor) {
@@ -111,6 +116,23 @@ void test('lists only the live session tenant through a least-data schema', asyn
     otherTenantId,
   );
   assert.doesNotMatch(response.body, /credential|provider|digest|content/i);
+});
+
+void test('permits a reviewer to read only the tenant-scoped operator history', async (t) => {
+  const setup = dependencies(tenantId, 'reviewer');
+  const app = createApp(config, { async ping() {}, async close() {} }, false);
+  t.after(() => app.close());
+  registerPublicationAttemptPresentationRoutes(app, setup);
+  const response = await app.inject({
+    method: 'GET',
+    url: publicationAttemptPresentationRoutePaths.list,
+    headers: headers(),
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(
+    setup.events.some((event) => Array.isArray(event) && event[0] === 'list'),
+    true,
+  );
 });
 
 void test('requires exact origin, session and CSRF before the single read', async (t) => {

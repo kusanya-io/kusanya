@@ -131,6 +131,7 @@ function createRouteApp(
       expectedSalesforceOrgId: orgId,
       authorizationOrigin: 'https://login.salesforce.com',
       namespacePrefix: 'ksny__',
+      role: 'administrator',
       csrfToken,
     }),
     transactionStore: memory.store,
@@ -171,6 +172,7 @@ void test('starts from only the verified session binding and ignores forged tena
         expectedSalesforceOrgId: orgId,
         authorizationOrigin: 'https://login.salesforce.com',
         namespacePrefix: 'ksny__',
+        role: 'administrator',
         csrfToken,
       };
     },
@@ -215,6 +217,7 @@ void test('requires a verified session, exact same-origin CSRF and an empty star
         expectedSalesforceOrgId: orgId,
         authorizationOrigin: 'https://login.salesforce.com',
         namespacePrefix: 'ksny__',
+        role: 'administrator',
         csrfToken,
       };
     },
@@ -258,6 +261,58 @@ void test('requires a verified session, exact same-origin CSRF and an empty star
   assert.equal(body.statusCode, 400);
   assert.equal(memory.rows.size, 0);
   assert.equal(authentications, 2);
+});
+
+void test('requires full administrator authority at both OAuth boundaries', async (context) => {
+  let role: 'administrator' | 'publisher' | 'reviewer' = 'administrator';
+  let fetches = 0;
+  const { app, memory } = createRouteApp({
+    authenticateAdministrator: async () => ({
+      actorId: 'administrator:synthetic',
+      tenantId,
+      expectedSalesforceOrgId: orgId,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: 'ksny__',
+      role,
+      csrfToken,
+    }),
+    fetchImplementation: async () => {
+      fetches++;
+      return signedResponse();
+    },
+  });
+  context.after(() => app.close());
+
+  role = 'publisher';
+  const deniedStart = await app.inject({
+    method: 'POST',
+    url: tenantOAuthRoutePaths.start,
+    headers: startHeaders(),
+  });
+  assert.equal(deniedStart.statusCode, 403);
+  assert.deepEqual(deniedStart.json(), { error: 'Request rejected' });
+  assert.equal(memory.rows.size, 0);
+
+  role = 'administrator';
+  const start = await app.inject({
+    method: 'POST',
+    url: tenantOAuthRoutePaths.start,
+    headers: startHeaders(),
+  });
+  const state = new URL(start.headers.location!).searchParams.get('state')!;
+  const binding = String(start.headers['set-cookie']).split(';', 1)[0]!;
+  assert.equal(memory.rows.size, 1);
+
+  role = 'reviewer';
+  const deniedCallback = await app.inject({
+    method: 'GET',
+    url: `${tenantOAuthRoutePaths.callback}?state=${state}&code=synthetic-code`,
+    headers: { cookie: callbackCookie(binding) },
+  });
+  assert.equal(deniedCallback.statusCode, 403);
+  assert.deepEqual(deniedCallback.json(), { error: 'Request rejected' });
+  assert.equal(fetches, 0);
+  assert.equal(memory.rows.size, 1);
 });
 
 void test('binds the callback to the initiating browser and stores no callback material in the response', async (context) => {
@@ -345,6 +400,7 @@ void test('revocation between start and callback immediately prevents completion
         expectedSalesforceOrgId: orgId,
         authorizationOrigin: 'https://login.salesforce.com',
         namespacePrefix: 'ksny__',
+        role: 'administrator',
         csrfToken,
       };
     },

@@ -160,7 +160,8 @@ paths:
   /api/admin/administrators:
     post:
       operationId: provisionTenantAdministrator
-      summary: Enrol one OIDC subject into the live administrator's immutable tenant
+      summary: Enrol one OIDC subject and role into the live administrator's immutable tenant
+      description: Requires the caller's live role to be administrator
       security: [{ administratorSession: [], csrfToken: [] }]
       parameters:
         - $ref: '#/components/parameters/ExactOrigin'
@@ -171,9 +172,12 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [subject]
+              required: [subject, role]
               properties:
                 subject: { type: string, minLength: 1, maxLength: 512 }
+                role:
+                  type: string
+                  enum: [administrator, publisher, reviewer]
       responses:
         '204':
           description: Subject enrolled in the current immutable tenant; response body is empty
@@ -184,6 +188,7 @@ paths:
     delete:
       operationId: deprovisionTenantAdministrator
       summary: Revoke one OIDC subject's access to the live administrator's tenant
+      description: Requires the caller's live role to be administrator
       security: [{ administratorSession: [], csrfToken: [] }]
       parameters:
         - $ref: '#/components/parameters/ExactOrigin'
@@ -204,10 +209,38 @@ paths:
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Rejected' }
         '503': { $ref: '#/components/responses/Unavailable' }
+    patch:
+      operationId: changeTenantAdministratorRole
+      summary: Change one peer administrator role without changing its tenant binding
+      description: Requires the caller's live role to be administrator
+      security: [{ administratorSession: [], csrfToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [subject, role]
+              properties:
+                subject: { type: string, minLength: 1, maxLength: 512 }
+                role:
+                  type: string
+                  enum: [administrator, publisher, reviewer]
+      responses:
+        '204':
+          description: Peer role changed and audited; response body is empty
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Rejected' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /api/admin/salesforce/publications:
     post:
       operationId: publishSalesforceDefinition
       summary: Publish one tenant-bound Salesforce Form Version
+      description: Requires the caller's live role to be administrator or publisher
       security: [{ administratorSession: [], csrfToken: [] }]
       parameters:
         - $ref: '#/components/parameters/ExactOrigin'
@@ -238,6 +271,7 @@ paths:
     get:
       operationId: listPublicationAttempts
       summary: List the newest 100 tenant-scoped publication attempts read-only
+      description: Available to administrator, publisher and reviewer roles
       security: [{ administratorSession: [], csrfToken: [] }]
       parameters:
         - $ref: '#/components/parameters/ExactOrigin'

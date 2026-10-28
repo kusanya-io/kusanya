@@ -93,8 +93,9 @@ query objects while still copying only own data descriptors.
 Deployments gain a reviewed, one-shot path to the first administrator, and active
 tenant administrators gain an immediate revocation path for peers. The operator
 interface uses the existing subject field for enrolment or removal and stores no
-new browser state. This is still a single-role model: every active binding has full
-administrator authority.
+new browser state. This unit originally shipped a single-role model in which every
+active binding had full administrator authority; ADR 0054 supersedes that part with
+the closed administrator/publisher/reviewer model.
 
 Unit tests cover bounded bootstrap parsing, issuer-derived identities, replay,
 origin/session/CSRF ordering, request selectors, generic refusals, self-removal,
@@ -108,9 +109,10 @@ Note 109 is narrowed in ADR 0052: the route hides the other tenant and all detai
 but a caller comparing successful enrolment with the generic refusal can learn one
 outcome bit. Notes 110, 111 and 112 are answered by this lifecycle, the root OpenAPI
 tripwire and the query-decoder comment respectively. Note 34 advances through
-bootstrap and deprovisioning but remains open for a role model, full browser-redirect
-OIDC client, attempt retention/deletion, scheduled reconciliation, privileged retry,
-disconnect/rebind, publish CLI and ODK Validate assets in the service runtime image.
+bootstrap and deprovisioning; ADR 0054 later closes the role-model strand. Its
+remaining current strands are invitations, attempt retention/deletion, scheduled
+reconciliation, privileged retry, disconnect/rebind, the publish CLI and ODK Validate
+assets in the service runtime image.
 Note 39 remains open. No C10 acceptance test, publish-ready state or Phase 1
 completion is claimed.
 

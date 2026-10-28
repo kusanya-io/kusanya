@@ -4,6 +4,10 @@ import { types } from 'node:util';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { requireHardenedRequestLogging } from '../http-security.js';
 import {
+  administratorHasCapability,
+  administratorRoutePolicy,
+} from './administrator-authorization.js';
+import {
   beginTenantSalesforceAuthorization,
   completeTenantSalesforceAuthorization,
   TenantOAuthError,
@@ -207,7 +211,11 @@ export function registerTenantOAuthRoutes(
         request.headers.origin !== origin ||
         typeof suppliedCsrf !== 'string' ||
         !csrfPattern.test(suppliedCsrf) ||
-        !safeEqual(suppliedCsrf, context.csrfToken)
+        !safeEqual(suppliedCsrf, context.csrfToken) ||
+        !administratorHasCapability(
+          context,
+          administratorRoutePolicy.salesforceAuthorization,
+        )
       )
         return reply.code(403).send({ error: 'Request rejected' });
       const started = await beginTenantSalesforceAuthorization(
@@ -263,6 +271,13 @@ export function registerTenantOAuthRoutes(
       } catch {
         return reply.code(401).send({ error: 'Authentication required' });
       }
+      if (
+        !administratorHasCapability(
+          context,
+          administratorRoutePolicy.salesforceAuthorization,
+        )
+      )
+        return reply.code(403).send({ error: 'Request rejected' });
       const expectedBinding = stateBinding(secret, input.state, session);
       if (
         suppliedBinding === undefined ||

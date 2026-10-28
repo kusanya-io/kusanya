@@ -48,6 +48,12 @@ peer deprovisioning. Bootstrap reads one bounded JSON document from standard inp
 has no HTTP route and refuses replay. Deprovisioning keeps the immutable actor binding
 inactive, revokes all of its sessions and appends the lifecycle audit atomically;
 self-removal, last-administrator removal and cross-tenant removal share one refusal.
+ADR 0054 adds three tenant operator roles. `administrator` may enrol, deprovision and
+change peer roles, authorize Salesforce, publish and view publication history;
+`publisher` may publish and view history; `reviewer` may only view history. Login,
+CSRF bootstrap and logout remain available to every active role. Authority is loaded
+from PostgreSQL on every request, never accepted from a header or cached in the
+session, so demotion immediately affects an existing cookie.
 
 Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.
 It has no HTTP route, Salesforce access or publishing authority. See
@@ -111,7 +117,12 @@ namespaced suite has passed. The command has one winner: it refuses if that tena
 already has any administrator or the issuer-derived actor has any binding. It never
 repairs, reactivates, moves or replaces an administrator. Do not edit the lifecycle
 tables manually; use the authenticated operator interface to remove a peer while
-retaining at least one active administrator.
+retaining at least one active full administrator. Enrol a second trusted
+`administrator` promptly after bootstrap: the one-shot bootstrap command cannot
+recover an existing tenant whose sole full administrator is unavailable. Use the
+operator interface to enrol peers at `administrator`, `publisher` or `reviewer`, or
+to change a peer role; self-change and demotion/removal of the final full
+administrator are refused.
 
 Before applying migration `0004_administrator_tenants` to a database created by PR
 #77, check the legacy bindings for namespace values that the current canonical rule

@@ -12,6 +12,7 @@ const context = Object.freeze({
   expectedSalesforceOrgId: '00D000000000001EAA',
   authorizationOrigin: 'https://login.salesforce.com',
   namespacePrefix: 'ksny__',
+  role: 'administrator' as const,
   csrfToken: 'c'.repeat(43),
 });
 

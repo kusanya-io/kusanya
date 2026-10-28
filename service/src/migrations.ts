@@ -276,6 +276,51 @@ const migrations = Object.freeze([
         CHECK (action <> 'bootstrap' OR performed_by_actor_id = target_actor_id)
     )`,
   }),
+  Object.freeze({
+    id: '0009_administrator_roles',
+    sql: `ALTER TABLE tenant_administrator_bindings
+      ADD COLUMN role varchar(16);
+    UPDATE tenant_administrator_bindings
+      SET role = 'administrator';
+    ALTER TABLE tenant_administrator_bindings
+      ALTER COLUMN role SET NOT NULL,
+      ADD CONSTRAINT tenant_administrator_bindings_role
+        CHECK (role IN ('administrator', 'publisher', 'reviewer'));
+    CREATE TABLE tenant_administrator_role_audits (
+      administrator_role_audit_id bigint
+        GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      tenant_id uuid NOT NULL
+        REFERENCES tenant_administrator_tenants(tenant_id),
+      performed_by_actor_id varchar(128) NOT NULL,
+      target_actor_id varchar(128) NOT NULL,
+      action varchar(16) NOT NULL,
+      previous_role varchar(16),
+      new_role varchar(16) NOT NULL,
+      occurred_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      CONSTRAINT tenant_administrator_role_audits_performer
+        FOREIGN KEY (performed_by_actor_id, tenant_id)
+        REFERENCES tenant_administrator_bindings(actor_id, tenant_id),
+      CONSTRAINT tenant_administrator_role_audits_target
+        FOREIGN KEY (target_actor_id, tenant_id)
+        REFERENCES tenant_administrator_bindings(actor_id, tenant_id),
+      CONSTRAINT tenant_administrator_role_audits_action
+        CHECK (action IN ('enrol', 'change')),
+      CONSTRAINT tenant_administrator_role_audits_previous
+        CHECK (
+          (action = 'enrol' AND previous_role IS NULL)
+          OR
+          (action = 'change' AND previous_role IS NOT NULL
+            AND previous_role <> new_role)
+        ),
+      CONSTRAINT tenant_administrator_role_audits_roles
+        CHECK (
+          (previous_role IS NULL OR previous_role IN (
+            'administrator', 'publisher', 'reviewer'
+          ))
+          AND new_role IN ('administrator', 'publisher', 'reviewer')
+        )
+    )`,
+  }),
 ]);
 
 export class MigrationError extends Error {
@@ -296,7 +341,8 @@ export type MigrationTarget =
   | '0005_salesforce_authorization_audits'
   | '0006_publication_attempts'
   | '0007_publication_attempt_reconciliation'
-  | '0008_administrator_lifecycle';
+  | '0008_administrator_lifecycle'
+  | '0009_administrator_roles';
 
 /** Apply the checked plan through an optional exact target for upgrade verification. */
 export async function applyMigrations(

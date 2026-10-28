@@ -265,6 +265,17 @@ self-performed by constraint. Both principals retain foreign keys to the immutab
 binding; audit append-only behaviour is a Kusanya write-path guarantee, not tamper
 evidence against a privileged database role.
 
+ADR 0054 adds the checked, non-null `role` column to
+`tenant_administrator_bindings`. The closed values are `administrator`, `publisher`
+and `reviewer`; migration backfill preserves every legacy binding as
+`administrator`, then leaves no role default for new rows. Sessions do not copy this value: each authentication joins the live
+binding so role changes take effect on the next request. The separate
+`tenant_administrator_role_audits` table records `enrol` and `change` events with
+performer, target, previous/new roles and database time. Enrolment and role change
+commit state and audit atomically. Its foreign keys preserve the immutable tenant
+identity, and append-only remains a Kusanya write-path guarantee rather than a claim
+against privileged database access.
+
 ADR 0045 adds append-only `tenant_salesforce_authorization_audits`. Each successful
 grant records the tenant, its bound trusted administrator actor, normalized `00D`
 org, signed authorizing `005` user and resulting credential version. The audited

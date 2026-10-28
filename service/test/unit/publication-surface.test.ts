@@ -22,6 +22,7 @@ const context = {
   expectedSalesforceOrgId: '00D000000000001EAA',
   authorizationOrigin: 'https://login.salesforce.com',
   namespacePrefix: '',
+  role: 'administrator' as const,
   csrfToken,
 };
 
@@ -34,6 +35,7 @@ function dependencies(): PublicationSurfaceDependencies {
     sessionStore: {
       async provision() {},
       async deprovision() {},
+      async changeRole() {},
       async issue() {
         return { opaqueSession, csrfToken, expiresInSeconds: 3600 };
       },
@@ -190,16 +192,18 @@ void test('mounted administrator lifecycle crosses identity and live tenant exac
       'x-actor-id': 'forged',
       'x-tenant-id': 'forged',
     },
-    payload: { subject: 'new-subject' },
+    payload: { subject: 'new-subject', role: 'publisher' },
   });
   assert.equal(response.statusCode, 204);
   assert.deepEqual(provisioned, [
     {
       actorId: 'oidc:new-subject',
+      performedByActorId: context.actorId,
       tenantId: context.tenantId,
       expectedSalesforceOrgId: context.expectedSalesforceOrgId,
       authorizationOrigin: context.authorizationOrigin,
       namespacePrefix: context.namespacePrefix,
+      role: 'publisher',
     },
   ]);
 
@@ -212,7 +216,7 @@ void test('mounted administrator lifecycle crosses identity and live tenant exac
       'x-csrf-token': csrfToken,
       'content-type': 'application/json',
     },
-    payload: { subject: 'other', tenantId: 'forged' },
+    payload: { subject: 'other', role: 'reviewer', tenantId: 'forged' },
   });
   assert.equal(widened.statusCode, 400);
   assert.equal(provisioned.length, 1);

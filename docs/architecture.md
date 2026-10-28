@@ -284,8 +284,15 @@ same-origin, live-session, CSRF-protected peer-deprovisioning operation. Removal
 the immutable binding as an inactive tombstone, revokes every session and appends a
 lifecycle audit in the same transaction. Ordered tenant binding locks prevent
 concurrent removals from orphaning a tenant; self-removal and last-administrator
-removal are refused. Privileged connection lifecycle, roles, retention, scheduled
-reconciliation and CLI work remain outside this boundary.
+removal are refused. ADR 0054 adds one database-backed `administrator`/`publisher`/
+`reviewer` role to every binding and one closed capability matrix for all mounted
+administrator routes. Authentication reads the role from PostgreSQL on every request,
+so demotion immediately re-scopes an existing cookie. Only administrators manage
+operators or authorize Salesforce, publishers may publish, and all three roles may
+read tenant-scoped publication history. Self-change and concurrent last-administrator
+demotion are refused; enrolment and role changes append atomic role audits.
+Privileged connection lifecycle, invitations, retention, scheduled reconciliation
+and CLI work remain outside this boundary.
 
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure
