@@ -56,6 +56,7 @@ void test('uses only mounted same-origin APIs and keeps bearer and CSRF values i
     '/api/admin/session/csrf',
     '/api/admin/session/logout',
     '/api/admin/administrators',
+    '/api/admin/administrator-invitations',
     '/api/admin/salesforce/publications',
     '/api/admin/salesforce/publication-attempts',
   ])
@@ -64,6 +65,11 @@ void test('uses only mounted same-origin APIs and keeps bearer and CSRF values i
   assert.match(response.body, /cache: 'no-store'/);
   assert.match(response.body, /redirect: 'error'/);
   assert.match(response.body, /elements\.token\.value = ''/);
+  assert.match(response.body, /clearInvitationSecret\(\)/);
+  assert.match(
+    response.body,
+    /Invitation created\. Copy its one-time token securely\./,
+  );
   assert.match(response.body, /method: 'DELETE'/);
   assert.match(response.body, /method: 'PATCH'/);
   assert.match(response.body, /value="administrator">Administrator<\/option>/);

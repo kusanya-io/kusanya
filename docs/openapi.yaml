@@ -102,6 +102,19 @@ paths:
       security: [{ oidcAccessToken: [] }]
       parameters:
         - $ref: '#/components/parameters/ExactOrigin'
+      requestBody:
+        required: false
+        description: Present only while atomically accepting a first-sign-in invitation
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [invitationToken]
+              properties:
+                invitationToken:
+                  type: string
+                  pattern: '^[A-Za-z0-9_-]{43}$'
       responses:
         '204':
           description: Session issued; response body is empty
@@ -158,33 +171,6 @@ paths:
         '403': { $ref: '#/components/responses/Rejected' }
         '503': { $ref: '#/components/responses/Unavailable' }
   /api/admin/administrators:
-    post:
-      operationId: provisionTenantAdministrator
-      summary: Enrol one OIDC subject and role into the live administrator's immutable tenant
-      description: Requires the caller's live role to be administrator
-      security: [{ administratorSession: [], csrfToken: [] }]
-      parameters:
-        - $ref: '#/components/parameters/ExactOrigin'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [subject, role]
-              properties:
-                subject: { type: string, minLength: 1, maxLength: 512 }
-                role:
-                  type: string
-                  enum: [administrator, publisher, reviewer]
-      responses:
-        '204':
-          description: Subject enrolled in the current immutable tenant; response body is empty
-        '400': { $ref: '#/components/responses/Rejected' }
-        '401': { $ref: '#/components/responses/AuthenticationRequired' }
-        '403': { $ref: '#/components/responses/Rejected' }
-        '503': { $ref: '#/components/responses/Unavailable' }
     delete:
       operationId: deprovisionTenantAdministrator
       summary: Revoke one OIDC subject's access to the live administrator's tenant
@@ -232,6 +218,79 @@ paths:
       responses:
         '204':
           description: Peer role changed and audited; response body is empty
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Rejected' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/admin/administrator-invitations:
+    post:
+      operationId: createTenantAdministratorInvitation
+      summary: Issue one expiring single-use invitation without probing global membership
+      description: Requires the caller's live role to be administrator
+      security: [{ administratorSession: [], csrfToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [subject, role]
+              properties:
+                subject: { type: string, minLength: 1, maxLength: 512 }
+                role:
+                  type: string
+                  enum: [administrator, publisher, reviewer]
+      responses:
+        '201':
+          description: Invitation issued; its raw token is returned only in this response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [invitationId, invitationToken, expiresInSeconds]
+                properties:
+                  invitationId:
+                    type: string
+                    format: uuid
+                    pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+                  invitationToken:
+                    type: string
+                    pattern: '^[A-Za-z0-9_-]{43}$'
+                  expiresInSeconds:
+                    type: integer
+                    minimum: 300
+                    maximum: 604800
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Rejected' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      operationId: revokeTenantAdministratorInvitation
+      summary: Idempotently revoke a pending invitation in the live tenant
+      description: Requires the caller's live role to be administrator
+      security: [{ administratorSession: [], csrfToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [invitationId]
+              properties:
+                invitationId:
+                  type: string
+                  format: uuid
+                  pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      responses:
+        '204':
+          description: Pending invitation revoked if present; response body is empty
         '400': { $ref: '#/components/responses/Rejected' }
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Rejected' }

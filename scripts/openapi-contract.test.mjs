@@ -53,10 +53,10 @@ void test('operator OpenAPI remains least-data and documents the lifecycle surfa
   assert.equal((summary.match(/^            - /gm) ?? []).length, 7);
 
   const administratorPath = contract.match(
-    /  \/api\/admin\/administrators:\n([\s\S]*?)\n  \/api\/admin\/salesforce\/publications:/,
+    /  \/api\/admin\/administrators:\n([\s\S]*?)\n  \/api\/admin\/administrator-invitations:/,
   )?.[1];
   assert.ok(administratorPath, 'administrator lifecycle path is documented');
-  assert.match(administratorPath, /^    post:$/m);
+  assert.doesNotMatch(administratorPath, /^    post:$/m);
   assert.match(administratorPath, /^    patch:$/m);
   assert.match(administratorPath, /^    delete:$/m);
   assert.equal(
@@ -65,10 +65,31 @@ void test('operator OpenAPI remains least-data and documents the lifecycle surfa
         /^                  enum: \[administrator, publisher, reviewer\]$/gm,
       ) ?? []
     ).length,
-    2,
+    1,
   );
   assert.doesNotMatch(
     administratorPath,
     /tenantId|actorId|salesforceOrgId|authorizationOrigin|namespacePrefix/,
   );
+
+  const invitationPath = contract.match(
+    /  \/api\/admin\/administrator-invitations:\n([\s\S]*?)\n  \/api\/admin\/salesforce\/publications:/,
+  )?.[1];
+  assert.ok(invitationPath, 'administrator invitation path is documented');
+  assert.match(invitationPath, /^    post:$/m);
+  assert.match(invitationPath, /^    delete:$/m);
+  assert.doesNotMatch(invitationPath, /^    patch:$/m);
+  for (const field of ['invitationId', 'invitationToken', 'expiresInSeconds'])
+    assert.match(invitationPath, new RegExp(`\\b${field}\\b`));
+  assert.doesNotMatch(
+    invitationPath,
+    /tenantId|actorId|salesforceOrgId|authorizationOrigin|namespacePrefix/,
+  );
+
+  const loginPath = contract.match(
+    /  \/api\/admin\/session\/login:\n([\s\S]*?)\n  \/api\/admin\/session\/csrf:/,
+  )?.[1];
+  assert.ok(loginPath, 'administrator login path is documented');
+  assert.match(loginPath, /required: \[invitationToken\]/);
+  assert.doesNotMatch(loginPath, /tenantId|actorId|role/);
 });

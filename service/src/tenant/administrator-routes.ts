@@ -3,6 +3,10 @@ import { timingSafeEqual } from 'node:crypto';
 import { types } from 'node:util';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { requireHardenedRequestLogging } from '../http-security.js';
+import {
+  AdministratorInvitationError,
+  type AdministratorInvitationStore,
+} from './administrator-invitation.js';
 import type {
   AdministratorSessionConfiguration,
   AdministratorSessionStore,
@@ -20,6 +24,7 @@ const cookieName = '__Host-kusanya_admin_session';
 const sessionPattern = /^[A-Za-z0-9_-]{43}$/;
 const actorPattern = /^[A-Za-z0-9:_-]{1,128}$/;
 const csrfPattern = /^[A-Za-z0-9_-]{43}$/;
+const invitationPattern = /^[A-Za-z0-9_-]{43}$/;
 
 class AdministratorHttpInputError extends Error {}
 
@@ -30,6 +35,7 @@ export interface AdministratorRouteDependencies {
     AdministratorSessionStore,
     'issue' | 'authenticate' | 'revoke'
   >;
+  readonly invitationStore: Pick<AdministratorInvitationStore, 'accept'>;
   readonly sessionConfiguration: AdministratorSessionConfiguration;
   readonly externalOrigin: string;
 }
@@ -92,7 +98,7 @@ function trustedContext(value: unknown) {
   }
 }
 
-function emptyRequest(request: FastifyRequest): boolean {
+function emptyQuery(request: FastifyRequest): boolean {
   const query = request.query;
   if (query === null || typeof query !== 'object' || types.isProxy(query))
     throw new AdministratorHttpInputError();
@@ -104,7 +110,23 @@ function emptyRequest(request: FastifyRequest): boolean {
     )
   )
     throw new AdministratorHttpInputError();
-  return Object.keys(descriptors).length === 0 && request.body === undefined;
+  return Object.keys(descriptors).length === 0;
+}
+
+function invitationToken(request: FastifyRequest): string | undefined {
+  if (request.body === undefined) return undefined;
+  const body = plainRecord(request.body);
+  if (
+    Object.keys(body).join(',') !== 'invitationToken' ||
+    typeof body.invitationToken !== 'string' ||
+    !invitationPattern.test(body.invitationToken)
+  )
+    throw new AdministratorHttpInputError();
+  return body.invitationToken;
+}
+
+function emptyRequest(request: FastifyRequest): boolean {
+  return emptyQuery(request) && request.body === undefined;
 }
 
 function cookieValue(request: FastifyRequest): string | undefined {
@@ -143,6 +165,8 @@ function isLoginRejection(error: unknown): boolean {
   return (
     error instanceof AdministratorHttpInputError ||
     error instanceof AdministratorOidcError ||
+    (error instanceof AdministratorInvitationError &&
+      error.code !== 'ADMINISTRATOR_INVITATION_STORAGE') ||
     (error instanceof AdministratorSessionError &&
       error.code === 'ADMINISTRATOR_SESSION_ABSENT')
   );
@@ -158,17 +182,24 @@ export function registerAdministratorSessionRoutes(
 
   app.post(loginPath, async (request, reply) => {
     try {
-      if (!sameOrigin(request, origin) || !emptyRequest(request)) {
+      if (!sameOrigin(request, origin) || !emptyQuery(request)) {
         reply.header('Set-Cookie', clearSessionCookie());
         return reply.code(400).send({ error: 'Request rejected' });
       }
+      const token = invitationToken(request);
       const actor = trustedActor(
         await dependencies.verifyLoginRequest(request),
       );
-      const issued = await dependencies.sessionStore.issue(
-        actor,
-        dependencies.sessionConfiguration,
-      );
+      const issued =
+        token === undefined
+          ? await dependencies.sessionStore.issue(
+              actor,
+              dependencies.sessionConfiguration,
+            )
+          : await dependencies.invitationStore.accept(
+              { actorId: actor, invitationToken: token },
+              dependencies.sessionConfiguration,
+            );
       reply.header(
         'Set-Cookie',
         sessionCookie(issued.opaqueSession, issued.expiresInSeconds),

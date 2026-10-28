@@ -38,13 +38,18 @@ const script = `
     csrf: '/api/admin/session/csrf',
     logout: '/api/admin/session/logout',
     attempts: '/api/admin/salesforce/publication-attempts',
+    invitations: '/api/admin/administrator-invitations',
     provision: '/api/admin/administrators',
     publish: '/api/admin/salesforce/publications'
   });
   const elements = Object.freeze({
     login: document.getElementById('login-form'),
     token: document.getElementById('access-token'),
-    provision: document.getElementById('provision-form'),
+    invitationToken: document.getElementById('invitation-token'),
+    invite: document.getElementById('invitation-form'),
+    invitationId: document.getElementById('invitation-id'),
+    invitationOutput: document.getElementById('invitation-output'),
+    revokeInvitation: document.getElementById('revoke-invitation'),
     subject: document.getElementById('oidc-subject'),
     role: document.getElementById('administrator-role'),
     deprovision: document.getElementById('deprovision'),
@@ -57,6 +62,10 @@ const script = `
     status: document.getElementById('status'),
     workspace: document.getElementById('workspace')
   });
+  const clearInvitationSecret = () => {
+    elements.invitationId.value = '';
+    elements.invitationOutput.value = '';
+  };
   let csrfToken = null;
   let nextCursor = null;
   const setStatus = (message) => { elements.status.textContent = message; };
@@ -104,6 +113,7 @@ const script = `
     const response = await request(endpoints.csrf, { method: 'POST' });
     if (!response.ok) {
       csrfToken = null;
+      clearInvitationSecret();
       elements.workspace.hidden = true;
       setStatus('Sign in with a short-lived Kusanya API access token.');
       return;
@@ -117,20 +127,29 @@ const script = `
   elements.login.addEventListener('submit', async (event) => {
     event.preventDefault();
     const token = elements.token.value;
+    const invitationToken = elements.invitationToken.value;
     elements.token.value = '';
+    elements.invitationToken.value = '';
+    clearInvitationSecret();
     try {
+      const headers = { Authorization: 'Bearer ' + token };
+      const init = { method: 'POST', headers };
+      if (invitationToken !== '') {
+        headers['Content-Type'] = 'application/json';
+        init.body = JSON.stringify({ invitationToken });
+      }
       const response = await request(endpoints.login, {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + token }
+        ...init
       });
       if (!response.ok) throw new Error(fixedFailure(response));
       await bootstrap();
     } catch (error) { setStatus(error.message); }
   });
-  elements.provision.addEventListener('submit', async (event) => {
+  elements.invite.addEventListener('submit', async (event) => {
     event.preventDefault();
+    clearInvitationSecret();
     try {
-      const response = await request(endpoints.provision, {
+      const response = await request(endpoints.invitations, {
         method: 'POST',
         headers: { ...protectedHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -139,8 +158,23 @@ const script = `
         })
       });
       if (!response.ok) throw new Error(fixedFailure(response));
+      const invitation = await response.json();
       elements.subject.value = '';
-      setStatus('Administrator enrolled for this tenant.');
+      elements.invitationId.value = invitation.invitationId;
+      elements.invitationOutput.value = invitation.invitationToken;
+      setStatus('Invitation created. Copy its one-time token securely.');
+    } catch (error) { setStatus(error.message); }
+  });
+  elements.revokeInvitation.addEventListener('click', async () => {
+    try {
+      const response = await request(endpoints.invitations, {
+        method: 'DELETE',
+        headers: { ...protectedHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invitationId: elements.invitationId.value })
+      });
+      if (!response.ok) throw new Error(fixedFailure(response));
+      clearInvitationSecret();
+      setStatus('Invitation revoked if it was still pending.');
     } catch (error) { setStatus(error.message); }
   });
   elements.deprovision.addEventListener('click', async () => {
@@ -189,6 +223,7 @@ const script = `
     catch (error) { setStatus(error.message); }
   });
   elements.logout.addEventListener('click', async () => {
+    clearInvitationSecret();
     try {
       const response = await request(endpoints.logout, {
         method: 'POST',
@@ -235,6 +270,7 @@ const html = `<!doctype html>
       <h2 id="session-title">Administrator session</h2>
       <form id="login-form" autocomplete="off">
         <label>Short-lived Kusanya API access token<input id="access-token" name="access-token" type="password" required autocomplete="off" spellcheck="false"></label>
+        <label>Invitation token (first sign-in only)<input id="invitation-token" name="invitation-token" type="password" autocomplete="off" spellcheck="false"></label>
         <div class="actions"><button type="submit">Sign in</button><button id="logout" class="secondary" type="button">Sign out</button></div>
       </form>
       <p id="status" role="status" aria-live="polite"></p>
@@ -243,12 +279,15 @@ const html = `<!doctype html>
       <div class="grid">
         <section class="card" aria-labelledby="provision-title">
           <h2 id="provision-title">Manage tenant operators</h2>
-          <p class="muted">The OIDC subject is mapped by the configured identity provider and can join only this tenant. Role changes take effect on the next request.</p>
-          <form id="provision-form">
+          <p class="muted">Issue a one-time invitation for the configured OIDC subject. The subject receives no authority until accepting it during sign-in. Role changes take effect on the next request.</p>
+          <form id="invitation-form">
             <label>OIDC subject<input id="oidc-subject" name="subject" required maxlength="512" autocomplete="off"></label>
             <label>Role<select id="administrator-role" name="role"><option value="reviewer">Reviewer</option><option value="publisher">Publisher</option><option value="administrator">Administrator</option></select></label>
-            <div class="actions"><button type="submit">Enroll operator</button><button id="change-role" class="secondary" type="button">Change role</button><button id="deprovision" class="secondary" type="button">Remove operator</button></div>
+            <div class="actions"><button type="submit">Create invitation</button><button id="change-role" class="secondary" type="button">Change existing role</button><button id="deprovision" class="secondary" type="button">Remove existing operator</button></div>
           </form>
+          <label>Invitation ID<input id="invitation-id" autocomplete="off" spellcheck="false"></label>
+          <label>One-time invitation token<input id="invitation-output" readonly autocomplete="off" spellcheck="false"></label>
+          <p><button id="revoke-invitation" class="secondary" type="button">Revoke invitation</button></p>
         </section>
         <section class="card" aria-labelledby="publish-title">
           <h2 id="publish-title">Publish a form version</h2>

@@ -61,8 +61,12 @@ removals cannot orphan a tenant. ADR 0054 assigns a checked live role to every
 binding, centralizes the route-capability matrix and serializes role changes so
 concurrent demotions cannot remove the last full administrator. Request fields never
 select the caller's role, and an existing session is re-scoped on its next database
-authentication. Login issues
-only a hardened host cookie, CSRF is released only
-through a live exact-origin session, and logout revokes PostgreSQL before clearing
-the cookie. All mounted adapters reject a host whose actual Fastify controller
-permits automatic request logging, closing note 94.
+authentication. ADR 0055 removes immediate browser enrolment. Invitation issuance
+requires the live full-administrator boundary but does not query whether the target
+actor exists anywhere, preventing a cross-tenant membership oracle. Only a matching
+verified OIDC actor can consume the opaque token; expiry, revocation, stored role,
+binding, audit and first session are checked or written atomically. The raw token is
+body-only, returned once and stored only as a digest. Login issues only a hardened
+host cookie, CSRF is released only through a live exact-origin session, and logout
+revokes PostgreSQL before clearing the cookie. All mounted adapters reject a host
+whose actual Fastify controller permits automatic request logging, closing note 94.

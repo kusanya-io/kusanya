@@ -37,6 +37,7 @@ function createRouteApp(
   const issuedActors: string[] = [];
   const authenticated: string[] = [];
   const revoked: string[] = [];
+  const accepted: unknown[] = [];
   const app = createApp(config, { async ping() {}, async close() {} }, false);
   const dependencies: AdministratorRouteDependencies = {
     verifyLoginRequest: async () => ({ actorId }),
@@ -58,12 +59,22 @@ function createRouteApp(
         return session === opaqueSession;
       },
     },
+    invitationStore: {
+      async accept(input) {
+        accepted.push(input);
+        return Object.freeze({
+          opaqueSession,
+          csrfToken,
+          expiresInSeconds: 900,
+        });
+      },
+    },
     sessionConfiguration,
     externalOrigin: origin,
     ...overrides,
   };
   registerAdministratorSessionRoutes(app, dependencies);
-  return { app, issuedActors, authenticated, revoked };
+  return { app, issuedActors, authenticated, revoked, accepted };
 }
 
 function headers(extra: Record<string, string> = {}) {
@@ -99,6 +110,28 @@ void test('issues only a fresh hardened host cookie after trusted login', async 
   assert.doesNotMatch(response.body, new RegExp(csrfToken));
   assert.deepEqual(issuedActors, [actorId]);
   assert.equal(verifications, 1);
+});
+
+void test('accepts an invitation only for the OIDC-verified actor and issues the same hardened cookie', async (t) => {
+  const invitationToken = 'i'.repeat(43);
+  const { app, issuedActors, accepted } = createRouteApp();
+  t.after(() => app.close());
+  const response = await app.inject({
+    method: 'POST',
+    url: administratorSessionRoutePaths.login,
+    headers: {
+      ...headers(),
+      'content-type': 'application/json',
+    },
+    payload: { invitationToken },
+  });
+  assert.equal(response.statusCode, 204);
+  assert.deepEqual(issuedActors, []);
+  assert.deepEqual(accepted, [{ actorId, invitationToken }]);
+  assert.equal(
+    response.headers['set-cookie'],
+    `${cookieName}=${opaqueSession}; Path=/; Max-Age=900; Secure; HttpOnly; SameSite=Lax`,
+  );
 });
 
 void test('login rejects cross-origin, nonempty and hostile verifier results', async (t) => {
@@ -377,6 +410,11 @@ void test('refuses browser route registration on a default Fastify host', async 
           },
           async revoke() {
             return false;
+          },
+        },
+        invitationStore: {
+          async accept() {
+            throw new Error('unused');
           },
         },
         sessionConfiguration,

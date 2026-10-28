@@ -35,11 +35,9 @@ judgement; the adapter cannot reconcile, retry, publish or delete. ADR 0050 reco
 Bill's OIDC/Entra identity decision and mounts login, CSRF, logout, publication and
 attempt presentation as one fail-closed production composition.
 ADR 0052 adds `GET /admin`, a dependency-free static operator shell over those APIs,
-plus same-tenant administrator enrolment and keyset pagination. The shell embeds no
+plus administrator lifecycle controls and keyset pagination. The shell embeds no
 tenant data, uses no external assets or browser storage, clears the short-lived login
-token immediately and renders API data only as text under a hash-pinned CSP. The
-enrolment request accepts only an OIDC subject; issuer-derived actor identity and the
-live session's immutable tenant tuple feed the existing provisioning store. Attempt
+token immediately and renders API data only as text under a hash-pinned CSP. Attempt
 pages stay capped at 100, repeat the full tenant authorization join and expose only
 an opaque continuation cursor. Initial tenant bootstrap and privileged connection
 lifecycle remain operator/deployment work outside these routes.
@@ -48,12 +46,19 @@ peer deprovisioning. Bootstrap reads one bounded JSON document from standard inp
 has no HTTP route and refuses replay. Deprovisioning keeps the immutable actor binding
 inactive, revokes all of its sessions and appends the lifecycle audit atomically;
 self-removal, last-administrator removal and cross-tenant removal share one refusal.
-ADR 0054 adds three tenant operator roles. `administrator` may enrol, deprovision and
+ADR 0054 adds three tenant operator roles. `administrator` may invite, deprovision and
 change peer roles, authorize Salesforce, publish and view publication history;
 `publisher` may publish and view history; `reviewer` may only view history. Login,
 CSRF bootstrap and logout remain available to every active role. Authority is loaded
 from PostgreSQL on every request, never accepted from a header or cached in the
 session, so demotion immediately affects an existing cookie.
+ADR 0055 replaces direct browser enrolment with opaque, expiring invitations. A full
+administrator issues the role and OIDC subject without learning whether that identity
+already exists elsewhere. The raw 256-bit token is returned once, stored only as a
+digest and accepted only in the first verified login body. Binding, stored role,
+enrolment audit, invitation consumption and the first browser session commit in one
+PostgreSQL statement. Pending tokens are revocable; wrong-subject, expired, revoked,
+replayed and cross-tenant collisions share one authentication refusal.
 
 Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.
 It has no HTTP route, Salesforce access or publishing authority. See
@@ -117,11 +122,12 @@ namespaced suite has passed. The command has one winner: it refuses if that tena
 already has any administrator or the issuer-derived actor has any binding. It never
 repairs, reactivates, moves or replaces an administrator. Do not edit the lifecycle
 tables manually; use the authenticated operator interface to remove a peer while
-retaining at least one active full administrator. Enrol a second trusted
+retaining at least one active full administrator. Invite a second trusted
 `administrator` promptly after bootstrap: the one-shot bootstrap command cannot
-recover an existing tenant whose sole full administrator is unavailable. Use the
-operator interface to enrol peers at `administrator`, `publisher` or `reviewer`, or
-to change a peer role; self-change and demotion/removal of the final full
+recover an existing tenant whose sole full administrator is unavailable. Deliver
+each one-time token to its intended subject out of band. Use the operator interface
+to issue or revoke invitations at `administrator`, `publisher` or `reviewer`, or to
+change an accepted peer's role; self-change and demotion/removal of the final full
 administrator are refused.
 
 Before applying migration `0004_administrator_tenants` to a database created by PR
@@ -196,7 +202,8 @@ version control.
 The mounted administrator surface also requires `ADMIN_EXTERNAL_ORIGIN`, the exact
 HTTPS origin; `ADMIN_OIDC_ISSUER`, `ADMIN_OIDC_AUDIENCE` and
 `ADMIN_OIDC_JWKS_URI`; canonical 32-byte `ADMIN_SESSION_SECRET` and bounded
-`ADMIN_SESSION_TTL_SECONDS`; `SALESFORCE_OAUTH_CLIENT_ID` and
+`ADMIN_SESSION_TTL_SECONDS`; bounded `ADMIN_INVITATION_TTL_SECONDS`;
+`SALESFORCE_OAUTH_CLIENT_ID` and
 `SALESFORCE_OAUTH_CLIENT_SECRET`; all three bounded Salesforce timeout settings;
 and absolute `ODK_VALIDATE_JAVA_EXECUTABLE` and `ODK_VALIDATE_JAR_PATH` values.
 There are no development fallbacks. Missing or malformed values stop `main.ts`
