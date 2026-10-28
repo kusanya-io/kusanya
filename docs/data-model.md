@@ -261,9 +261,12 @@ identity. Session issuance and resolution require `active`, so removal revokes a
 even across concurrent requests, and enrolment cannot reactivate or move the actor.
 `tenant_administrator_lifecycle_audits` records `bootstrap` and `deprovision` events
 with the tenant, performing actor, target actor and database timestamp. Bootstrap is
-self-performed by constraint. Both principals retain foreign keys to the immutable
-binding; audit append-only behaviour is a Kusanya write-path guarantee, not tamper
-evidence against a privileged database role.
+self-performed by constraint. Migration `0012_bootstrap_uniqueness` adds a partial
+unique index on `tenant_id` for `bootstrap` events, making one initial bootstrap per
+tenant a database invariant even when concurrent statements begin on separate warm
+pool connections. Both principals retain foreign keys to the immutable binding;
+audit append-only behaviour is a Kusanya write-path guarantee, not tamper evidence
+against a privileged database role.
 
 ADR 0054 adds the checked, non-null `role` column to
 `tenant_administrator_bindings`. The closed values are `administrator`, `publisher`

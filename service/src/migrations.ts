@@ -501,6 +501,26 @@ const migrations = Object.freeze([
       FOR EACH ROW
       EXECUTE FUNCTION kusanya_guard_publication_attempt_retention()`,
   }),
+  Object.freeze({
+    id: '0012_bootstrap_uniqueness',
+    sql: `DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM tenant_administrator_lifecycle_audits
+        WHERE action = 'bootstrap'
+        GROUP BY tenant_id
+        HAVING count(*) > 1
+      ) THEN
+        RAISE EXCEPTION 'duplicate tenant bootstrap audits require operator review'
+          USING ERRCODE = '23514';
+      END IF;
+    END;
+    $$;
+    CREATE UNIQUE INDEX kusanya_one_bootstrap_per_tenant
+      ON tenant_administrator_lifecycle_audits (tenant_id)
+      WHERE action = 'bootstrap'`,
+  }),
 ]);
 
 export class MigrationError extends Error {
@@ -524,7 +544,8 @@ export type MigrationTarget =
   | '0008_administrator_lifecycle'
   | '0009_administrator_roles'
   | '0010_administrator_invitations'
-  | '0011_publication_attempt_retention';
+  | '0011_publication_attempt_retention'
+  | '0012_bootstrap_uniqueness';
 
 /** Apply the checked plan through an optional exact target for upgrade verification. */
 export async function applyMigrations(

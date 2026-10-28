@@ -263,7 +263,7 @@ void test('provisions an exact immutable actor binding and normalizes the org ID
   assert.equal(memory.bindings.get(targetActor)?.tenant_id, tenantId);
 });
 
-void test('bootstraps once with tenant and actor locks plus an atomic lifecycle audit', async () => {
+void test('bootstraps once with database uniqueness plus an atomic lifecycle audit', async () => {
   const queries: { text: string; values: unknown[] }[] = [];
   const store = new AdministratorSessionStore({
     async query<Row>(text: string, values: unknown[] = []) {
@@ -276,7 +276,7 @@ void test('bootstraps once with tenant and actor locks plus an atomic lifecycle 
   });
   await store.bootstrap(bootstrap);
   assert.equal(queries.length, 1);
-  assert.match(queries[0]!.text, /pg_advisory_xact_lock/);
+  assert.doesNotMatch(queries[0]!.text, /pg_advisory_xact_lock/);
   assert.match(
     queries[0]!.text,
     /WHERE tenant_id = \$2::uuid OR actor_id = \$1/,
