@@ -4,6 +4,10 @@ import { types } from 'node:util';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { requireHardenedRequestLogging } from '../http-security.js';
 import {
+  administratorHasCapability,
+  administratorRoutePolicy,
+} from '../tenant/administrator-authorization.js';
+import {
   AdministratorSessionError,
   decodeTrustedAdministratorContext,
   type TrustedAdministratorContext,
@@ -163,7 +167,11 @@ export function registerPublicationRoutes(
     if (
       typeof suppliedCsrf !== 'string' ||
       !csrfPattern.test(suppliedCsrf) ||
-      !safeEqual(suppliedCsrf, context.csrfToken)
+      !safeEqual(suppliedCsrf, context.csrfToken) ||
+      !administratorHasCapability(
+        context,
+        administratorRoutePolicy.salesforcePublication,
+      )
     )
       return reply.code(403).send({ error: 'Request rejected' });
 

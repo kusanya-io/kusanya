@@ -405,7 +405,11 @@ there is no bootstrap HTTP route and replay is refused. A live administrator can
 deprovision a peer through the same origin/session/CSRF boundary. The binding remains
 as an inactive tombstone, all target sessions are revoked, the change is audited, and
 ordered locking prevents self, last-administrator and concurrent tenant lockout.
-Roles, invitations, retention/deletion of publication attempts, scheduled
-reconciliation, privileged retry, disconnect/rebind, the publish CLI and ODK Validate
-runtime assets remain under note 34. Note 39 remains open, and no C10 or Phase 1
-completion claim is made.
+ADR 0054 adds the closed administrator/publisher/reviewer role model. Every request
+uses the live database role: administrators manage peers and Salesforce authorization,
+publishers can publish, and reviewers are limited to publication history. Enrolment
+and role changes are audited atomically, while ordered locking prevents self-change
+or concurrent demotion of the final full administrator. Invitations,
+retention/deletion of publication attempts, scheduled reconciliation, privileged
+retry, disconnect/rebind, the publish CLI and ODK Validate runtime assets remain
+under note 34. Note 39 remains open, and no C10 or Phase 1 completion claim is made.

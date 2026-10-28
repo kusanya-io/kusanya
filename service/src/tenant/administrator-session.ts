@@ -13,6 +13,13 @@ const sessionPattern = /^[A-Za-z0-9_-]{43}$/;
 const digestPattern = /^[0-9a-f]{64}$/;
 const administratorNamespacePattern = /^(?:|[a-z][a-z0-9]{0,14}__)$/;
 
+export const administratorRoles = Object.freeze([
+  'administrator',
+  'publisher',
+  'reviewer',
+] as const);
+export type AdministratorRole = (typeof administratorRoles)[number];
+
 export type AdministratorSessionFailureCode =
   | 'ADMINISTRATOR_SESSION_INPUT'
   | 'ADMINISTRATOR_SESSION_CONFLICT'
@@ -26,7 +33,7 @@ export class AdministratorSessionError extends Error {
   }
 }
 
-export interface AdministratorProvisioningInput {
+export interface AdministratorBindingInput {
   /** Internal stable actor identifier produced by a future trusted identity mapper. */
   readonly actorId: string;
   readonly tenantId: string;
@@ -35,10 +42,22 @@ export interface AdministratorProvisioningInput {
   readonly namespacePrefix: string;
 }
 
+export interface AdministratorProvisioningInput extends AdministratorBindingInput {
+  readonly performedByActorId: string;
+  readonly role: AdministratorRole;
+}
+
 export interface AdministratorDeprovisioningInput {
   readonly performedByActorId: string;
   readonly targetActorId: string;
   readonly tenantId: string;
+}
+
+export interface AdministratorRoleChangeInput {
+  readonly performedByActorId: string;
+  readonly targetActorId: string;
+  readonly tenantId: string;
+  readonly role: AdministratorRole;
 }
 
 export interface AdministratorSessionConfiguration {
@@ -59,15 +78,21 @@ export interface TrustedAdministratorContext {
   readonly expectedSalesforceOrgId: string;
   readonly authorizationOrigin: string;
   readonly namespacePrefix: string;
+  readonly role: AdministratorRole;
   readonly csrfToken: string;
 }
 
-interface DecodedProvisioning {
+interface DecodedBinding {
   actorId: string;
   tenantId: string;
   expectedSalesforceOrgId: string;
   authorizationOrigin: string;
   namespacePrefix: string;
+}
+
+interface DecodedProvisioning extends DecodedBinding {
+  performedByActorId: string;
+  role: AdministratorRole;
 }
 
 interface ProvisioningRow {
@@ -76,6 +101,7 @@ interface ProvisioningRow {
   expected_salesforce_org_id: unknown;
   authorization_origin: unknown;
   namespace_prefix: unknown;
+  role: unknown;
 }
 
 function fail(code: AdministratorSessionFailureCode): never {
@@ -151,7 +177,17 @@ function salesforceOrigin(value: unknown): string {
   return parsed.origin;
 }
 
-function provisioning(value: unknown): DecodedProvisioning {
+/** Decode the closed administrator role set used by storage and route policy. */
+export function administratorRole(value: unknown): AdministratorRole {
+  if (
+    typeof value !== 'string' ||
+    !administratorRoles.includes(value as AdministratorRole)
+  )
+    fail('ADMINISTRATOR_SESSION_INPUT');
+  return value as AdministratorRole;
+}
+
+function binding(value: unknown): DecodedBinding {
   const input = plainRecord(value);
   exactKeys(input, [
     'actorId',
@@ -176,6 +212,31 @@ function provisioning(value: unknown): DecodedProvisioning {
   }
 }
 
+function provisioning(value: unknown): DecodedProvisioning {
+  const input = plainRecord(value);
+  exactKeys(input, [
+    'actorId',
+    'authorizationOrigin',
+    'expectedSalesforceOrgId',
+    'namespacePrefix',
+    'performedByActorId',
+    'role',
+    'tenantId',
+  ]);
+  const decoded = binding({
+    actorId: input.actorId,
+    tenantId: input.tenantId,
+    expectedSalesforceOrgId: input.expectedSalesforceOrgId,
+    authorizationOrigin: input.authorizationOrigin,
+    namespacePrefix: input.namespacePrefix,
+  });
+  return {
+    ...decoded,
+    performedByActorId: actorId(input.performedByActorId),
+    role: administratorRole(input.role),
+  };
+}
+
 function deprovisioning(value: unknown): AdministratorDeprovisioningInput {
   const input = plainRecord(value);
   exactKeys(input, ['performedByActorId', 'targetActorId', 'tenantId']);
@@ -187,6 +248,21 @@ function deprovisioning(value: unknown): AdministratorDeprovisioningInput {
     performedByActorId,
     targetActorId,
     tenantId: tenantId(input.tenantId),
+  });
+}
+
+function roleChange(value: unknown): AdministratorRoleChangeInput {
+  const input = plainRecord(value);
+  exactKeys(input, ['performedByActorId', 'role', 'targetActorId', 'tenantId']);
+  const performedByActorId = actorId(input.performedByActorId);
+  const targetActorId = actorId(input.targetActorId);
+  if (performedByActorId === targetActorId)
+    fail('ADMINISTRATOR_SESSION_CONFLICT');
+  return Object.freeze({
+    performedByActorId,
+    targetActorId,
+    tenantId: tenantId(input.tenantId),
+    role: administratorRole(input.role),
   });
 }
 
@@ -246,6 +322,7 @@ export function decodeTrustedAdministratorContext(
     'csrfToken',
     'expectedSalesforceOrgId',
     'namespacePrefix',
+    'role',
     'tenantId',
   ]);
   if (
@@ -262,6 +339,7 @@ export function decodeTrustedAdministratorContext(
       ),
       authorizationOrigin: salesforceOrigin(input.authorizationOrigin),
       namespacePrefix: administratorNamespacePrefix(input.namespacePrefix),
+      role: administratorRole(input.role),
       csrfToken: input.csrfToken,
     });
   } catch (error) {
@@ -277,7 +355,7 @@ function decodeRow(
 ): TrustedAdministratorContext {
   try {
     const row = plainRecord(value) as unknown as ProvisioningRow;
-    const decoded = provisioning({
+    const decoded = binding({
       actorId: row.actor_id,
       tenantId: row.tenant_id,
       expectedSalesforceOrgId: row.expected_salesforce_org_id,
@@ -290,6 +368,7 @@ function decodeRow(
       expectedSalesforceOrgId: decoded.expectedSalesforceOrgId,
       authorizationOrigin: decoded.authorizationOrigin,
       namespacePrefix: decoded.namespacePrefix,
+      role: row.role,
       csrfToken: csrfToken(secret, session),
     });
   } catch {
@@ -301,8 +380,8 @@ export class AdministratorSessionStore {
   constructor(private readonly database: QueryExecutor) {}
 
   /** Create the first tenant administrator once, from the server-only bootstrap CLI. */
-  async bootstrap(inputValue: AdministratorProvisioningInput): Promise<void> {
-    const input = provisioning(inputValue);
+  async bootstrap(inputValue: AdministratorBindingInput): Promise<void> {
+    const input = binding(inputValue);
     let result;
     try {
       result = await this.database.query(
@@ -337,8 +416,10 @@ export class AdministratorSessionStore {
                    EXCLUDED.namespace_prefix
            RETURNING tenant_id
          ), actor AS (
-           INSERT INTO tenant_administrator_bindings (actor_id, tenant_id)
-           SELECT $1, tenant_id FROM tenant
+           INSERT INTO tenant_administrator_bindings (
+             actor_id, tenant_id, role
+           )
+           SELECT $1, tenant_id, 'administrator' FROM tenant
            RETURNING actor_id, tenant_id
          ), audit AS (
            INSERT INTO tenant_administrator_lifecycle_audits (
@@ -387,44 +468,64 @@ export class AdministratorSessionStore {
              hashtextextended('actor:' || $1, 0)
            )
            FROM tenant_lock
-         ), eligible AS MATERIALIZED (
-           SELECT $2::uuid AS tenant_id
+         ), performer AS MATERIALIZED (
+           SELECT binding.actor_id, binding.tenant_id
            FROM actor_lock
+           JOIN tenant_administrator_bindings binding
+             ON binding.actor_id = $6
+            AND binding.tenant_id = $2::uuid
+            AND binding.active
+            AND binding.role = 'administrator'
+           JOIN tenant_administrator_tenants tenant
+             ON tenant.tenant_id = binding.tenant_id
+            AND tenant.expected_salesforce_org_id = $3
+            AND tenant.authorization_origin = $4
+            AND tenant.namespace_prefix = $5
+         ), eligible AS MATERIALIZED (
+           SELECT tenant_id FROM performer
            WHERE NOT EXISTS (
              SELECT 1
              FROM tenant_administrator_bindings
              WHERE actor_id = $1
                AND tenant_id <> $2::uuid
            )
-         ), tenant AS (
-           INSERT INTO tenant_administrator_tenants (
-             tenant_id, expected_salesforce_org_id,
-             authorization_origin, namespace_prefix
+         ), inserted AS (
+           INSERT INTO tenant_administrator_bindings (
+             actor_id, tenant_id, role
            )
-           SELECT tenant_id, $3, $4, $5 FROM eligible
-           ON CONFLICT (tenant_id) DO UPDATE SET tenant_id = EXCLUDED.tenant_id
-           WHERE tenant_administrator_tenants.expected_salesforce_org_id =
-                   EXCLUDED.expected_salesforce_org_id
-             AND tenant_administrator_tenants.authorization_origin =
-                   EXCLUDED.authorization_origin
-             AND tenant_administrator_tenants.namespace_prefix =
-                   EXCLUDED.namespace_prefix
-           RETURNING tenant_id
-         ), actor AS (
-           INSERT INTO tenant_administrator_bindings (actor_id, tenant_id)
-           SELECT $1, tenant_id FROM tenant
-           ON CONFLICT (actor_id) DO UPDATE SET actor_id = EXCLUDED.actor_id
-           WHERE tenant_administrator_bindings.tenant_id = EXCLUDED.tenant_id
-             AND tenant_administrator_bindings.active
-           RETURNING actor_id
+           SELECT $1, tenant_id, $7 FROM eligible
+           ON CONFLICT (actor_id) DO NOTHING
+           RETURNING actor_id, tenant_id, role
+         ), existing AS (
+           SELECT binding.actor_id, binding.tenant_id, binding.role
+           FROM eligible
+           JOIN tenant_administrator_bindings binding
+             ON binding.actor_id = $1
+            AND binding.tenant_id = eligible.tenant_id
+            AND binding.active
+            AND binding.role = $7
+         ), accepted AS MATERIALIZED (
+           SELECT actor_id, tenant_id, role FROM inserted
+           UNION ALL
+           SELECT actor_id, tenant_id, role FROM existing
+         ), audit AS (
+           INSERT INTO tenant_administrator_role_audits (
+             tenant_id, performed_by_actor_id, target_actor_id,
+             action, previous_role, new_role
+           )
+           SELECT tenant_id, $6, actor_id, 'enrol', NULL, role
+           FROM inserted
+           RETURNING administrator_role_audit_id
          )
-         SELECT actor_id FROM actor`,
+         SELECT actor_id FROM accepted`,
         [
           input.actorId,
           input.tenantId,
           input.expectedSalesforceOrgId,
           input.authorizationOrigin,
           input.namespacePrefix,
+          input.performedByActorId,
+          input.role,
         ],
       );
     } catch (error) {
@@ -456,7 +557,7 @@ export class AdministratorSessionStore {
              hashtextextended('tenant:' || $3::text, 0)
            )
          ), locked AS MATERIALIZED (
-           SELECT binding.actor_id, binding.tenant_id
+           SELECT binding.actor_id, binding.tenant_id, binding.role
            FROM tenant_lock
            JOIN tenant_administrator_bindings binding
              ON binding.tenant_id = $3::uuid
@@ -471,7 +572,12 @@ export class AdministratorSessionStore {
             AND target.actor_id = $2
             AND target.tenant_id = performer.tenant_id
            WHERE $1 <> $2
-             AND (SELECT count(*) FROM locked) > 1
+             AND performer.role = 'administrator'
+             AND (
+               target.role <> 'administrator'
+               OR (SELECT count(*) FROM locked
+                   WHERE role = 'administrator') > 1
+             )
          ), disabled AS (
            UPDATE tenant_administrator_bindings binding
            SET active = false, deprovisioned_at = clock_timestamp()
@@ -493,6 +599,76 @@ export class AdministratorSessionStore {
          )
          SELECT administrator_lifecycle_audit_id FROM audit`,
         [input.performedByActorId, input.targetActorId, input.tenantId],
+      );
+    } catch {
+      fail('ADMINISTRATOR_SESSION_STORAGE');
+    }
+    if (result.rowCount === 0 && result.rows.length === 0)
+      fail('ADMINISTRATOR_SESSION_CONFLICT');
+    if (result.rowCount !== 1 || result.rows.length !== 1)
+      fail('ADMINISTRATOR_SESSION_STORAGE');
+  }
+
+  /** Atomically rescope one peer while retaining at least one full administrator. */
+  async changeRole(inputValue: AdministratorRoleChangeInput): Promise<void> {
+    const input = roleChange(inputValue);
+    let result;
+    try {
+      result = await this.database.query(
+        `WITH tenant_lock AS MATERIALIZED (
+           SELECT pg_advisory_xact_lock(
+             hashtextextended('tenant:' || $3::text, 0)
+           )
+         ), locked AS MATERIALIZED (
+           SELECT binding.actor_id, binding.tenant_id, binding.role
+           FROM tenant_lock
+           JOIN tenant_administrator_bindings binding
+             ON binding.tenant_id = $3::uuid
+            AND binding.active
+           ORDER BY binding.actor_id
+           FOR UPDATE OF binding
+         ), eligible AS MATERIALIZED (
+           SELECT target.actor_id, target.tenant_id,
+                  target.role AS previous_role
+           FROM locked performer
+           JOIN locked target
+             ON performer.actor_id = $1
+            AND target.actor_id = $2
+            AND target.tenant_id = performer.tenant_id
+           WHERE $1 <> $2
+             AND performer.role = 'administrator'
+             AND target.role <> $4
+             AND (
+               target.role <> 'administrator'
+               OR $4 = 'administrator'
+               OR (SELECT count(*) FROM locked
+                   WHERE role = 'administrator') > 1
+             )
+         ), changed AS (
+           UPDATE tenant_administrator_bindings binding
+           SET role = $4
+           FROM eligible
+           WHERE binding.actor_id = eligible.actor_id
+             AND binding.tenant_id = eligible.tenant_id
+           RETURNING binding.actor_id, binding.tenant_id,
+                     eligible.previous_role, binding.role AS new_role
+         ), audit AS (
+           INSERT INTO tenant_administrator_role_audits (
+             tenant_id, performed_by_actor_id, target_actor_id,
+             action, previous_role, new_role
+           )
+           SELECT tenant_id, $1, actor_id, 'change',
+                  previous_role, new_role
+           FROM changed
+           RETURNING administrator_role_audit_id
+         )
+         SELECT administrator_role_audit_id FROM audit`,
+        [
+          input.performedByActorId,
+          input.targetActorId,
+          input.tenantId,
+          input.role,
+        ],
       );
     } catch {
       fail('ADMINISTRATOR_SESSION_STORAGE');
@@ -562,7 +738,7 @@ export class AdministratorSessionStore {
              AND expires_at <= clock_timestamp()
          )
          SELECT b.actor_id, b.tenant_id, t.expected_salesforce_org_id,
-                t.authorization_origin, t.namespace_prefix
+                t.authorization_origin, t.namespace_prefix, b.role
          FROM administrator_sessions s
          JOIN tenant_administrator_bindings b ON b.actor_id = s.actor_id
          JOIN tenant_administrator_tenants t ON t.tenant_id = b.tenant_id

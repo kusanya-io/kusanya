@@ -93,8 +93,8 @@ void test(
       [tenantId, orgId, otherTenantId, otherOrgId],
     );
     await pool.query(
-      `INSERT INTO tenant_administrator_bindings (actor_id, tenant_id)
-       VALUES ($1, $2), ($3, $4)`,
+      `INSERT INTO tenant_administrator_bindings (actor_id, tenant_id, role)
+       VALUES ($1, $2, 'administrator'), ($3, $4, 'administrator')`,
       [actorId, tenantId, otherActorId, otherTenantId],
     );
     const executor: QueryExecutor = {
@@ -110,6 +110,7 @@ void test(
       expectedSalesforceOrgId: orgId,
       authorizationOrigin: 'https://login.salesforce.com',
       namespacePrefix: 'ksny__',
+      role: 'administrator' as const,
       csrfToken: 'c'.repeat(43),
     };
     const otherTrusted = {
@@ -118,6 +119,7 @@ void test(
       expectedSalesforceOrgId: otherOrgId,
       authorizationOrigin: 'https://login.salesforce.com',
       namespacePrefix: '',
+      role: 'administrator' as const,
       csrfToken: 'o'.repeat(43),
     };
     const otherAttemptId = await store.start(
@@ -667,6 +669,14 @@ void test(
           [tenantId, rejectedTenantId],
         );
         await pool.query(
+          'DELETE FROM tenant_administrator_role_audits WHERE tenant_id = $1::uuid',
+          [tenantId],
+        );
+        await pool.query(
+          'DELETE FROM tenant_administrator_lifecycle_audits WHERE tenant_id = $1::uuid',
+          [tenantId],
+        );
+        await pool.query(
           'DELETE FROM tenant_administrator_bindings WHERE actor_id = $1',
           [actorId],
         );
@@ -717,7 +727,7 @@ void test(
       timeoutMs: 1_000,
       transactionTtlSeconds: 300,
     } as const;
-    await administratorStore.provision({
+    await administratorStore.bootstrap({
       actorId,
       tenantId,
       expectedSalesforceOrgId: orgId,
@@ -1134,9 +1144,10 @@ void test(
           tenant_id: string;
           active: boolean;
           deprovisioned_at: string | null;
+          role: string;
         }>(
           `SELECT actor_id, tenant_id::text, active,
-                  deprovisioned_at::text
+                  deprovisioned_at::text, role
            FROM tenant_administrator_bindings
            ORDER BY actor_id`,
         )
@@ -1146,6 +1157,7 @@ void test(
         tenant_id: tenantId,
         active: true,
         deprovisioned_at: null,
+        role: 'administrator',
       })),
     );
     assert.deepEqual(
@@ -1165,6 +1177,7 @@ void test(
         '0006_publication_attempts',
         '0007_publication_attempt_reconciliation',
         '0008_administrator_lifecycle',
+        '0009_administrator_roles',
       ],
     );
   },
@@ -1210,6 +1223,11 @@ void test(
     context.after(async () => {
       try {
         await pool.query(
+          `DELETE FROM tenant_administrator_role_audits
+           WHERE tenant_id = ANY($1::uuid[])`,
+          [[tenantId, otherTenantId, raceTenantId, bootstrapTenantId]],
+        );
+        await pool.query(
           `DELETE FROM tenant_administrator_lifecycle_audits
            WHERE tenant_id = ANY($1::uuid[])`,
           [[tenantId, otherTenantId, raceTenantId, bootstrapTenantId]],
@@ -1250,7 +1268,29 @@ void test(
            ORDER BY column_name`,
         )
       ).rows.map((row) => row.column_name),
-      ['active', 'actor_id', 'created_at', 'deprovisioned_at', 'tenant_id'],
+      [
+        'active',
+        'actor_id',
+        'created_at',
+        'deprovisioned_at',
+        'role',
+        'tenant_id',
+      ],
+    );
+    assert.deepEqual(
+      (
+        await pool.query<{
+          column_default: string | null;
+          is_nullable: string;
+        }>(
+          `SELECT column_default, is_nullable
+           FROM information_schema.columns
+           WHERE table_schema = 'public'
+             AND table_name = 'tenant_administrator_bindings'
+             AND column_name = 'role'`,
+        )
+      ).rows,
+      [{ column_default: null, is_nullable: 'NO' }],
     );
     const queryExecutor: QueryExecutor = {
       async query<Row>(text: string, values: unknown[] = []) {
@@ -1268,10 +1308,12 @@ void test(
     const otherBoundOrgId = normalizeSalesforceOrgId('00D000000000003');
     const provisioned = Object.freeze({
       actorId,
+      performedByActorId: actorId,
       tenantId,
       expectedSalesforceOrgId: orgStem,
       authorizationOrigin: 'https://login.salesforce.com',
       namespacePrefix: '',
+      role: 'administrator' as const,
     });
     const bootstrapOrgStem = `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`;
     const bootstrapRace = await Promise.allSettled(
@@ -1336,16 +1378,71 @@ void test(
     )!;
     await store.provision({
       actorId: secondBootstrapActorId,
+      performedByActorId: bootstrappedActorId,
       tenantId: bootstrapTenantId,
       expectedSalesforceOrgId: bootstrapOrgStem,
       authorizationOrigin: 'https://login.salesforce.com',
       namespacePrefix: '',
+      role: 'administrator',
     });
     const bootstrapSessions = await Promise.all(
       bootstrapActorIds.map((candidate) =>
         store.issue(candidate, sessionConfiguration),
       ),
     );
+    const roleRace = await Promise.allSettled([
+      store.changeRole({
+        performedByActorId: bootstrapActorIds[0]!,
+        targetActorId: bootstrapActorIds[1]!,
+        tenantId: bootstrapTenantId,
+        role: 'reviewer',
+      }),
+      store.changeRole({
+        performedByActorId: bootstrapActorIds[1]!,
+        targetActorId: bootstrapActorIds[0]!,
+        tenantId: bootstrapTenantId,
+        role: 'reviewer',
+      }),
+    ]);
+    assert.equal(
+      roleRace.filter((result) => result.status === 'fulfilled').length,
+      1,
+    );
+    const roleRows = (
+      await pool.query<{ actor_id: string; role: string }>(
+        `SELECT actor_id, role
+         FROM tenant_administrator_bindings
+         WHERE tenant_id = $1::uuid AND active
+         ORDER BY actor_id`,
+        [bootstrapTenantId],
+      )
+    ).rows;
+    assert.deepEqual(roleRows.map((row) => row.role).toSorted(), [
+      'administrator',
+      'reviewer',
+    ]);
+    const survivingAdministrator = roleRows.find(
+      (row) => row.role === 'administrator',
+    )!.actor_id;
+    const demotedAdministrator = roleRows.find(
+      (row) => row.role === 'reviewer',
+    )!.actor_id;
+    assert.equal(
+      (
+        await store.authenticate(
+          bootstrapSessions[bootstrapActorIds.indexOf(demotedAdministrator)]!
+            .opaqueSession,
+          sessionConfiguration,
+        )
+      )?.role,
+      'reviewer',
+    );
+    await store.changeRole({
+      performedByActorId: survivingAdministrator,
+      targetActorId: demotedAdministrator,
+      tenantId: bootstrapTenantId,
+      role: 'administrator',
+    });
     const removalRace = await Promise.allSettled([
       store.deprovision({
         performedByActorId: bootstrapActorIds[0]!,
@@ -1383,6 +1480,25 @@ void test(
       ).filter(Boolean).length,
       1,
     );
+    await store.bootstrap({
+      actorId,
+      tenantId,
+      expectedSalesforceOrgId: orgStem,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: '',
+    });
+    await assert.rejects(
+      pool.query(
+        `UPDATE tenant_administrator_bindings
+         SET role = 'owner'
+         WHERE actor_id = $1`,
+        [actorId],
+      ),
+      (error: unknown) =>
+        error !== null &&
+        typeof error === 'object' &&
+        Object.getOwnPropertyDescriptor(error, 'code')?.value === '23514',
+    );
     await store.provision(provisioned);
     await store.provision({
       ...provisioned,
@@ -1404,11 +1520,12 @@ void test(
       ).rows[0]?.count,
       0,
     );
-    await store.provision({
-      ...provisioned,
+    await store.bootstrap({
       actorId: otherBoundActorId,
       tenantId: otherTenantId,
       expectedSalesforceOrgId: otherBoundOrgId,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: '',
     });
     for (const changed of [
       { expectedSalesforceOrgId: '00D000000000002EAA' },
@@ -1433,16 +1550,27 @@ void test(
         { message: 'ADMINISTRATOR_SESSION_INPUT' },
       );
 
+    const raceOrgId = normalizeSalesforceOrgId('00D000000000004');
+    await store.bootstrap({
+      actorId: raceActorIds[0]!,
+      tenantId: raceTenantId,
+      expectedSalesforceOrgId: raceOrgId,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: '',
+    });
+    const raceProvisioning = {
+      actorId: raceActorIds[1]!,
+      performedByActorId: raceActorIds[0]!,
+      tenantId: raceTenantId,
+      expectedSalesforceOrgId: raceOrgId,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: '',
+      role: 'reviewer' as const,
+    };
     const race = await Promise.allSettled([
+      store.provision(raceProvisioning),
       store.provision({
-        ...provisioned,
-        actorId: raceActorIds[0]!,
-        tenantId: raceTenantId,
-      }),
-      store.provision({
-        ...provisioned,
-        actorId: raceActorIds[1]!,
-        tenantId: raceTenantId,
+        ...raceProvisioning,
         expectedSalesforceOrgId: '00D000000000002EAA',
       }),
     ]);
@@ -1471,8 +1599,8 @@ void test(
         await pool.query<{ count: number }>(
           `SELECT count(*)::integer AS count
            FROM tenant_administrator_bindings
-           WHERE actor_id = ANY($1::varchar[])`,
-          [raceActorIds],
+           WHERE actor_id = $1`,
+          [raceActorIds[1]],
         )
       ).rows[0]?.count,
       1,
@@ -1510,6 +1638,7 @@ void test(
         expectedSalesforceOrgId: orgId,
         authorizationOrigin: 'https://login.salesforce.com',
         namespacePrefix: '',
+        role: 'administrator',
         csrfToken: first.csrfToken,
       },
     );
@@ -1624,7 +1753,7 @@ void test(
         cookie: `__Host-kusanya_admin_session=${browserSession.opaqueSession}`,
         'x-csrf-token': browserSession.csrfToken,
       },
-      payload: { subject: 'already-other-tenant' },
+      payload: { subject: 'already-other-tenant', role: 'reviewer' },
     });
     assert.equal(crossTenant.statusCode, 503);
     assert.deepEqual(crossTenant.json(), { error: 'Provisioning unavailable' });
@@ -1636,13 +1765,46 @@ void test(
         cookie: `__Host-kusanya_admin_session=${browserSession.opaqueSession}`,
         'x-csrf-token': browserSession.csrfToken,
       },
-      payload: { subject: 'new-same-tenant' },
+      payload: { subject: 'new-same-tenant', role: 'reviewer' },
     });
     assert.equal(enrolled.statusCode, 204);
+    const enrolledSession = await store.issue(
+      enrolledActorId,
+      sessionConfiguration,
+    );
+    assert.equal(
+      (
+        await store.authenticate(
+          enrolledSession.opaqueSession,
+          sessionConfiguration,
+        )
+      )?.role,
+      'reviewer',
+    );
+    const roleChanged = await app.inject({
+      method: 'PATCH',
+      url: administratorProvisioningRoutePaths.provision,
+      headers: {
+        origin: 'https://service.example',
+        cookie: `__Host-kusanya_admin_session=${browserSession.opaqueSession}`,
+        'x-csrf-token': browserSession.csrfToken,
+      },
+      payload: { subject: 'new-same-tenant', role: 'publisher' },
+    });
+    assert.equal(roleChanged.statusCode, 204);
+    assert.equal(
+      (
+        await store.authenticate(
+          enrolledSession.opaqueSession,
+          sessionConfiguration,
+        )
+      )?.role,
+      'publisher',
+    );
     assert.deepEqual(
       (
-        await pool.query<{ actor_id: string; tenant_id: string }>(
-          `SELECT actor_id, tenant_id::text
+        await pool.query<{ actor_id: string; tenant_id: string; role: string }>(
+          `SELECT actor_id, tenant_id::text, role
            FROM tenant_administrator_bindings
            WHERE actor_id = ANY($1::varchar[])
            ORDER BY actor_id`,
@@ -1650,8 +1812,16 @@ void test(
         )
       ).rows,
       [
-        { actor_id: enrolledActorId, tenant_id: tenantId },
-        { actor_id: otherBoundActorId, tenant_id: otherTenantId },
+        {
+          actor_id: enrolledActorId,
+          tenant_id: tenantId,
+          role: 'publisher',
+        },
+        {
+          actor_id: otherBoundActorId,
+          tenant_id: otherTenantId,
+          role: 'administrator',
+        },
       ].toSorted((left, right) => left.actor_id.localeCompare(right.actor_id)),
     );
     const departingSession = await store.issue(
@@ -1736,6 +1906,47 @@ void test(
           performed_by_actor_id: string;
           target_actor_id: string;
           action: string;
+          previous_role: string | null;
+          new_role: string;
+        }>(
+          `SELECT performed_by_actor_id, target_actor_id, action,
+                  previous_role, new_role
+           FROM tenant_administrator_role_audits
+           WHERE tenant_id = $1::uuid
+           ORDER BY administrator_role_audit_id`,
+          [tenantId],
+        )
+      ).rows,
+      [
+        {
+          performed_by_actor_id: actorId,
+          target_actor_id: secondActorId,
+          action: 'enrol',
+          previous_role: null,
+          new_role: 'administrator',
+        },
+        {
+          performed_by_actor_id: actorId,
+          target_actor_id: enrolledActorId,
+          action: 'enrol',
+          previous_role: null,
+          new_role: 'reviewer',
+        },
+        {
+          performed_by_actor_id: actorId,
+          target_actor_id: enrolledActorId,
+          action: 'change',
+          previous_role: 'reviewer',
+          new_role: 'publisher',
+        },
+      ],
+    );
+    assert.deepEqual(
+      (
+        await pool.query<{
+          performed_by_actor_id: string;
+          target_actor_id: string;
+          action: string;
         }>(
           `SELECT performed_by_actor_id, target_actor_id, action
            FROM tenant_administrator_lifecycle_audits
@@ -1744,6 +1955,11 @@ void test(
         )
       ).rows,
       [
+        {
+          performed_by_actor_id: actorId,
+          target_actor_id: actorId,
+          action: 'bootstrap',
+        },
         {
           performed_by_actor_id: actorId,
           target_actor_id: secondActorId,

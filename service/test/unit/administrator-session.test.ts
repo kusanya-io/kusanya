@@ -16,12 +16,17 @@ const orgId = '00D000000000001EAA';
 const actor = 'administrator:synthetic';
 const sessionSecret = Buffer.alloc(32, 61).toString('base64');
 const configuration = Object.freeze({ sessionSecret, ttlSeconds: 900 });
-const provisioning = Object.freeze({
+const bootstrap = Object.freeze({
   actorId: actor,
   tenantId,
   expectedSalesforceOrgId: '00D000000000001',
   authorizationOrigin: 'https://login.salesforce.com',
   namespacePrefix: 'ksny__',
+});
+const provisioning = Object.freeze({
+  ...bootstrap,
+  performedByActorId: actor,
+  role: 'administrator' as const,
 });
 
 void test('one shared context decoder normalizes IDs and refuses executable shapes', () => {
@@ -31,6 +36,7 @@ void test('one shared context decoder normalizes IDs and refuses executable shap
     expectedSalesforceOrgId: '00D000000000001',
     authorizationOrigin: 'https://login.salesforce.com',
     namespacePrefix: 'ksny__',
+    role: 'administrator',
     csrfToken: 'c'.repeat(43),
   });
   assert.equal(decoded.expectedSalesforceOrgId, orgId);
@@ -52,6 +58,8 @@ void test('one shared context decoder normalizes IDs and refuses executable shap
 interface BindingRow {
   actor_id: string;
   tenant_id: string;
+  active: boolean;
+  role: 'administrator' | 'publisher' | 'reviewer';
 }
 
 interface TenantRow {
@@ -92,6 +100,8 @@ function memoryDatabase() {
         const proposed: BindingRow = {
           actor_id: String(values[0]),
           tenant_id: String(values[1]),
+          active: true,
+          role: 'administrator',
         };
         const existing = bindings.get(proposed.actor_id);
         if (
@@ -101,6 +111,35 @@ function memoryDatabase() {
           return { rowCount: 0, rows: [] } satisfies QueryResult<Row>;
         tenants.set(proposedTenant.tenant_id, proposedTenant);
         bindings.set(proposed.actor_id, proposed);
+        return {
+          rowCount: 1,
+          rows: [{ actor_id: proposed.actor_id } as Row],
+        } satisfies QueryResult<Row>;
+      }
+      if (/tenant_administrator_role_audits/.test(text)) {
+        const proposed: BindingRow = {
+          actor_id: String(values[0]),
+          tenant_id: String(values[1]),
+          active: true,
+          role: String(values[6]) as BindingRow['role'],
+        };
+        const performer = bindings.get(String(values[5]));
+        const tenant = tenants.get(proposed.tenant_id);
+        const existing = bindings.get(proposed.actor_id);
+        if (
+          performer?.tenant_id !== proposed.tenant_id ||
+          performer.role !== 'administrator' ||
+          tenant === undefined ||
+          tenant.expected_salesforce_org_id !== values[2] ||
+          tenant.authorization_origin !== values[3] ||
+          tenant.namespace_prefix !== values[4] ||
+          (existing !== undefined &&
+            (existing.tenant_id !== proposed.tenant_id ||
+              !existing.active ||
+              existing.role !== proposed.role))
+        )
+          return { rowCount: 0, rows: [] } satisfies QueryResult<Row>;
+        if (existing === undefined) bindings.set(proposed.actor_id, proposed);
         return {
           rowCount: 1,
           rows: [{ actor_id: proposed.actor_id } as Row],
@@ -181,14 +220,23 @@ function memoryDatabase() {
 void test('provisions an exact immutable actor binding and normalizes the org ID', async () => {
   const memory = memoryDatabase();
   const store = new AdministratorSessionStore(memory.database);
-  await store.provision(provisioning);
-  await store.provision({
+  const targetActor = 'administrator:publisher';
+  const targetProvisioning = {
     ...provisioning,
+    actorId: targetActor,
+    role: 'publisher' as const,
+  };
+  await store.bootstrap(bootstrap);
+  await store.provision(targetProvisioning);
+  await store.provision({
+    ...targetProvisioning,
     expectedSalesforceOrgId: orgId,
   });
-  assert.deepEqual(memory.bindings.get(actor), {
-    actor_id: actor,
+  assert.deepEqual(memory.bindings.get(targetActor), {
+    actor_id: targetActor,
     tenant_id: tenantId,
+    active: true,
+    role: 'publisher',
   });
   assert.deepEqual(memory.tenants.get(tenantId), {
     tenant_id: tenantId,
@@ -197,18 +245,22 @@ void test('provisions an exact immutable actor binding and normalizes the org ID
     namespace_prefix: 'ksny__',
   });
   for (const changed of [
-    { ...provisioning, tenantId: otherTenantId },
+    { ...targetProvisioning, tenantId: otherTenantId },
     {
-      ...provisioning,
+      ...targetProvisioning,
       expectedSalesforceOrgId: '00D000000000002EAA',
     },
-    { ...provisioning, authorizationOrigin: 'https://test.salesforce.com' },
-    { ...provisioning, namespacePrefix: '' },
+    {
+      ...targetProvisioning,
+      authorizationOrigin: 'https://test.salesforce.com',
+    },
+    { ...targetProvisioning, namespacePrefix: '' },
+    { ...targetProvisioning, role: 'reviewer' as const },
   ])
     await assert.rejects(store.provision(changed), {
       message: 'ADMINISTRATOR_SESSION_CONFLICT',
     });
-  assert.equal(memory.bindings.get(actor)?.tenant_id, tenantId);
+  assert.equal(memory.bindings.get(targetActor)?.tenant_id, tenantId);
 });
 
 void test('bootstraps once with tenant and actor locks plus an atomic lifecycle audit', async () => {
@@ -222,7 +274,7 @@ void test('bootstraps once with tenant and actor locks plus an atomic lifecycle 
       } satisfies QueryResult<Row>;
     },
   });
-  await store.bootstrap(provisioning);
+  await store.bootstrap(bootstrap);
   assert.equal(queries.length, 1);
   assert.match(queries[0]!.text, /pg_advisory_xact_lock/);
   assert.match(
@@ -244,7 +296,7 @@ void test('bootstraps once with tenant and actor locks plus an atomic lifecycle 
       return { rowCount: 0, rows: [] } satisfies QueryResult<Row>;
     },
   });
-  await assert.rejects(replay.bootstrap(provisioning), {
+  await assert.rejects(replay.bootstrap(bootstrap), {
     message: 'ADMINISTRATOR_SESSION_CONFLICT',
   });
 });
@@ -298,6 +350,64 @@ void test('deprovisions atomically without permitting self-removal or rebinding'
   );
 });
 
+void test('changes a peer role atomically while protecting self and the last administrator', async () => {
+  const queries: { text: string; values: unknown[] }[] = [];
+  const store = new AdministratorSessionStore({
+    async query<Row>(text: string, values: unknown[] = []) {
+      queries.push({ text, values });
+      return {
+        rowCount: 1,
+        rows: [{ administrator_role_audit_id: '3' } as Row],
+      } satisfies QueryResult<Row>;
+    },
+  });
+  await store.changeRole({
+    performedByActorId: actor,
+    targetActorId: 'administrator:peer',
+    tenantId,
+    role: 'publisher',
+  });
+  assert.equal(queries.length, 1);
+  assert.match(queries[0]!.text, /FOR UPDATE OF binding/);
+  assert.match(queries[0]!.text, /performer\.role = 'administrator'/);
+  assert.match(queries[0]!.text, /SELECT count\(\*\) FROM locked/);
+  assert.match(queries[0]!.text, /SET role = \$4/);
+  assert.match(queries[0]!.text, /tenant_administrator_role_audits/);
+  assert.match(queries[0]!.text, /'change'/);
+  assert.deepEqual(queries[0]!.values, [
+    actor,
+    'administrator:peer',
+    tenantId,
+    'publisher',
+  ]);
+
+  await assert.rejects(
+    store.changeRole({
+      performedByActorId: actor,
+      targetActorId: actor,
+      tenantId,
+      role: 'reviewer',
+    }),
+    { message: 'ADMINISTRATOR_SESSION_CONFLICT' },
+  );
+  assert.equal(queries.length, 1);
+
+  const refused = new AdministratorSessionStore({
+    async query<Row>() {
+      return { rowCount: 0, rows: [] } satisfies QueryResult<Row>;
+    },
+  });
+  await assert.rejects(
+    refused.changeRole({
+      performedByActorId: actor,
+      targetActorId: 'administrator:last-peer',
+      tenantId,
+      role: 'reviewer',
+    }),
+    { message: 'ADMINISTRATOR_SESSION_CONFLICT' },
+  );
+});
+
 void test('refuses invalid namespaces and tenant-wide Salesforce disagreements before issuing a session', async () => {
   const memory = memoryDatabase();
   const store = new AdministratorSessionStore(memory.database);
@@ -308,10 +418,23 @@ void test('refuses invalid namespaces and tenant-wide Salesforce disagreements b
         message: 'ADMINISTRATOR_SESSION_INPUT',
       },
     );
+  await assert.rejects(
+    store.provision({ ...provisioning, role: 'owner' as never }),
+    { message: 'ADMINISTRATOR_SESSION_INPUT' },
+  );
+  await assert.rejects(
+    store.changeRole({
+      performedByActorId: actor,
+      targetActorId: 'administrator:peer',
+      tenantId,
+      role: 'owner' as never,
+    }),
+    { message: 'ADMINISTRATOR_SESSION_INPUT' },
+  );
   assert.equal(memory.bindings.size, 0);
   assert.equal(memory.tenants.size, 0);
 
-  await store.provision(provisioning);
+  await store.bootstrap(bootstrap);
   const otherActor = 'administrator:other';
   for (const changed of [
     { expectedSalesforceOrgId: '00D000000000002EAA' },
@@ -372,7 +495,7 @@ void test('maps only a direct PostgreSQL uniqueness code to a provisioning confl
 void test('issues only fresh random sessions, stores only digests and derives CSRF', async () => {
   const memory = memoryDatabase();
   const store = new AdministratorSessionStore(memory.database);
-  await store.provision(provisioning);
+  await store.bootstrap(bootstrap);
   const first = await store.issue(actor, configuration);
   assert.match(first.opaqueSession, /^[A-Za-z0-9_-]{43}$/);
   assert.match(first.csrfToken, /^[A-Za-z0-9_-]{43}$/);
@@ -391,6 +514,7 @@ void test('issues only fresh random sessions, stores only digests and derives CS
     expectedSalesforceOrgId: orgId,
     authorizationOrigin: 'https://login.salesforce.com',
     namespacePrefix: 'ksny__',
+    role: 'administrator',
     csrfToken: first.csrfToken,
   });
   assert.ok(Object.isFrozen(authenticated));
@@ -410,7 +534,7 @@ void test('issues only fresh random sessions, stores only digests and derives CS
 void test('revokes immediately, idempotently, by session or trusted actor', async () => {
   const memory = memoryDatabase();
   const store = new AdministratorSessionStore(memory.database);
-  await store.provision(provisioning);
+  await store.bootstrap(bootstrap);
   const first = await store.issue(actor, configuration);
   assert.equal(await store.revoke(first.opaqueSession), true);
   assert.equal(await store.revoke(first.opaqueSession), false);
@@ -430,7 +554,7 @@ void test('revokes immediately, idempotently, by session or trusted actor', asyn
 void test('self-cleans expired sessions and never upgrades caller-supplied tokens', async () => {
   const memory = memoryDatabase();
   const store = new AdministratorSessionStore(memory.database);
-  await store.provision(provisioning);
+  await store.bootstrap(bootstrap);
   const fixedPreloginToken = 'f'.repeat(43);
   assert.equal(
     await store.authenticate(fixedPreloginToken, configuration),

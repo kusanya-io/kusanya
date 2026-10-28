@@ -24,6 +24,7 @@ const context = Object.freeze({
   expectedSalesforceOrgId: '00D000000000001EAA',
   authorizationOrigin: 'https://login.salesforce.com',
   namespacePrefix: 'ksny__',
+  role: 'administrator' as const,
   csrfToken,
 });
 const config = readConfig({
@@ -176,6 +177,53 @@ void test('releases CSRF only to an exact-origin authenticated bootstrap', async
   );
   assert.doesNotMatch(absent.body, new RegExp(csrfToken));
   assert.deepEqual(authenticated, [opaqueSession]);
+});
+
+void test('keeps session bootstrap and logout available to every active role', async (t) => {
+  for (const role of ['administrator', 'publisher', 'reviewer'] as const) {
+    const events: string[] = [];
+    const { app } = createRouteApp({
+      sessionStore: {
+        async issue() {
+          throw new Error('unused');
+        },
+        async authenticate() {
+          events.push(`authenticate:${role}`);
+          return { ...context, role };
+        },
+        async revoke() {
+          events.push(`revoke:${role}`);
+          return true;
+        },
+      },
+    });
+    t.after(() => app.close());
+    assert.equal(
+      (
+        await app.inject({
+          method: 'POST',
+          url: administratorSessionRoutePaths.csrf,
+          headers: headers(),
+        })
+      ).statusCode,
+      200,
+    );
+    assert.equal(
+      (
+        await app.inject({
+          method: 'POST',
+          url: administratorSessionRoutePaths.logout,
+          headers: headers({ 'x-csrf-token': csrfToken }),
+        })
+      ).statusCode,
+      204,
+    );
+    assert.deepEqual(events, [
+      `authenticate:${role}`,
+      `authenticate:${role}`,
+      `revoke:${role}`,
+    ]);
+  }
 });
 
 void test('rejects duplicate session cookies and hostile contexts without access', async (t) => {

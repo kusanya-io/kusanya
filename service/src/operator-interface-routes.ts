@@ -16,7 +16,7 @@ main { width: min(1120px, calc(100% - 2rem)); margin: 1.5rem auto 3rem; display:
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
 h1, h2 { margin: 0 0 .65rem; }
 label { display: grid; gap: .35rem; font-weight: 650; }
-input { width: 100%; border: 1px solid #9eacbe; border-radius: .45rem; padding: .65rem; font: inherit; }
+input, select { width: 100%; border: 1px solid #9eacbe; border-radius: .45rem; padding: .65rem; font: inherit; background: white; }
 button { border: 0; border-radius: .45rem; padding: .65rem .9rem; background: #176b56; color: white; font: inherit; font-weight: 700; cursor: pointer; }
 button.secondary { background: #41556e; }
 button:disabled { opacity: .5; cursor: not-allowed; }
@@ -46,7 +46,9 @@ const script = `
     token: document.getElementById('access-token'),
     provision: document.getElementById('provision-form'),
     subject: document.getElementById('oidc-subject'),
+    role: document.getElementById('administrator-role'),
     deprovision: document.getElementById('deprovision'),
+    changeRole: document.getElementById('change-role'),
     publish: document.getElementById('publish-form'),
     formVersion: document.getElementById('form-version'),
     logout: document.getElementById('logout'),
@@ -131,7 +133,10 @@ const script = `
       const response = await request(endpoints.provision, {
         method: 'POST',
         headers: { ...protectedHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject: elements.subject.value })
+        body: JSON.stringify({
+          subject: elements.subject.value,
+          role: elements.role.value
+        })
       });
       if (!response.ok) throw new Error(fixedFailure(response));
       elements.subject.value = '';
@@ -147,7 +152,22 @@ const script = `
       });
       if (!response.ok) throw new Error(fixedFailure(response));
       elements.subject.value = '';
-      setStatus('Administrator access removed for this tenant.');
+      setStatus('Operator access removed for this tenant.');
+    } catch (error) { setStatus(error.message); }
+  });
+  elements.changeRole.addEventListener('click', async () => {
+    try {
+      const response = await request(endpoints.provision, {
+        method: 'PATCH',
+        headers: { ...protectedHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: elements.subject.value,
+          role: elements.role.value
+        })
+      });
+      if (!response.ok) throw new Error(fixedFailure(response));
+      elements.subject.value = '';
+      setStatus('Operator role changed for this tenant.');
     } catch (error) { setStatus(error.message); }
   });
   elements.publish.addEventListener('submit', async (event) => {
@@ -222,11 +242,12 @@ const html = `<!doctype html>
     <div id="workspace" hidden>
       <div class="grid">
         <section class="card" aria-labelledby="provision-title">
-          <h2 id="provision-title">Enroll an administrator</h2>
-          <p class="muted">The OIDC subject is mapped by the configured identity provider and can join only this tenant.</p>
+          <h2 id="provision-title">Manage tenant operators</h2>
+          <p class="muted">The OIDC subject is mapped by the configured identity provider and can join only this tenant. Role changes take effect on the next request.</p>
           <form id="provision-form">
             <label>OIDC subject<input id="oidc-subject" name="subject" required maxlength="512" autocomplete="off"></label>
-            <div class="actions"><button type="submit">Enroll administrator</button><button id="deprovision" class="secondary" type="button">Remove administrator</button></div>
+            <label>Role<select id="administrator-role" name="role"><option value="reviewer">Reviewer</option><option value="publisher">Publisher</option><option value="administrator">Administrator</option></select></label>
+            <div class="actions"><button type="submit">Enroll operator</button><button id="change-role" class="secondary" type="button">Change role</button><button id="deprovision" class="secondary" type="button">Remove operator</button></div>
           </form>
         </section>
         <section class="card" aria-labelledby="publish-title">

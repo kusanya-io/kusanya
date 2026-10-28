@@ -25,6 +25,7 @@ const context = Object.freeze({
   expectedSalesforceOrgId: orgId,
   authorizationOrigin: 'https://login.salesforce.com',
   namespacePrefix: '',
+  role: 'administrator' as const,
   csrfToken: 'c'.repeat(43),
 });
 const configuration: PublicationReconcilerConfiguration = Object.freeze({

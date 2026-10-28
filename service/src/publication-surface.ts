@@ -22,7 +22,12 @@ export interface PublicationSurfaceDependencies {
   readonly administratorIdentity: AdministratorOidcIdentity;
   readonly sessionStore: Pick<
     AdministratorSessionStore,
-    'issue' | 'authenticate' | 'revoke' | 'provision' | 'deprovision'
+    | 'issue'
+    | 'authenticate'
+    | 'revoke'
+    | 'provision'
+    | 'deprovision'
+    | 'changeRole'
   >;
   readonly sessionConfiguration: AdministratorSessionConfiguration;
   readonly connectionStore: TenantConnectionSessionStore;
@@ -91,7 +96,14 @@ function checkedDependencies(
   for (const [store, methods] of [
     [
       decoded.sessionStore,
-      ['issue', 'authenticate', 'provision', 'deprovision', 'revoke'],
+      [
+        'issue',
+        'authenticate',
+        'provision',
+        'deprovision',
+        'changeRole',
+        'revoke',
+      ],
     ],
     [decoded.connectionStore, ['withRefreshLock']],
     [decoded.attemptStore, ['start', 'complete', 'listForOperator']],

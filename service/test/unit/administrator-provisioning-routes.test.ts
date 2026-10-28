@@ -25,6 +25,7 @@ const trusted = Object.freeze({
   expectedSalesforceOrgId: '00D000000000001EAA',
   authorizationOrigin: 'https://login.salesforce.com',
   namespacePrefix: 'ksny__',
+  role: 'administrator' as const,
   csrfToken,
 });
 
@@ -38,7 +39,9 @@ function headers(extra: Record<string, string> = {}) {
   };
 }
 
-function dependencies(): AdministratorProvisioningRouteDependencies & {
+function dependencies(
+  role: 'administrator' | 'publisher' | 'reviewer' = 'administrator',
+): AdministratorProvisioningRouteDependencies & {
   readonly events: unknown[];
 } {
   const events: unknown[] = [];
@@ -47,7 +50,7 @@ function dependencies(): AdministratorProvisioningRouteDependencies & {
     externalOrigin,
     async authenticateAdministrator(value) {
       events.push(['authenticate', value]);
-      return trusted;
+      return { ...trusted, role };
     },
     actorIdForSubject(subject) {
       events.push(['derive', subject]);
@@ -59,6 +62,9 @@ function dependencies(): AdministratorProvisioningRouteDependencies & {
       },
       async deprovision(input) {
         events.push(['deprovision', input]);
+      },
+      async changeRole(input) {
+        events.push(['change-role', input]);
       },
     },
   };
@@ -77,7 +83,7 @@ void test('enrolls only an OIDC-derived actor into the live session tenant', asy
       'x-actor-id': 'forged',
       'x-tenant-id': '20000000-0000-4000-8000-000000000002',
     }),
-    payload: { subject: 'new-subject' },
+    payload: { subject: 'new-subject', role: 'publisher' },
   });
   assert.equal(response.statusCode, 204);
   assert.deepEqual(setup.events.slice(0, 2), [
@@ -87,10 +93,12 @@ void test('enrolls only an OIDC-derived actor into the live session tenant', asy
   const provisioned = (setup.events[2] as ['provision', unknown])[1];
   assert.deepEqual(provisioned, {
     actorId: administratorOidcActorId(issuer, 'new-subject'),
+    performedByActorId: trusted.actorId,
     tenantId: trusted.tenantId,
     expectedSalesforceOrgId: trusted.expectedSalesforceOrgId,
     authorizationOrigin: trusted.authorizationOrigin,
     namespacePrefix: trusted.namespacePrefix,
+    role: 'publisher',
   });
   assert.equal(
     Object.keys(provisioned as AdministratorProvisioningInput).includes(
@@ -105,7 +113,7 @@ void test('authenticates and checks CSRF before deriving or provisioning', async
   const app = createApp(config, { async ping() {}, async close() {} }, false);
   t.after(() => app.close());
   registerAdministratorProvisioningRoutes(app, setup);
-  for (const method of ['POST', 'DELETE'] as const)
+  for (const method of ['POST', 'DELETE', 'PATCH'] as const)
     for (const request of [
       { headers: headers({ origin: 'https://attacker.example' }) },
       { headers: { ...headers(), cookie: '' } },
@@ -131,7 +139,9 @@ void test('authenticates and checks CSRF before deriving or provisioning', async
           (event) =>
             Array.isArray(event) &&
             typeof event[0] === 'string' &&
-            ['derive', 'provision', 'deprovision'].includes(event[0]),
+            ['derive', 'provision', 'deprovision', 'change-role'].includes(
+              event[0],
+            ),
         ),
         false,
       );
@@ -147,9 +157,15 @@ void test('refuses selectors and hostile subjects without widening the tenant tu
   const bodies = [
     {},
     { actorId: 'oidc:forged' },
-    { subject: 'new-subject', actorId: 'oidc:forged' },
-    { subject: 'new-subject', tenantId: trusted.tenantId },
-    { subject: 'new-subject', expectedSalesforceOrgId: '00D000000000002EAA' },
+    { subject: 'new-subject' },
+    { subject: 'new-subject', role: 'owner' },
+    { subject: 'new-subject', role: 'publisher', actorId: 'oidc:forged' },
+    { subject: 'new-subject', role: 'publisher', tenantId: trusted.tenantId },
+    {
+      subject: 'new-subject',
+      role: 'publisher',
+      expectedSalesforceOrgId: '00D000000000002EAA',
+    },
     { subject: null },
     { subject: '' },
     { subject: 'x'.repeat(513) },
@@ -175,7 +191,7 @@ void test('refuses selectors and hostile subjects without widening the tenant tu
     method: 'POST',
     url: `${administratorProvisioningRoutePaths.provision}?tenant=other`,
     headers: headers(),
-    payload: { subject: 'new-subject' },
+    payload: { subject: 'new-subject', role: 'publisher' },
   });
   assert.equal(query.statusCode, 400);
 });
@@ -196,7 +212,7 @@ void test('makes cross-tenant conflicts indistinguishable from storage failures'
       method: 'POST',
       url: administratorProvisioningRoutePaths.provision,
       headers: headers(),
-      payload: { subject: 'already-bound-subject' },
+      payload: { subject: 'already-bound-subject', role: 'reviewer' },
     });
     assert.equal(response.statusCode, 503);
     assert.deepEqual(response.json(), { error: 'Provisioning unavailable' });
@@ -261,11 +277,73 @@ void test('makes absent, last, self and cross-tenant removals indistinguishable'
   }
 });
 
+void test('changes only a peer role and denies lifecycle access to lower roles', async (t) => {
+  const setup = dependencies();
+  const app = createApp(config, { async ping() {}, async close() {} }, false);
+  t.after(() => app.close());
+  registerAdministratorProvisioningRoutes(app, setup);
+
+  const changed = await app.inject({
+    method: 'PATCH',
+    url: administratorProvisioningRoutePaths.provision,
+    headers: headers(),
+    payload: { subject: 'peer-subject', role: 'reviewer' },
+  });
+  assert.equal(changed.statusCode, 204);
+  assert.deepEqual(setup.events.slice(-2), [
+    ['derive', 'peer-subject'],
+    [
+      'change-role',
+      {
+        performedByActorId: trusted.actorId,
+        targetActorId: administratorOidcActorId(issuer, 'peer-subject'),
+        tenantId: trusted.tenantId,
+        role: 'reviewer',
+      },
+    ],
+  ]);
+
+  for (const role of ['publisher', 'reviewer'] as const) {
+    const denied = dependencies(role);
+    const deniedApp = createApp(
+      config,
+      { async ping() {}, async close() {} },
+      false,
+    );
+    t.after(() => deniedApp.close());
+    registerAdministratorProvisioningRoutes(deniedApp, denied);
+    for (const method of ['POST', 'DELETE', 'PATCH'] as const) {
+      denied.events.length = 0;
+      const response = await deniedApp.inject({
+        method,
+        url: administratorProvisioningRoutePaths.provision,
+        headers: headers(),
+        payload:
+          method === 'DELETE'
+            ? { subject: 'peer-subject' }
+            : { subject: 'peer-subject', role: 'reviewer' },
+      });
+      assert.equal(response.statusCode, 403);
+      assert.deepEqual(response.json(), { error: 'Request rejected' });
+      assert.equal(
+        denied.events.some(
+          (event) =>
+            Array.isArray(event) &&
+            ['derive', 'provision', 'deprovision', 'change-role'].includes(
+              String(event[0]),
+            ),
+        ),
+        false,
+      );
+    }
+  }
+});
+
 void test('exposes no alternate mutation method and refuses an unhardened host', async (t) => {
   const app = createApp(config, { async ping() {}, async close() {} }, false);
   t.after(() => app.close());
   registerAdministratorProvisioningRoutes(app, dependencies());
-  for (const method of ['GET', 'PUT', 'PATCH'] as const) {
+  for (const method of ['GET', 'PUT'] as const) {
     const response = await app.inject({
       method,
       url: administratorProvisioningRoutePaths.provision,
