@@ -130,6 +130,14 @@ to issue or revoke invitations at `administrator`, `publisher` or `reviewer`, or
 change an accepted peer's role; self-change and demotion/removal of the final full
 administrator are refused.
 
+Only a live `administrator` may run publication-attempt retention from the operator
+interface. The request supplies no tenant, cutoff, status or attempt identifier.
+PostgreSQL applies the tenant's stored policy (90 days by default, constrained to
+30 through 3650) to at most 100 old safe terminal rows and records one surviving
+audit for each deletion. Repeat the operation to process another bounded batch.
+Started, unresolved, indeterminate and unlinked-artifact attempts cannot be removed
+by this operation. Do not edit those states or the retention audit table manually.
+
 Before applying migration `0004_administrator_tenants` to a database created by PR
 #77, check the legacy bindings for namespace values that the current canonical rule
 will refuse:

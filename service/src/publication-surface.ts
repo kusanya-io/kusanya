@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireHardenedRequestLogging } from './http-security.js';
 import { registerOperatorInterfaceRoutes } from './operator-interface-routes.js';
 import { registerPublicationAttemptPresentationRoutes } from './publication/publication-attempt-presentation-routes.js';
+import { registerPublicationAttemptRetentionRoutes } from './publication/publication-attempt-retention-routes.js';
 import type { PublicationAttemptStore } from './publication/publication-attempt-store.js';
 import { registerPublicationRoutes } from './publication/publication-routes.js';
 import type { TenantSalesforcePublisherConfiguration } from './publication/tenant-salesforce-publisher.js';
@@ -38,7 +39,7 @@ export interface PublicationSurfaceDependencies {
   readonly connectionStore: TenantConnectionSessionStore;
   readonly attemptStore: Pick<
     PublicationAttemptStore,
-    'start' | 'complete' | 'listForOperator'
+    'start' | 'complete' | 'listForOperator' | 'applyRetention'
   >;
   readonly publisherConfiguration: TenantSalesforcePublisherConfiguration;
   readonly validateXForm: ValidateXForm;
@@ -107,7 +108,10 @@ function checkedDependencies(
     ],
     [decoded.invitationStore, ['accept', 'issue', 'revoke']],
     [decoded.connectionStore, ['withRefreshLock']],
-    [decoded.attemptStore, ['start', 'complete', 'listForOperator']],
+    [
+      decoded.attemptStore,
+      ['start', 'complete', 'listForOperator', 'applyRetention'],
+    ],
   ] as const) {
     if (store === null || typeof store !== 'object' || types.isProxy(store))
       throw new Error('PUBLICATION_SURFACE_CONFIGURATION');
@@ -202,6 +206,15 @@ export function registerPublicationSurface(
   registerPublicationAttemptPresentationRoutes(app, {
     authenticateAdministrator,
     attemptStore: dependencies.attemptStore,
+    externalOrigin: dependencies.externalOrigin,
+  });
+  registerPublicationAttemptRetentionRoutes(app, {
+    authenticateAdministrator,
+    attemptStore: Object.freeze({
+      applyRetention: dependencies.attemptStore.applyRetention.bind(
+        dependencies.attemptStore,
+      ),
+    }),
     externalOrigin: dependencies.externalOrigin,
   });
   registerOperatorInterfaceRoutes(app);

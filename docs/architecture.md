@@ -295,8 +295,13 @@ global membership. The verified invited subject accepts through first sign-in;
 binding, stored role, enrolment audit, invitation consumption and browser session
 commit atomically. Wrong-subject, expired, revoked, replayed and cross-tenant
 conflicts share one refusal, and the raw token never enters a URL or database.
-Privileged connection lifecycle, invitation delivery, retention, scheduled
-reconciliation and CLI work remain outside this boundary.
+ADR 0056 adds administrator-only, database-policy-owned retention for publication
+attempts. Each call has no selector and removes at most 100 old safely terminal rows
+from the live tenant. PostgreSQL protects unresolved, indeterminate and unlinked
+evidence, rechecks the actor's live full-administrator role, and writes a surviving
+per-attempt audit in the same transaction. Privileged connection lifecycle,
+invitation delivery, scheduled reconciliation and CLI work remain outside this
+boundary.
 
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure

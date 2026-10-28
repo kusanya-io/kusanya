@@ -5,9 +5,16 @@ import { createServer } from 'node:net';
 import { Pool } from 'pg';
 import { createApp } from '../../src/app.js';
 import { readConfig } from '../../src/config.js';
-import { createDatabase, createPostgresPool } from '../../src/database.js';
+import {
+  createDatabase,
+  createPostgresPool,
+  createQueryExecutor,
+} from '../../src/database.js';
 import { applyMigrations } from '../../src/migrations.js';
-import { PublicationAttemptStore } from '../../src/publication/publication-attempt-store.js';
+import {
+  PublicationAttemptError,
+  PublicationAttemptStore,
+} from '../../src/publication/publication-attempt-store.js';
 import { createTenantCredentialVault } from '../../src/tenant/credential-vault.js';
 import {
   normalizeSalesforceOrgId,
@@ -77,7 +84,61 @@ void test(
     context.after(async () => {
       try {
         await pool.query(
-          `DELETE FROM tenant_publication_attempts WHERE tenant_id = ANY($1::uuid[])`,
+          `DELETE FROM tenant_publication_attempt_retention_audits
+           WHERE tenant_id = ANY($1::uuid[])`,
+          [[tenantId, otherTenantId]],
+        );
+        const cleanup = await pool.connect();
+        try {
+          await cleanup.query('BEGIN');
+          for (const [cleanupTenant, cleanupActor] of [
+            [tenantId, actorId],
+            [otherTenantId, otherActorId],
+          ]) {
+            await cleanup.query(
+              `SELECT set_config(
+                 'kusanya.publication_retention_actor', $1, true
+               )`,
+              [cleanupActor],
+            );
+            await cleanup.query(
+              `UPDATE tenant_publication_attempts
+               SET outcome = 'failed', failure_code = 'TEST_CLEANUP',
+                   salesforce_request_count = 0,
+                   completed_at = clock_timestamp() - interval '4000 days'
+               WHERE tenant_id = $1 AND outcome = 'started'
+                 AND reconciliation_status IS NULL`,
+              [cleanupTenant],
+            );
+            await cleanup.query(
+              `UPDATE tenant_publication_attempts
+               SET reconciliation_status = 'artifacts_missing',
+                   reconciled_at = clock_timestamp() - interval '4000 days'
+               WHERE tenant_id = $1 AND outcome = 'partial'
+                 AND reconciliation_status IN ('unlinked', 'committed')`,
+              [cleanupTenant],
+            );
+            await cleanup.query(
+              `UPDATE tenant_publication_attempts
+               SET completed_at = clock_timestamp() - interval '4000 days'
+               WHERE tenant_id = $1 AND outcome IN ('succeeded', 'failed')`,
+              [cleanupTenant],
+            );
+            await cleanup.query(
+              `DELETE FROM tenant_publication_attempts WHERE tenant_id = $1`,
+              [cleanupTenant],
+            );
+          }
+          await cleanup.query('COMMIT');
+        } catch (error) {
+          await cleanup.query('ROLLBACK');
+          throw error;
+        } finally {
+          cleanup.release();
+        }
+        await pool.query(
+          `DELETE FROM tenant_publication_attempt_retention_audits
+           WHERE tenant_id = ANY($1::uuid[])`,
           [[tenantId, otherTenantId]],
         );
         await pool.query(
@@ -304,6 +365,330 @@ void test(
     const response = await app.inject('/readyz');
     assert.equal(response.statusCode, 200);
     assert.deepEqual(response.json(), { status: 'ready' });
+  },
+);
+
+void test(
+  'publication retention deletes only old safe tenant evidence and preserves atomic audits',
+  {
+    timeout: 15000,
+    skip:
+      !databaseUrl && !databaseRequired
+        ? 'Set DATABASE_URL to a disposable PostgreSQL 17 database'
+        : false,
+  },
+  async (context) => {
+    assert.ok(databaseUrl);
+    const config = readConfig({
+      ...process.env,
+      NODE_ENV: 'test',
+      DATABASE_URL: databaseUrl,
+    });
+    const pool = createPostgresPool(config, () => {});
+    const tenantId = randomUUID();
+    const otherTenantId = randomUUID();
+    const actorId = `administrator:${randomUUID()}`;
+    const otherActorId = `administrator:${randomUUID()}`;
+    const orgId = normalizeSalesforceOrgId(
+      `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+    );
+    const otherOrgId = normalizeSalesforceOrgId(
+      `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+    );
+    context.after(async () => {
+      try {
+        await pool.query(
+          `DELETE FROM tenant_publication_attempt_retention_audits
+           WHERE tenant_id = ANY($1::uuid[])`,
+          [[tenantId, otherTenantId]],
+        );
+        const cleanup = await pool.connect();
+        try {
+          await cleanup.query('BEGIN');
+          for (const [cleanupTenant, cleanupActor] of [
+            [tenantId, actorId],
+            [otherTenantId, otherActorId],
+          ]) {
+            await cleanup.query(
+              `SELECT set_config(
+                 'kusanya.publication_retention_actor', $1, true
+               )`,
+              [cleanupActor],
+            );
+            await cleanup.query(
+              `UPDATE tenant_publication_attempts
+               SET outcome = 'failed', publication_digest = NULL,
+                   xform_version_id = NULL, xlsform_version_id = NULL,
+                   failure_code = 'TEST_CLEANUP',
+                   salesforce_request_count = 0,
+                   completed_at = clock_timestamp() - interval '4000 days',
+                   reconciliation_status = NULL,
+                   reconciliation_request_count = NULL,
+                   reconciled_at = NULL
+               WHERE tenant_id = $1`,
+              [cleanupTenant],
+            );
+            await cleanup.query(
+              `DELETE FROM tenant_publication_attempts WHERE tenant_id = $1`,
+              [cleanupTenant],
+            );
+          }
+          await cleanup.query('COMMIT');
+        } catch (error) {
+          await cleanup.query('ROLLBACK');
+          throw error;
+        } finally {
+          cleanup.release();
+        }
+        await pool.query(
+          `DELETE FROM tenant_publication_attempt_retention_audits
+           WHERE tenant_id = ANY($1::uuid[])`,
+          [[tenantId, otherTenantId]],
+        );
+        await pool.query(
+          `DELETE FROM tenant_administrator_bindings
+           WHERE actor_id = ANY($1::varchar[])`,
+          [[actorId, otherActorId]],
+        );
+        await pool.query(
+          `DELETE FROM tenant_administrator_tenants
+           WHERE tenant_id = ANY($1::uuid[])`,
+          [[tenantId, otherTenantId]],
+        );
+      } finally {
+        await pool.end();
+      }
+    });
+    await applyMigrations(pool);
+    await pool.query(
+      `INSERT INTO tenant_administrator_tenants
+         (tenant_id, expected_salesforce_org_id, authorization_origin,
+          namespace_prefix)
+       VALUES ($1, $2, 'https://login.salesforce.com', 'ksny__'),
+              ($3, $4, 'https://login.salesforce.com', '')`,
+      [tenantId, orgId, otherTenantId, otherOrgId],
+    );
+    await pool.query(
+      `INSERT INTO tenant_administrator_bindings
+         (actor_id, tenant_id, role)
+       VALUES ($1, $2, 'administrator'), ($3, $4, 'administrator')`,
+      [actorId, tenantId, otherActorId, otherTenantId],
+    );
+    const insert = async (
+      selectedTenant: string,
+      selectedActor: string,
+      selectedOrg: string,
+      outcome: 'started' | 'succeeded' | 'failed' | 'partial',
+      reconciliation:
+        null | 'indeterminate' | 'committed' | 'unlinked' | 'artifacts_missing',
+      old = true,
+    ) => {
+      const attemptId = randomUUID();
+      const partial = outcome === 'partial';
+      const completed = outcome !== 'started';
+      await pool.query(
+        `INSERT INTO tenant_publication_attempts (
+           publication_attempt_id, tenant_id, actor_id, salesforce_org_id,
+           form_version_id, outcome, publication_digest,
+           xform_version_id, xlsform_version_id, failure_code,
+           salesforce_request_count, created_at, completed_at,
+           reconciliation_status, reconciliation_request_count, reconciled_at
+         ) VALUES (
+           $1, $2, $3, $4, 'a0B000000000001AAA', $5, $6, $7, $8, $9, $10,
+           clock_timestamp() - interval '120 days',
+           CASE WHEN $11 THEN clock_timestamp()
+             - (CASE WHEN $12 THEN interval '120 days' ELSE interval '1 day' END)
+             ELSE NULL END,
+           $13, $14,
+           CASE WHEN $13::varchar IS NOT NULL THEN clock_timestamp()
+             - interval '120 days' ELSE NULL END
+         )`,
+        [
+          attemptId,
+          selectedTenant,
+          selectedActor,
+          selectedOrg,
+          outcome,
+          outcome === 'succeeded' || partial ? 'd'.repeat(64) : null,
+          partial ? '068000000000001AAA' : null,
+          partial ? '068000000000002AAA' : null,
+          outcome === 'failed' || partial ? 'PUBLICATION_REJECTED' : null,
+          completed ? 1 : null,
+          completed,
+          old,
+          reconciliation,
+          reconciliation === null
+            ? null
+            : reconciliation === 'indeterminate'
+              ? 0
+              : 1,
+        ],
+      );
+      return attemptId;
+    };
+    const eligible = [
+      await insert(tenantId, actorId, orgId, 'succeeded', null),
+      await insert(tenantId, actorId, orgId, 'failed', null),
+      await insert(tenantId, actorId, orgId, 'partial', 'committed'),
+      await insert(tenantId, actorId, orgId, 'partial', 'artifacts_missing'),
+    ];
+    const protectedAttempts = [
+      await insert(tenantId, actorId, orgId, 'started', null),
+      await insert(tenantId, actorId, orgId, 'started', 'indeterminate'),
+      await insert(tenantId, actorId, orgId, 'partial', null),
+      await insert(tenantId, actorId, orgId, 'partial', 'unlinked'),
+      await insert(tenantId, actorId, orgId, 'succeeded', null, false),
+    ];
+    const otherAttempt = await insert(
+      otherTenantId,
+      otherActorId,
+      otherOrgId,
+      'failed',
+      null,
+    );
+    const store = new PublicationAttemptStore(createQueryExecutor(pool));
+    const trusted = {
+      actorId,
+      tenantId,
+      expectedSalesforceOrgId: orgId,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: 'ksny__',
+      role: 'administrator' as const,
+      csrfToken: 'c'.repeat(43),
+    };
+    assert.deepEqual(await store.applyRetention(trusted), { deletedCount: 4 });
+    assert.deepEqual(
+      (
+        await pool.query<{ publication_attempt_id: string }>(
+          `SELECT publication_attempt_id::text
+           FROM tenant_publication_attempts
+           WHERE tenant_id = $1 ORDER BY publication_attempt_id`,
+          [tenantId],
+        )
+      ).rows.map((row) => row.publication_attempt_id),
+      protectedAttempts.toSorted(),
+    );
+    assert.equal(
+      (
+        await pool.query(
+          `SELECT 1 FROM tenant_publication_attempts
+           WHERE publication_attempt_id = $1`,
+          [otherAttempt],
+        )
+      ).rowCount,
+      1,
+    );
+    const audits = await pool.query<{
+      publication_attempt_id: string;
+      performed_by_actor_id: string;
+      retention_days: number;
+    }>(
+      `SELECT publication_attempt_id::text, performed_by_actor_id,
+              retention_days::integer
+       FROM tenant_publication_attempt_retention_audits
+       WHERE tenant_id = $1 ORDER BY publication_attempt_id`,
+      [tenantId],
+    );
+    assert.deepEqual(
+      audits.rows.map((row) => row.publication_attempt_id),
+      eligible.toSorted(),
+    );
+    assert.equal(
+      audits.rows.every(
+        (row) =>
+          row.performed_by_actor_id === actorId && row.retention_days === 90,
+      ),
+      true,
+    );
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO tenant_publication_attempt_retention_audits (
+           tenant_id, publication_attempt_id, performed_by_actor_id,
+           outcome, reconciliation_status, terminal_at, retention_days
+         ) VALUES (
+           $1, $2, $3, 'partial', NULL,
+           clock_timestamp() - interval '120 days', 90
+         )`,
+        [tenantId, randomUUID(), actorId],
+      ),
+      { code: '23514' },
+    );
+    const direct = await pool.connect();
+    try {
+      for (const protectedAttempt of protectedAttempts) {
+        await direct.query('BEGIN');
+        await direct.query(
+          `SELECT set_config(
+             'kusanya.publication_retention_actor', $1, true
+           )`,
+          [actorId],
+        );
+        await assert.rejects(
+          direct.query(
+            `DELETE FROM tenant_publication_attempts
+             WHERE publication_attempt_id = $1`,
+            [protectedAttempt],
+          ),
+          { code: '23514' },
+        );
+        await direct.query('ROLLBACK');
+      }
+    } finally {
+      direct.release();
+    }
+
+    const batchIds = Array.from({ length: 101 }, () => randomUUID());
+    await pool.query(
+      `INSERT INTO tenant_publication_attempts (
+         publication_attempt_id, tenant_id, actor_id, salesforce_org_id,
+         form_version_id, outcome, failure_code,
+         salesforce_request_count, created_at, completed_at
+       )
+       SELECT batch.attempt_id, $2, $3, $4, 'a0B000000000001AAA',
+              'failed', 'PUBLICATION_REJECTED', 0,
+              clock_timestamp() - interval '120 days',
+              clock_timestamp() - interval '120 days'
+       FROM unnest($1::uuid[]) AS batch(attempt_id)`,
+      [batchIds, tenantId, actorId, orgId],
+    );
+    assert.deepEqual(await store.applyRetention(trusted), {
+      deletedCount: 100,
+    });
+    assert.equal(
+      (
+        await pool.query(
+          `SELECT 1 FROM tenant_publication_attempts
+           WHERE publication_attempt_id = ANY($1::uuid[])`,
+          [batchIds],
+        )
+      ).rowCount,
+      1,
+    );
+    assert.deepEqual(await store.applyRetention(trusted), { deletedCount: 1 });
+
+    const collision = await insert(tenantId, actorId, orgId, 'failed', null);
+    await pool.query(
+      `INSERT INTO tenant_publication_attempt_retention_audits (
+         tenant_id, publication_attempt_id, performed_by_actor_id,
+         outcome, terminal_at, retention_days
+       ) VALUES ($1, $2, $3, 'failed',
+         clock_timestamp() - interval '120 days', 90)`,
+      [tenantId, collision, actorId],
+    );
+    await assert.rejects(
+      store.applyRetention(trusted),
+      PublicationAttemptError,
+    );
+    assert.equal(
+      (
+        await pool.query(
+          `SELECT 1 FROM tenant_publication_attempts
+           WHERE publication_attempt_id = $1`,
+          [collision],
+        )
+      ).rowCount,
+      1,
+    );
   },
 );
 
@@ -1187,6 +1572,7 @@ void test(
         '0008_administrator_lifecycle',
         '0009_administrator_roles',
         '0010_administrator_invitations',
+        '0011_publication_attempt_retention',
       ],
     );
   },

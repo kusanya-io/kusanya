@@ -6,6 +6,7 @@ import type {
 
 export type AdministratorCapability =
   | 'manage_administrators'
+  | 'manage_publication_retention'
   | 'authorize_salesforce'
   | 'publish'
   | 'view_publication_history';
@@ -13,6 +14,7 @@ export type AdministratorCapability =
 const roleCapabilities = Object.freeze({
   administrator: Object.freeze([
     'manage_administrators',
+    'manage_publication_retention',
     'authorize_salesforce',
     'publish',
     'view_publication_history',
@@ -33,6 +35,7 @@ export function administratorHasCapability(
 
 export const administratorRoutePolicy = Object.freeze({
   administratorLifecycle: 'manage_administrators',
+  publicationRetention: 'manage_publication_retention',
   salesforceAuthorization: 'authorize_salesforce',
   salesforcePublication: 'publish',
   publicationHistory: 'view_publication_history',

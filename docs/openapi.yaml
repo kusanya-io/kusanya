@@ -367,6 +367,36 @@ paths:
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Rejected' }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /api/admin/publication-attempts/retention:
+    post:
+      operationId: applyPublicationAttemptRetention
+      summary: Delete one bounded batch selected by the tenant retention policy
+      description: >-
+        Administrator only. Accepts no body, query, tenant, cutoff or attempt ID.
+        Started, unresolved, indeterminate and unlinked-artifact attempts are never
+        eligible. Each deleted attempt receives a surviving audit in the same
+        database transaction.
+      security: [{ administratorSession: [], csrfToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      responses:
+        '200':
+          description: Policy applied to at most 100 eligible attempts
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [deletedCount]
+                properties:
+                  deletedCount: { type: integer, minimum: 0, maximum: 100 }
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Rejected' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 components:
   securitySchemes:
     oidcAccessToken:

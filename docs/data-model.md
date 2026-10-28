@@ -289,6 +289,18 @@ invitation accepted, appends the enrolment audit and inserts the opaque browser
 session. Issuance deliberately does not query global actor bindings; cross-tenant
 binding conflicts are visible only to the invited subject at acceptance.
 
+ADR 0056 adds `publication_attempt_retention_days` to the tenant policy, defaulting
+to 90 and constrained to 30 through 3650. A guarded delete can remove at most 100
+old attempts per transaction and only when their terminal evidence is `succeeded`,
+`failed`, `partial/committed` or `partial/artifacts_missing`. `started`, unresolved,
+`indeterminate`, `unlinked` and young rows are database-protected. The trigger
+requires a live full administrator in the same tenant and inserts one
+`tenant_publication_attempt_retention_audits` row before every deletion. That audit
+keeps the attempt UUID, actor, terminal state/timestamp, policy days and deletion
+time but deliberately has no foreign key to the deleted attempt, so it survives.
+The unique tenant/attempt key and single PostgreSQL transaction make a partial
+delete-and-audit outcome impossible.
+
 ADR 0045 adds append-only `tenant_salesforce_authorization_audits`. Each successful
 grant records the tenant, its bound trusted administrator actor, normalized `00D`
 org, signed authorizing `005` user and resulting credential version. The audited
@@ -302,8 +314,8 @@ is an audit column. Append-only is enforced by the Kusanya write path, not as ta
 evidence against a privileged database role (ADR 0045).
 
 Checksum-pinned migrations run as an explicit one-shot command. Hashed collector
-credentials, durable relay state, retention constraints and API-use counters remain
-future tables and must retain tenant-scoped keys and tested isolation.
+credentials, durable relay state for submissions and API-use counters remain future
+tables and must retain tenant-scoped keys and tested isolation.
 
 ADR 0029 defines the future Answer cardinality boundary for dynamic repeats. The
 submitted count is authoritative per enclosing repeat instance; trailing physical

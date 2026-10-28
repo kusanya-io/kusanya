@@ -90,6 +90,9 @@ function dependencies(): PublicationSurfaceDependencies {
           nextCursor: null,
         };
       },
+      async applyRetention() {
+        return { deletedCount: 0 };
+      },
     },
     publisherConfiguration: {
       clientId: 'client',
@@ -157,6 +160,17 @@ void test('the real app mounts login, CSRF, publication and least-data presentat
     'reconciledAt',
   ]);
   assert.equal(attempts.headers['cache-control'], 'no-store');
+  const retained = await app.inject({
+    method: 'POST',
+    url: '/api/admin/publication-attempts/retention',
+    headers: {
+      origin,
+      cookie: `__Host-kusanya_admin_session=${opaqueSession}`,
+      'x-csrf-token': csrfToken,
+    },
+  });
+  assert.equal(retained.statusCode, 200);
+  assert.deepEqual(retained.json(), { deletedCount: 0 });
   const operatorInterface = await app.inject({
     method: 'GET',
     url: '/admin',

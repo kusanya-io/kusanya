@@ -59,6 +59,7 @@ void test('uses only mounted same-origin APIs and keeps bearer and CSRF values i
     '/api/admin/administrator-invitations',
     '/api/admin/salesforce/publications',
     '/api/admin/salesforce/publication-attempts',
+    '/api/admin/publication-attempts/retention',
   ])
     assert.ok(response.body.includes(path), path);
   assert.match(response.body, /credentials: 'same-origin'/);
@@ -77,6 +78,11 @@ void test('uses only mounted same-origin APIs and keeps bearer and CSRF values i
   assert.match(response.body, /value="reviewer">Reviewer<\/option>/);
   assert.match(response.body, /Operator access removed for this tenant\./);
   assert.match(response.body, /Operator role changed for this tenant\./);
+  assert.match(response.body, /Delete expired safe attempts/);
+  assert.match(
+    response.body,
+    /Deleted ' \+ result\.deletedCount \+ ' retention-eligible publication attempts\./,
+  );
   assert.match(
     response.body,
     /Human judgement is required before any publication retry\./,
