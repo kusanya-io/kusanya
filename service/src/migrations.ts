@@ -321,6 +321,89 @@ const migrations = Object.freeze([
         )
     )`,
   }),
+  Object.freeze({
+    id: '0010_administrator_invitations',
+    sql: `CREATE TABLE tenant_administrator_invitations (
+      invitation_id uuid PRIMARY KEY,
+      token_digest char(64) NOT NULL UNIQUE,
+      tenant_id uuid NOT NULL
+        REFERENCES tenant_administrator_tenants(tenant_id),
+      issued_by_actor_id varchar(128) NOT NULL,
+      target_actor_id varchar(128) NOT NULL,
+      role varchar(16) NOT NULL,
+      issued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      expires_at timestamptz NOT NULL,
+      accepted_at timestamptz,
+      accepted_by_actor_id varchar(128),
+      revoked_at timestamptz,
+      revoked_by_actor_id varchar(128),
+      CONSTRAINT tenant_administrator_invitations_issuer
+        FOREIGN KEY (issued_by_actor_id, tenant_id)
+        REFERENCES tenant_administrator_bindings(actor_id, tenant_id),
+      CONSTRAINT tenant_administrator_invitations_accepted_actor
+        FOREIGN KEY (accepted_by_actor_id, tenant_id)
+        REFERENCES tenant_administrator_bindings(actor_id, tenant_id),
+      CONSTRAINT tenant_administrator_invitations_revoker
+        FOREIGN KEY (revoked_by_actor_id, tenant_id)
+        REFERENCES tenant_administrator_bindings(actor_id, tenant_id),
+      CONSTRAINT tenant_administrator_invitations_token
+        CHECK (token_digest ~ '^[0-9a-f]{64}$'),
+      CONSTRAINT tenant_administrator_invitations_target
+        CHECK (target_actor_id ~ '^[A-Za-z0-9:_-]{1,128}$'),
+      CONSTRAINT tenant_administrator_invitations_role
+        CHECK (role IN ('administrator', 'publisher', 'reviewer')),
+      CONSTRAINT tenant_administrator_invitations_expiry
+        CHECK (expires_at > issued_at),
+      CONSTRAINT tenant_administrator_invitations_terminal_state
+        CHECK (
+          (accepted_at IS NULL AND accepted_by_actor_id IS NULL)
+          OR
+          (accepted_at IS NOT NULL
+            AND accepted_by_actor_id = target_actor_id
+            AND accepted_at <= expires_at)
+        ),
+      CONSTRAINT tenant_administrator_invitations_revocation_state
+        CHECK (
+          (revoked_at IS NULL AND revoked_by_actor_id IS NULL)
+          OR
+          (revoked_at IS NOT NULL AND revoked_by_actor_id IS NOT NULL)
+        ),
+      CONSTRAINT tenant_administrator_invitations_one_terminal_state
+        CHECK (accepted_at IS NULL OR revoked_at IS NULL)
+    );
+    CREATE FUNCTION kusanya_guard_administrator_invitation_immutable()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN
+      IF NEW.invitation_id IS DISTINCT FROM OLD.invitation_id
+        OR NEW.token_digest IS DISTINCT FROM OLD.token_digest
+        OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+        OR NEW.issued_by_actor_id IS DISTINCT FROM OLD.issued_by_actor_id
+        OR NEW.target_actor_id IS DISTINCT FROM OLD.target_actor_id
+        OR NEW.role IS DISTINCT FROM OLD.role
+        OR NEW.issued_at IS DISTINCT FROM OLD.issued_at
+        OR NEW.expires_at IS DISTINCT FROM OLD.expires_at
+        OR (OLD.accepted_at IS NOT NULL AND (
+          NEW.accepted_at IS DISTINCT FROM OLD.accepted_at
+          OR NEW.accepted_by_actor_id IS DISTINCT FROM OLD.accepted_by_actor_id
+        ))
+        OR (OLD.revoked_at IS NOT NULL AND (
+          NEW.revoked_at IS DISTINCT FROM OLD.revoked_at
+          OR NEW.revoked_by_actor_id IS DISTINCT FROM OLD.revoked_by_actor_id
+        ))
+      THEN
+        RAISE EXCEPTION 'administrator invitation state is immutable'
+          USING ERRCODE = '23514';
+      END IF;
+      RETURN NEW;
+    END;
+    $$;
+    CREATE TRIGGER tenant_administrator_invitations_immutable
+      BEFORE UPDATE ON tenant_administrator_invitations
+      FOR EACH ROW
+      EXECUTE FUNCTION kusanya_guard_administrator_invitation_immutable()`,
+  }),
 ]);
 
 export class MigrationError extends Error {
@@ -342,7 +425,8 @@ export type MigrationTarget =
   | '0006_publication_attempts'
   | '0007_publication_attempt_reconciliation'
   | '0008_administrator_lifecycle'
-  | '0009_administrator_roles';
+  | '0009_administrator_roles'
+  | '0010_administrator_invitations';
 
 /** Apply the checked plan through an optional exact target for upgrade verification. */
 export async function applyMigrations(

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { createServer } from 'node:net';
 import { Pool } from 'pg';
@@ -27,6 +27,14 @@ import {
   administratorProvisioningRoutePaths,
   registerAdministratorProvisioningRoutes,
 } from '../../src/tenant/administrator-provisioning-routes.js';
+import {
+  AdministratorInvitationError,
+  AdministratorInvitationStore,
+} from '../../src/tenant/administrator-invitation.js';
+import {
+  administratorInvitationRoutePaths,
+  registerAdministratorInvitationRoutes,
+} from '../../src/tenant/administrator-invitation-routes.js';
 import {
   administratorSessionRoutePaths,
   registerAdministratorSessionRoutes,
@@ -1178,6 +1186,7 @@ void test(
         '0007_publication_attempt_reconciliation',
         '0008_administrator_lifecycle',
         '0009_administrator_roles',
+        '0010_administrator_invitations',
       ],
     );
   },
@@ -1222,6 +1231,11 @@ void test(
     ];
     context.after(async () => {
       try {
+        await pool.query(
+          `DELETE FROM tenant_administrator_invitations
+           WHERE tenant_id = ANY($1::uuid[])`,
+          [[tenantId, otherTenantId, raceTenantId, bootstrapTenantId]],
+        );
         await pool.query(
           `DELETE FROM tenant_administrator_role_audits
            WHERE tenant_id = ANY($1::uuid[])`,
@@ -1299,6 +1313,8 @@ void test(
       },
     };
     const store = new AdministratorSessionStore(queryExecutor);
+    const invitationStore = new AdministratorInvitationStore(queryExecutor);
+    const invitationConfiguration = Object.freeze({ ttlSeconds: 3600 });
     const sessionConfiguration = Object.freeze({
       sessionSecret: Buffer.alloc(32, 83).toString('base64'),
       ttlSeconds: 900,
@@ -1729,9 +1745,36 @@ void test(
       sessionStore: store,
       externalOrigin: 'https://service.example',
     });
+    registerAdministratorInvitationRoutes(app, {
+      authenticateAdministrator: async (opaqueSession) => {
+        const authenticated = await store.authenticate(
+          opaqueSession,
+          sessionConfiguration,
+        );
+        if (authenticated === undefined)
+          throw new Error('ADMINISTRATOR_SESSION_AUTHENTICATION');
+        return authenticated;
+      },
+      actorIdForSubject: (subject) => {
+        if (subject === 'already-other-tenant') return otherBoundActorId;
+        if (subject === 'new-same-tenant') return enrolledActorId;
+        throw new Error('OIDC_SUBJECT');
+      },
+      invitationStore,
+      invitationConfiguration,
+      externalOrigin: 'https://service.example',
+    });
     registerAdministratorSessionRoutes(app, {
-      verifyLoginRequest: async () => ({ actorId }),
+      verifyLoginRequest: async (request) => ({
+        actorId:
+          request.headers.authorization === 'Bearer enrolled.synthetic.token'
+            ? enrolledActorId
+            : request.headers.authorization === 'Bearer other.synthetic.token'
+              ? otherBoundActorId
+              : actorId,
+      }),
       sessionStore: store,
+      invitationStore,
       sessionConfiguration,
       externalOrigin: 'https://service.example',
     });
@@ -1745,9 +1788,9 @@ void test(
     });
     assert.equal(csrf.statusCode, 200);
     assert.deepEqual(csrf.json(), { csrfToken: browserSession.csrfToken });
-    const crossTenant = await app.inject({
+    const crossTenantInvitation = await app.inject({
       method: 'POST',
-      url: administratorProvisioningRoutePaths.provision,
+      url: administratorInvitationRoutePaths.invitations,
       headers: {
         origin: 'https://service.example',
         cookie: `__Host-kusanya_admin_session=${browserSession.opaqueSession}`,
@@ -1755,11 +1798,28 @@ void test(
       },
       payload: { subject: 'already-other-tenant', role: 'reviewer' },
     });
-    assert.equal(crossTenant.statusCode, 503);
-    assert.deepEqual(crossTenant.json(), { error: 'Provisioning unavailable' });
-    const enrolled = await app.inject({
+    assert.equal(crossTenantInvitation.statusCode, 201);
+    const crossTenantToken = crossTenantInvitation.json<{
+      invitationToken: string;
+    }>().invitationToken;
+    const crossTenantAcceptance = await app.inject({
       method: 'POST',
-      url: administratorProvisioningRoutePaths.provision,
+      url: administratorSessionRoutePaths.login,
+      headers: {
+        origin: 'https://service.example',
+        authorization: 'Bearer other.synthetic.token',
+        'content-type': 'application/json',
+      },
+      payload: { invitationToken: crossTenantToken },
+    });
+    assert.equal(crossTenantAcceptance.statusCode, 401);
+    assert.deepEqual(crossTenantAcceptance.json(), {
+      error: 'Authentication required',
+    });
+
+    const invitation = await app.inject({
+      method: 'POST',
+      url: administratorInvitationRoutePaths.invitations,
       headers: {
         origin: 'https://service.example',
         cookie: `__Host-kusanya_admin_session=${browserSession.opaqueSession}`,
@@ -1767,18 +1827,32 @@ void test(
       },
       payload: { subject: 'new-same-tenant', role: 'reviewer' },
     });
-    assert.equal(enrolled.statusCode, 204);
-    const enrolledSession = await store.issue(
-      enrolledActorId,
-      sessionConfiguration,
-    );
+    assert.equal(invitation.statusCode, 201);
+    const invitationBody = invitation.json<{
+      invitationId: string;
+      invitationToken: string;
+      expiresInSeconds: number;
+    }>();
+    assert.equal(invitationBody.expiresInSeconds, 3600);
+    const accepted = await app.inject({
+      method: 'POST',
+      url: administratorSessionRoutePaths.login,
+      headers: {
+        origin: 'https://service.example',
+        authorization: 'Bearer enrolled.synthetic.token',
+        'content-type': 'application/json',
+      },
+      payload: { invitationToken: invitationBody.invitationToken },
+    });
+    assert.equal(accepted.statusCode, 204);
+    const acceptedCookie = String(accepted.headers['set-cookie']);
+    const enrolledOpaqueSession = acceptedCookie.match(
+      /__Host-kusanya_admin_session=([A-Za-z0-9_-]{43})/,
+    )?.[1];
+    assert.ok(enrolledOpaqueSession);
     assert.equal(
-      (
-        await store.authenticate(
-          enrolledSession.opaqueSession,
-          sessionConfiguration,
-        )
-      )?.role,
+      (await store.authenticate(enrolledOpaqueSession, sessionConfiguration))
+        ?.role,
       'reviewer',
     );
     const roleChanged = await app.inject({
@@ -1793,12 +1867,8 @@ void test(
     });
     assert.equal(roleChanged.statusCode, 204);
     assert.equal(
-      (
-        await store.authenticate(
-          enrolledSession.opaqueSession,
-          sessionConfiguration,
-        )
-      )?.role,
+      (await store.authenticate(enrolledOpaqueSession, sessionConfiguration))
+        ?.role,
       'publisher',
     );
     assert.deepEqual(
@@ -1926,7 +1996,7 @@ void test(
           new_role: 'administrator',
         },
         {
-          performed_by_actor_id: actorId,
+          performed_by_actor_id: enrolledActorId,
           target_actor_id: enrolledActorId,
           action: 'enrol',
           previous_role: null,
@@ -1998,5 +2068,444 @@ void test(
       0,
     );
     await app.close();
+  },
+);
+
+void test(
+  'administrator invitations are private, expiring, revocable and atomically single-use',
+  {
+    timeout: 15000,
+    skip:
+      !databaseUrl && !databaseRequired
+        ? 'Set DATABASE_URL to a disposable PostgreSQL 17 database'
+        : false,
+  },
+  async (context) => {
+    assert.ok(
+      databaseUrl,
+      'DATABASE_URL is required when REQUIRE_DATABASE_TESTS=true',
+    );
+    const config = readConfig({
+      ...process.env,
+      NODE_ENV: 'test',
+      DATABASE_URL: databaseUrl,
+    });
+    const pool = createPostgresPool(config, () => {});
+    const tenantId = randomUUID();
+    const otherTenantId = randomUUID();
+    const administratorId = `administrator:${randomUUID()}`;
+    const otherAdministratorId = `administrator:${randomUUID()}`;
+    const crossTenantActorId = `administrator:${randomUUID()}`;
+    const wrongTargetId = `administrator:${randomUUID()}`;
+    const wrongPresenterId = `administrator:${randomUUID()}`;
+    const revokedTargetId = `administrator:${randomUUID()}`;
+    const expiredTargetId = `administrator:${randomUUID()}`;
+    const raceTargetId = `administrator:${randomUUID()}`;
+    const lowerRoleTargetId = `administrator:${randomUUID()}`;
+    const secondAdministratorId = `administrator:${randomUUID()}`;
+    const staleIssuerTargetId = `administrator:${randomUUID()}`;
+    const actorIds = [
+      administratorId,
+      otherAdministratorId,
+      crossTenantActorId,
+      wrongTargetId,
+      wrongPresenterId,
+      revokedTargetId,
+      expiredTargetId,
+      raceTargetId,
+      lowerRoleTargetId,
+      secondAdministratorId,
+      staleIssuerTargetId,
+    ];
+    context.after(async () => {
+      try {
+        await pool.query(
+          'DELETE FROM administrator_sessions WHERE actor_id = ANY($1::varchar[])',
+          [actorIds],
+        );
+        await pool.query(
+          `DELETE FROM tenant_administrator_invitations
+           WHERE tenant_id = ANY($1::uuid[])`,
+          [[tenantId, otherTenantId]],
+        );
+        await pool.query(
+          `DELETE FROM tenant_administrator_role_audits
+           WHERE tenant_id = ANY($1::uuid[])`,
+          [[tenantId, otherTenantId]],
+        );
+        await pool.query(
+          `DELETE FROM tenant_administrator_lifecycle_audits
+           WHERE tenant_id = ANY($1::uuid[])`,
+          [[tenantId, otherTenantId]],
+        );
+        await pool.query(
+          'DELETE FROM tenant_administrator_bindings WHERE actor_id = ANY($1::varchar[])',
+          [actorIds],
+        );
+        await pool.query(
+          `DELETE FROM tenant_administrator_tenants
+           WHERE tenant_id = ANY($1::uuid[])`,
+          [[tenantId, otherTenantId]],
+        );
+      } finally {
+        await pool.end();
+      }
+    });
+    await applyMigrations(pool);
+    const queryExecutor: QueryExecutor = {
+      async query<Row>(text: string, values: unknown[] = []) {
+        const result = await pool.query(text, values);
+        return { rows: result.rows as Row[], rowCount: result.rowCount };
+      },
+    };
+    const sessions = new AdministratorSessionStore(queryExecutor);
+    const invitations = new AdministratorInvitationStore(queryExecutor);
+    const sessionConfiguration = Object.freeze({
+      sessionSecret: Buffer.alloc(32, 27).toString('base64'),
+      ttlSeconds: 900,
+    });
+    const invitationConfiguration = Object.freeze({ ttlSeconds: 3600 });
+    await sessions.bootstrap({
+      actorId: administratorId,
+      tenantId,
+      expectedSalesforceOrgId: '00D000000000005',
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: '',
+    });
+    await sessions.bootstrap({
+      actorId: otherAdministratorId,
+      tenantId: otherTenantId,
+      expectedSalesforceOrgId: '00D000000000006',
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: '',
+    });
+    await sessions.provision({
+      actorId: crossTenantActorId,
+      performedByActorId: otherAdministratorId,
+      tenantId: otherTenantId,
+      expectedSalesforceOrgId: '00D000000000006',
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: '',
+      role: 'reviewer',
+    });
+    await sessions.provision({
+      actorId: secondAdministratorId,
+      performedByActorId: administratorId,
+      tenantId,
+      expectedSalesforceOrgId: '00D000000000005',
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: '',
+      role: 'administrator',
+    });
+
+    const crossTenant = await invitations.issue(
+      {
+        performedByActorId: administratorId,
+        targetActorId: crossTenantActorId,
+        tenantId,
+        role: 'publisher',
+      },
+      invitationConfiguration,
+    );
+    assert.match(crossTenant.invitationToken, /^[A-Za-z0-9_-]{43}$/);
+    await assert.rejects(
+      invitations.accept(
+        {
+          actorId: crossTenantActorId,
+          invitationToken: crossTenant.invitationToken,
+        },
+        sessionConfiguration,
+      ),
+      (error: unknown) =>
+        error instanceof AdministratorInvitationError &&
+        error.code === 'ADMINISTRATOR_INVITATION_REJECTED',
+    );
+
+    const wrongSubject = await invitations.issue(
+      {
+        performedByActorId: administratorId,
+        targetActorId: wrongTargetId,
+        tenantId,
+        role: 'reviewer',
+      },
+      invitationConfiguration,
+    );
+    await assert.rejects(
+      invitations.accept(
+        {
+          actorId: wrongPresenterId,
+          invitationToken: wrongSubject.invitationToken,
+        },
+        sessionConfiguration,
+      ),
+      { message: 'ADMINISTRATOR_INVITATION_REJECTED' },
+    );
+
+    const revoked = await invitations.issue(
+      {
+        performedByActorId: administratorId,
+        targetActorId: revokedTargetId,
+        tenantId,
+        role: 'reviewer',
+      },
+      invitationConfiguration,
+    );
+    await invitations.revoke({
+      performedByActorId: administratorId,
+      invitationId: revoked.invitationId,
+      tenantId,
+    });
+    await assert.rejects(
+      invitations.accept(
+        {
+          actorId: revokedTargetId,
+          invitationToken: revoked.invitationToken,
+        },
+        sessionConfiguration,
+      ),
+      { message: 'ADMINISTRATOR_INVITATION_REJECTED' },
+    );
+
+    const expired = Object.freeze({
+      invitationId: randomUUID(),
+      invitationToken: 'e'.repeat(43),
+    });
+    await pool.query(
+      `INSERT INTO tenant_administrator_invitations (
+         invitation_id, token_digest, tenant_id, issued_by_actor_id,
+         target_actor_id, role, issued_at, expires_at
+       ) VALUES (
+         $1::uuid, $2, $3::uuid, $4, $5, 'reviewer',
+         clock_timestamp() - interval '2 hours',
+         clock_timestamp() - interval '1 hour'
+       )`,
+      [
+        expired.invitationId,
+        createHash('sha256')
+          .update(expired.invitationToken, 'ascii')
+          .digest('hex'),
+        tenantId,
+        administratorId,
+        expiredTargetId,
+      ],
+    );
+    await assert.rejects(
+      invitations.accept(
+        {
+          actorId: expiredTargetId,
+          invitationToken: expired.invitationToken,
+        },
+        sessionConfiguration,
+      ),
+      { message: 'ADMINISTRATOR_INVITATION_REJECTED' },
+    );
+
+    const racing = await invitations.issue(
+      {
+        performedByActorId: administratorId,
+        targetActorId: raceTargetId,
+        tenantId,
+        role: 'reviewer',
+      },
+      invitationConfiguration,
+    );
+    const race = await Promise.allSettled([
+      invitations.accept(
+        { actorId: raceTargetId, invitationToken: racing.invitationToken },
+        sessionConfiguration,
+      ),
+      invitations.accept(
+        { actorId: raceTargetId, invitationToken: racing.invitationToken },
+        sessionConfiguration,
+      ),
+    ]);
+    assert.equal(
+      race.filter((result) => result.status === 'fulfilled').length,
+      1,
+    );
+    assert.equal(
+      race.filter(
+        (result) =>
+          result.status === 'rejected' &&
+          result.reason instanceof AdministratorInvitationError &&
+          result.reason.code === 'ADMINISTRATOR_INVITATION_REJECTED',
+      ).length,
+      1,
+    );
+    await assert.rejects(
+      invitations.accept(
+        { actorId: raceTargetId, invitationToken: racing.invitationToken },
+        sessionConfiguration,
+      ),
+      { message: 'ADMINISTRATOR_INVITATION_REJECTED' },
+    );
+
+    const terminal = await pool.query<{
+      bindings: number;
+      sessions: number;
+      audits: number;
+      accepted: boolean;
+      role: string;
+    }>(
+      `SELECT
+         (SELECT count(*)::integer FROM tenant_administrator_bindings
+          WHERE actor_id = $1) AS bindings,
+         (SELECT count(*)::integer FROM administrator_sessions
+          WHERE actor_id = $1) AS sessions,
+         (SELECT count(*)::integer FROM tenant_administrator_role_audits
+          WHERE target_actor_id = $1 AND action = 'enrol') AS audits,
+         (SELECT accepted_at IS NOT NULL
+          FROM tenant_administrator_invitations
+          WHERE invitation_id = $2::uuid) AS accepted,
+         (SELECT role FROM tenant_administrator_bindings
+          WHERE actor_id = $1) AS role`,
+      [raceTargetId, racing.invitationId],
+    );
+    assert.deepEqual(terminal.rows, [
+      {
+        bindings: 1,
+        sessions: 1,
+        audits: 1,
+        accepted: true,
+        role: 'reviewer',
+      },
+    ]);
+
+    await assert.rejects(
+      invitations.issue(
+        {
+          performedByActorId: raceTargetId,
+          targetActorId: lowerRoleTargetId,
+          tenantId,
+          role: 'reviewer',
+        },
+        invitationConfiguration,
+      ),
+      { message: 'ADMINISTRATOR_INVITATION_REJECTED' },
+    );
+
+    const staleIssuer = await invitations.issue(
+      {
+        performedByActorId: administratorId,
+        targetActorId: staleIssuerTargetId,
+        tenantId,
+        role: 'publisher',
+      },
+      invitationConfiguration,
+    );
+    const blocker = await pool.connect();
+    const accepter = await pool.connect();
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query(
+        `SELECT pg_advisory_xact_lock(
+           hashtextextended('tenant:' || $1::text, 0)
+         )`,
+        [tenantId],
+      );
+      const accepterPid = (
+        await accepter.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')
+      ).rows[0]!.pid;
+      const acceptanceStore = new AdministratorInvitationStore({
+        async query<Row>(text: string, values: unknown[] = []) {
+          const result = await accepter.query(text, values);
+          return { rows: result.rows as Row[], rowCount: result.rowCount };
+        },
+      });
+      const acceptance = acceptanceStore
+        .accept(
+          {
+            actorId: staleIssuerTargetId,
+            invitationToken: staleIssuer.invitationToken,
+          },
+          sessionConfiguration,
+        )
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+      let waiting = false;
+      for (let attempt = 0; attempt < 100 && !waiting; attempt++) {
+        const activity = await pool.query<{ waiting: boolean }>(
+          `SELECT wait_event_type = 'Lock' AS waiting
+           FROM pg_stat_activity WHERE pid = $1`,
+          [accepterPid],
+        );
+        waiting = activity.rows[0]?.waiting === true;
+        if (!waiting) await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      assert.equal(waiting, true);
+      await blocker.query(
+        `UPDATE tenant_administrator_bindings
+         SET role = 'reviewer'
+         WHERE actor_id = $1 AND tenant_id = $2::uuid`,
+        [administratorId, tenantId],
+      );
+      await blocker.query('COMMIT');
+      const acceptanceError = await acceptance;
+      assert.ok(acceptanceError instanceof AdministratorInvitationError);
+      assert.equal(acceptanceError.code, 'ADMINISTRATOR_INVITATION_REJECTED');
+    } finally {
+      try {
+        await blocker.query('ROLLBACK');
+      } catch {
+        // A successful COMMIT leaves no transaction to roll back.
+      }
+      blocker.release();
+      accepter.release();
+    }
+    await pool.query(
+      `UPDATE tenant_administrator_bindings
+       SET role = 'administrator'
+       WHERE actor_id = $1 AND tenant_id = $2::uuid`,
+      [administratorId, tenantId],
+    );
+    assert.equal(
+      (
+        await pool.query<{ count: number }>(
+          `SELECT count(*)::integer AS count
+           FROM tenant_administrator_bindings
+           WHERE actor_id = ANY($1::varchar[])`,
+          [
+            [
+              wrongTargetId,
+              wrongPresenterId,
+              revokedTargetId,
+              expiredTargetId,
+              lowerRoleTargetId,
+              staleIssuerTargetId,
+            ],
+          ],
+        )
+      ).rows[0]?.count,
+      0,
+    );
+    const rawInvitations = await pool.query(
+      `SELECT * FROM tenant_administrator_invitations
+       WHERE tenant_id = $1::uuid`,
+      [tenantId],
+    );
+    const serialized = JSON.stringify(rawInvitations.rows);
+    for (const token of [
+      crossTenant.invitationToken,
+      wrongSubject.invitationToken,
+      revoked.invitationToken,
+      expired.invitationToken,
+      racing.invitationToken,
+      staleIssuer.invitationToken,
+    ])
+      assert.doesNotMatch(serialized, new RegExp(token));
+    await assert.rejects(
+      pool.query(
+        `UPDATE tenant_administrator_invitations
+         SET role = 'administrator'
+         WHERE invitation_id = $1::uuid`,
+        [wrongSubject.invitationId],
+      ),
+      (error: unknown) =>
+        error !== null &&
+        typeof error === 'object' &&
+        Object.getOwnPropertyDescriptor(error, 'code')?.value === '23514',
+    );
   },
 );

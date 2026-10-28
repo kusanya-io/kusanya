@@ -249,10 +249,10 @@ ADR 0052 continues that same ordered projection with an opaque keyset cursor mad
 from the exact microsecond `created_at` value and attempt UUID. Every page rechecks
 the live actor and immutable tenant/org/origin/namespace tuple; the cursor contains
 no tenant and is never authority. The fixed page size remains 100. The new
-same-tenant enrolment route creates no table: it derives an actor from the configured
-OIDC issuer and subject, then reuses ADR 0043's serializable provisioning operation
-with the current session's complete tuple. It cannot create the initial tenant or
-move an existing actor.
+same-tenant lifecycle route creates no table: it derives an actor from the configured
+OIDC issuer and subject for peer removal and role change. ADR 0055 removes direct HTTP
+enrolment; a new binding is created only when its invited OIDC identity accepts a
+one-time token.
 
 ADR 0053 adds `active` and `deprovisioned_at` to
 `tenant_administrator_bindings`. Active and timestamp states are mutually exclusive;
@@ -275,6 +275,19 @@ performer, target, previous/new roles and database time. Enrolment and role chan
 commit state and audit atomically. Its foreign keys preserve the immutable tenant
 identity, and append-only remains a Kusanya write-path guarantee rather than a claim
 against privileged database access.
+
+ADR 0055 adds `tenant_administrator_invitations`. Each row stores a random UUID,
+SHA-256 digest of a 256-bit opaque token, tenant, issuer-derived target actor, exact
+closed role, issuing administrator and bounded expiry. Mutually exclusive acceptance
+and revocation columns preserve the terminal state; composite foreign keys keep the
+issuer, accepter and revoker in the same tenant, and acceptance requires the accepter
+to equal the original target actor. The raw invitation token is returned once and is
+never stored. A trigger prevents edits to the target, role, token identity or expiry
+and prevents accepted or revoked terminal state from being cleared or rewritten.
+Acceptance atomically inserts the immutable binding from the stored role, marks the
+invitation accepted, appends the enrolment audit and inserts the opaque browser
+session. Issuance deliberately does not query global actor bindings; cross-tenant
+binding conflicts are visible only to the invited subject at acceptance.
 
 ADR 0045 adds append-only `tenant_salesforce_authorization_audits`. Each successful
 grant records the tenant, its bound trusted administrator actor, normalized `00D`

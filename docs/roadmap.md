@@ -390,14 +390,13 @@ Kusanya-API access token's exact issuer and subject, and mounts session, publica
 and presentation in `app.ts`/`main.ts`. Retention, operator UI, self-service
 provisioning, connection lifecycle and the CLI remain later units.
 
-ADR 0052 adds the first self-contained operator interface, same-tenant administrator
-enrolment and bounded keyset pagination. Authority still comes only from a live
-session, exact origin and its derived CSRF value. An enrolment supplies only the OIDC
-subject; the configured issuer derives the actor and the live immutable tuple selects
-the tenant. A cursor can continue the least-data view but cannot select another
-tenant. Initial bootstrap, retention/deletion, scheduled reconciliation, privileged
-retry, disconnect/rebind and the publish CLI remain under note 34. Note 39 remains
-open, and no C10 or Phase 1 completion claim is made.
+ADR 0052 adds the first self-contained operator interface, administrator lifecycle
+controls and bounded keyset pagination. Authority still comes only from a live
+session, exact origin and its derived CSRF value. A cursor can continue the
+least-data view but cannot select another tenant. Initial bootstrap,
+retention/deletion, scheduled reconciliation, privileged retry, disconnect/rebind
+and the publish CLI remain under note 34. Note 39 remains open, and no C10 or Phase 1
+completion claim is made.
 
 ADR 0053 adds the tenant administrator lifecycle ends. A bounded server-only command
 bootstraps exactly one first OIDC-derived administrator and atomically audits it;
@@ -412,4 +411,10 @@ and role changes are audited atomically, while ordered locking prevents self-cha
 or concurrent demotion of the final full administrator. Invitations,
 retention/deletion of publication attempts, scheduled reconciliation, privileged
 retry, disconnect/rebind, the publish CLI and ODK Validate runtime assets remain
-under note 34. Note 39 remains open, and no C10 or Phase 1 completion claim is made.
+under note 34. ADR 0055 replaces immediate peer enrolment with opaque invitations.
+Issuance reveals no global membership result; the invited OIDC identity atomically
+consumes the stored role into its binding, audit and first session. Expiry, revocation,
+wrong identity, replay and cross-tenant conflicts fail closed. Invitation delivery,
+retention/deletion, scheduled reconciliation, privileged retry, disconnect/rebind,
+the publish CLI and ODK Validate runtime assets remain under note 34. Note 39 remains
+open, and no C10 or Phase 1 completion claim is made.

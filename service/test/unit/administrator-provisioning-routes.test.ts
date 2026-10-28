@@ -8,10 +8,7 @@ import {
   registerAdministratorProvisioningRoutes,
   type AdministratorProvisioningRouteDependencies,
 } from '../../src/tenant/administrator-provisioning-routes.js';
-import {
-  AdministratorSessionError,
-  type AdministratorProvisioningInput,
-} from '../../src/tenant/administrator-session.js';
+import { AdministratorSessionError } from '../../src/tenant/administrator-session.js';
 import { administratorOidcActorId } from '../../src/tenant/oidc-login.js';
 
 const config = readConfig({ DATABASE_URL: 'postgresql://localhost/kusanya' });
@@ -57,9 +54,6 @@ function dependencies(
       return administratorOidcActorId(issuer, subject);
     },
     sessionStore: {
-      async provision(input) {
-        events.push(['provision', input]);
-      },
       async deprovision(input) {
         events.push(['deprovision', input]);
       },
@@ -69,156 +63,6 @@ function dependencies(
     },
   };
 }
-
-void test('enrolls only an OIDC-derived actor into the live session tenant', async (t) => {
-  const setup = dependencies();
-  const app = createApp(config, { async ping() {}, async close() {} }, false);
-  t.after(() => app.close());
-  registerAdministratorProvisioningRoutes(app, setup);
-
-  const response = await app.inject({
-    method: 'POST',
-    url: administratorProvisioningRoutePaths.provision,
-    headers: headers({
-      'x-actor-id': 'forged',
-      'x-tenant-id': '20000000-0000-4000-8000-000000000002',
-    }),
-    payload: { subject: 'new-subject', role: 'publisher' },
-  });
-  assert.equal(response.statusCode, 204);
-  assert.deepEqual(setup.events.slice(0, 2), [
-    ['authenticate', opaqueSession],
-    ['derive', 'new-subject'],
-  ]);
-  const provisioned = (setup.events[2] as ['provision', unknown])[1];
-  assert.deepEqual(provisioned, {
-    actorId: administratorOidcActorId(issuer, 'new-subject'),
-    performedByActorId: trusted.actorId,
-    tenantId: trusted.tenantId,
-    expectedSalesforceOrgId: trusted.expectedSalesforceOrgId,
-    authorizationOrigin: trusted.authorizationOrigin,
-    namespacePrefix: trusted.namespacePrefix,
-    role: 'publisher',
-  });
-  assert.equal(
-    Object.keys(provisioned as AdministratorProvisioningInput).includes(
-      'subject',
-    ),
-    false,
-  );
-});
-
-void test('authenticates and checks CSRF before deriving or provisioning', async (t) => {
-  const setup = dependencies();
-  const app = createApp(config, { async ping() {}, async close() {} }, false);
-  t.after(() => app.close());
-  registerAdministratorProvisioningRoutes(app, setup);
-  for (const method of ['POST', 'DELETE', 'PATCH'] as const)
-    for (const request of [
-      { headers: headers({ origin: 'https://attacker.example' }) },
-      { headers: { ...headers(), cookie: '' } },
-      {
-        headers: {
-          ...headers(),
-          cookie: `__Host-kusanya_admin_session=${opaqueSession}; __Host-kusanya_admin_session=${opaqueSession}`,
-        },
-      },
-      { headers: headers({ 'x-csrf-token': 'x'.repeat(43) }) },
-      { headers: headers({ 'x-csrf-token': 'x' }) },
-    ]) {
-      setup.events.length = 0;
-      const response = await app.inject({
-        method,
-        url: administratorProvisioningRoutePaths.provision,
-        payload: { subject: 'new-subject' },
-        ...request,
-      });
-      assert.ok([400, 401, 403].includes(response.statusCode));
-      assert.equal(
-        setup.events.some(
-          (event) =>
-            Array.isArray(event) &&
-            typeof event[0] === 'string' &&
-            ['derive', 'provision', 'deprovision', 'change-role'].includes(
-              event[0],
-            ),
-        ),
-        false,
-      );
-      assert.doesNotMatch(response.body, /subject|tenant|actor|00D/i);
-    }
-});
-
-void test('refuses selectors and hostile subjects without widening the tenant tuple', async (t) => {
-  const setup = dependencies();
-  const app = createApp(config, { async ping() {}, async close() {} }, false);
-  t.after(() => app.close());
-  registerAdministratorProvisioningRoutes(app, setup);
-  const bodies = [
-    {},
-    { actorId: 'oidc:forged' },
-    { subject: 'new-subject' },
-    { subject: 'new-subject', role: 'owner' },
-    { subject: 'new-subject', role: 'publisher', actorId: 'oidc:forged' },
-    { subject: 'new-subject', role: 'publisher', tenantId: trusted.tenantId },
-    {
-      subject: 'new-subject',
-      role: 'publisher',
-      expectedSalesforceOrgId: '00D000000000002EAA',
-    },
-    { subject: null },
-    { subject: '' },
-    { subject: 'x'.repeat(513) },
-    { subject: 'line\nbreak' },
-  ];
-  for (const body of bodies) {
-    setup.events.length = 0;
-    const response = await app.inject({
-      method: 'POST',
-      url: administratorProvisioningRoutePaths.provision,
-      headers: headers(),
-      payload: body,
-    });
-    assert.equal(response.statusCode, 400);
-    assert.equal(
-      setup.events.some(
-        (event) => Array.isArray(event) && event[0] === 'provision',
-      ),
-      false,
-    );
-  }
-  const query = await app.inject({
-    method: 'POST',
-    url: `${administratorProvisioningRoutePaths.provision}?tenant=other`,
-    headers: headers(),
-    payload: { subject: 'new-subject', role: 'publisher' },
-  });
-  assert.equal(query.statusCode, 400);
-});
-
-void test('makes cross-tenant conflicts indistinguishable from storage failures', async (t) => {
-  for (const error of [
-    new AdministratorSessionError('ADMINISTRATOR_SESSION_CONFLICT'),
-    new Error('actor already belongs to confidential tenant'),
-  ]) {
-    const setup = dependencies();
-    setup.sessionStore.provision = async () => {
-      throw error;
-    };
-    const app = createApp(config, { async ping() {}, async close() {} }, false);
-    t.after(() => app.close());
-    registerAdministratorProvisioningRoutes(app, setup);
-    const response = await app.inject({
-      method: 'POST',
-      url: administratorProvisioningRoutePaths.provision,
-      headers: headers(),
-      payload: { subject: 'already-bound-subject', role: 'reviewer' },
-    });
-    assert.equal(response.statusCode, 503);
-    assert.deepEqual(response.json(), { error: 'Provisioning unavailable' });
-    assert.doesNotMatch(response.body, /already|confidential|tenant|subject/i);
-  }
-});
 
 void test('deprovisions only an OIDC-derived actor from the live session tenant', async (t) => {
   const setup = dependencies();
@@ -248,6 +92,47 @@ void test('deprovisions only an OIDC-derived actor from the live session tenant'
       },
     ],
   ]);
+});
+
+void test('authenticates and checks CSRF before deriving or mutating', async (t) => {
+  const setup = dependencies();
+  const app = createApp(config, { async ping() {}, async close() {} }, false);
+  t.after(() => app.close());
+  registerAdministratorProvisioningRoutes(app, setup);
+  for (const method of ['DELETE', 'PATCH'] as const)
+    for (const request of [
+      { headers: headers({ origin: 'https://attacker.example' }) },
+      { headers: { ...headers(), cookie: '' } },
+      {
+        headers: {
+          ...headers(),
+          cookie: `__Host-kusanya_admin_session=${opaqueSession}; __Host-kusanya_admin_session=${opaqueSession}`,
+        },
+      },
+      { headers: headers({ 'x-csrf-token': 'x'.repeat(43) }) },
+      { headers: headers({ 'x-csrf-token': 'x' }) },
+    ]) {
+      setup.events.length = 0;
+      const response = await app.inject({
+        method,
+        url: administratorProvisioningRoutePaths.provision,
+        payload:
+          method === 'DELETE'
+            ? { subject: 'peer-subject' }
+            : { subject: 'peer-subject', role: 'reviewer' },
+        ...request,
+      });
+      assert.ok([400, 401, 403].includes(response.statusCode));
+      assert.equal(
+        setup.events.some(
+          (event) =>
+            Array.isArray(event) &&
+            ['derive', 'deprovision', 'change-role'].includes(String(event[0])),
+        ),
+        false,
+      );
+      assert.doesNotMatch(response.body, /subject|tenant|actor|00D/i);
+    }
 });
 
 void test('makes absent, last, self and cross-tenant removals indistinguishable', async (t) => {
@@ -312,7 +197,7 @@ void test('changes only a peer role and denies lifecycle access to lower roles',
     );
     t.after(() => deniedApp.close());
     registerAdministratorProvisioningRoutes(deniedApp, denied);
-    for (const method of ['POST', 'DELETE', 'PATCH'] as const) {
+    for (const method of ['DELETE', 'PATCH'] as const) {
       denied.events.length = 0;
       const response = await deniedApp.inject({
         method,
@@ -329,14 +214,46 @@ void test('changes only a peer role and denies lifecycle access to lower roles',
         denied.events.some(
           (event) =>
             Array.isArray(event) &&
-            ['derive', 'provision', 'deprovision', 'change-role'].includes(
-              String(event[0]),
-            ),
+            ['derive', 'deprovision', 'change-role'].includes(String(event[0])),
         ),
         false,
       );
     }
   }
+});
+
+void test('removes direct enrolment and refuses hostile selectors', async (t) => {
+  const setup = dependencies();
+  const app = createApp(config, { async ping() {}, async close() {} }, false);
+  t.after(() => app.close());
+  registerAdministratorProvisioningRoutes(app, setup);
+  const direct = await app.inject({
+    method: 'POST',
+    url: administratorProvisioningRoutePaths.provision,
+    headers: headers(),
+    payload: { subject: 'new-subject', role: 'publisher' },
+  });
+  assert.equal(direct.statusCode, 404);
+  for (const body of [
+    {},
+    { subject: 'peer-subject', role: 'owner' },
+    { subject: 'peer-subject', role: 'reviewer', tenantId: trusted.tenantId },
+  ]) {
+    const response = await app.inject({
+      method: 'PATCH',
+      url: administratorProvisioningRoutePaths.provision,
+      headers: headers(),
+      payload: body,
+    });
+    assert.equal(response.statusCode, 400);
+  }
+  const query = await app.inject({
+    method: 'DELETE',
+    url: `${administratorProvisioningRoutePaths.provision}?tenant=other`,
+    headers: headers(),
+    payload: { subject: 'peer-subject' },
+  });
+  assert.equal(query.statusCode, 400);
 });
 
 void test('exposes no alternate mutation method and refuses an unhardened host', async (t) => {
@@ -349,10 +266,7 @@ void test('exposes no alternate mutation method and refuses an unhardened host',
       url: administratorProvisioningRoutePaths.provision,
       headers: headers(),
     });
-    assert.ok(
-      [400, 404].includes(response.statusCode),
-      `${method}: ${response.body}`,
-    );
+    assert.ok([400, 404].includes(response.statusCode));
   }
   const bootstrap = await app.inject({
     method: 'POST',

@@ -5,6 +5,7 @@ import { createOdkValidateValidator } from './publication/odk-validate.js';
 import { PublicationAttemptStore } from './publication/publication-attempt-store.js';
 import { readPublicationSurfaceRuntimeConfig } from './runtime-config.js';
 import { AdministratorSessionStore } from './tenant/administrator-session.js';
+import { AdministratorInvitationStore } from './tenant/administrator-invitation.js';
 import { TenantConnectionStore } from './tenant/connection-store.js';
 import { createAdministratorOidcIdentity } from './tenant/oidc-login.js';
 
@@ -25,10 +26,13 @@ async function main(): Promise<void> {
   };
   const executor = createQueryExecutor(pool);
   const sessionStore = new AdministratorSessionStore(executor);
+  const invitationStore = new AdministratorInvitationStore(executor);
   const attemptStore = new PublicationAttemptStore(executor);
   const app = createApp(config, database, true, {
     administratorIdentity,
     sessionStore,
+    invitationStore,
+    invitationConfiguration: runtime.invitation,
     sessionConfiguration: runtime.session,
     connectionStore: new TenantConnectionStore(
       executor,

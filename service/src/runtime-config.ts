@@ -4,6 +4,7 @@ import { ConfigurationError } from './config.js';
 import type { TenantSalesforcePublisherConfiguration } from './publication/tenant-salesforce-publisher.js';
 import type { OdkValidateConfiguration } from './publication/odk-validate.js';
 import type { AdministratorSessionConfiguration } from './tenant/administrator-session.js';
+import type { AdministratorInvitationConfiguration } from './tenant/administrator-invitation.js';
 import {
   readTenantCredentialVault,
   type TenantCredentialVault,
@@ -14,6 +15,7 @@ export interface PublicationSurfaceRuntimeConfig {
   readonly externalOrigin: string;
   readonly oidc: AdministratorOidcConfiguration;
   readonly session: AdministratorSessionConfiguration;
+  readonly invitation: AdministratorInvitationConfiguration;
   readonly publisher: TenantSalesforcePublisherConfiguration;
   readonly validator: OdkValidateConfiguration;
   readonly credentialVault: TenantCredentialVault;
@@ -106,6 +108,9 @@ export function readPublicationSurfaceRuntimeConfig(
     session: Object.freeze({
       sessionSecret: sessionSecret(env),
       ttlSeconds: integer(env, 'ADMIN_SESSION_TTL_SECONDS', 60, 86_400),
+    }),
+    invitation: Object.freeze({
+      ttlSeconds: integer(env, 'ADMIN_INVITATION_TTL_SECONDS', 300, 604_800),
     }),
     publisher: Object.freeze({
       clientId: required(env, 'SALESFORCE_OAUTH_CLIENT_ID'),

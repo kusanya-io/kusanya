@@ -33,7 +33,6 @@ function dependencies(): PublicationSurfaceDependencies {
       actorIdForSubject: (subject) => `oidc:${subject}`,
     },
     sessionStore: {
-      async provision() {},
       async deprovision() {},
       async changeRole() {},
       async issue() {
@@ -46,6 +45,20 @@ function dependencies(): PublicationSurfaceDependencies {
         return true;
       },
     },
+    invitationStore: {
+      async issue() {
+        return {
+          invitationId: '11111111-1111-4111-8111-111111111111',
+          invitationToken: 'i'.repeat(43),
+          expiresInSeconds: 3600,
+        };
+      },
+      async revoke() {},
+      async accept() {
+        return { opaqueSession, csrfToken, expiresInSeconds: 3600 };
+      },
+    },
+    invitationConfiguration: { ttlSeconds: 3600 },
     sessionConfiguration: {
       sessionSecret: Buffer.alloc(32, 1).toString('base64'),
       ttlSeconds: 3600,
@@ -166,15 +179,23 @@ void test('the real app mounts login, CSRF, publication and least-data presentat
 
 void test('mounted administrator lifecycle crosses identity and live tenant exactly once', async (contextTest) => {
   const base = dependencies();
-  const provisioned: unknown[] = [];
+  const invitations: unknown[] = [];
   const deprovisioned: unknown[] = [];
   const app = createApp(config, { async ping() {}, async close() {} }, false, {
     ...base,
+    invitationStore: {
+      ...base.invitationStore,
+      async issue(input, configuration) {
+        invitations.push([input, configuration]);
+        return {
+          invitationId: '11111111-1111-4111-8111-111111111111',
+          invitationToken: 'i'.repeat(43),
+          expiresInSeconds: 3600,
+        };
+      },
+    },
     sessionStore: {
       ...base.sessionStore,
-      async provision(input) {
-        provisioned.push(input);
-      },
       async deprovision(input) {
         deprovisioned.push(input);
       },
@@ -183,7 +204,7 @@ void test('mounted administrator lifecycle crosses identity and live tenant exac
   contextTest.after(() => app.close());
   const response = await app.inject({
     method: 'POST',
-    url: '/api/admin/administrators',
+    url: '/api/admin/administrator-invitations',
     headers: {
       origin,
       cookie: `__Host-kusanya_admin_session=${opaqueSession}`,
@@ -194,22 +215,22 @@ void test('mounted administrator lifecycle crosses identity and live tenant exac
     },
     payload: { subject: 'new-subject', role: 'publisher' },
   });
-  assert.equal(response.statusCode, 204);
-  assert.deepEqual(provisioned, [
-    {
-      actorId: 'oidc:new-subject',
-      performedByActorId: context.actorId,
-      tenantId: context.tenantId,
-      expectedSalesforceOrgId: context.expectedSalesforceOrgId,
-      authorizationOrigin: context.authorizationOrigin,
-      namespacePrefix: context.namespacePrefix,
-      role: 'publisher',
-    },
+  assert.equal(response.statusCode, 201);
+  assert.deepEqual(invitations, [
+    [
+      {
+        performedByActorId: context.actorId,
+        targetActorId: 'oidc:new-subject',
+        tenantId: context.tenantId,
+        role: 'publisher',
+      },
+      { ttlSeconds: 3600 },
+    ],
   ]);
 
   const widened = await app.inject({
     method: 'POST',
-    url: '/api/admin/administrators',
+    url: '/api/admin/administrator-invitations',
     headers: {
       origin,
       cookie: `__Host-kusanya_admin_session=${opaqueSession}`,
@@ -219,7 +240,7 @@ void test('mounted administrator lifecycle crosses identity and live tenant exac
     payload: { subject: 'other', role: 'reviewer', tenantId: 'forged' },
   });
   assert.equal(widened.statusCode, 400);
-  assert.equal(provisioned.length, 1);
+  assert.equal(invitations.length, 1);
 
   const removed = await app.inject({
     method: 'DELETE',

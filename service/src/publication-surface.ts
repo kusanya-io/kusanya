@@ -9,6 +9,11 @@ import { registerPublicationRoutes } from './publication/publication-routes.js';
 import type { TenantSalesforcePublisherConfiguration } from './publication/tenant-salesforce-publisher.js';
 import type { ValidateXForm } from './publication/odk-validate.js';
 import { registerAdministratorSessionRoutes } from './tenant/administrator-routes.js';
+import { registerAdministratorInvitationRoutes } from './tenant/administrator-invitation-routes.js';
+import type {
+  AdministratorInvitationConfiguration,
+  AdministratorInvitationStore,
+} from './tenant/administrator-invitation.js';
 import { registerAdministratorProvisioningRoutes } from './tenant/administrator-provisioning-routes.js';
 import type {
   AdministratorSessionConfiguration,
@@ -22,13 +27,13 @@ export interface PublicationSurfaceDependencies {
   readonly administratorIdentity: AdministratorOidcIdentity;
   readonly sessionStore: Pick<
     AdministratorSessionStore,
-    | 'issue'
-    | 'authenticate'
-    | 'revoke'
-    | 'provision'
-    | 'deprovision'
-    | 'changeRole'
+    'issue' | 'authenticate' | 'revoke' | 'deprovision' | 'changeRole'
   >;
+  readonly invitationStore: Pick<
+    AdministratorInvitationStore,
+    'accept' | 'issue' | 'revoke'
+  >;
+  readonly invitationConfiguration: AdministratorInvitationConfiguration;
   readonly sessionConfiguration: AdministratorSessionConfiguration;
   readonly connectionStore: TenantConnectionSessionStore;
   readonly attemptStore: Pick<
@@ -73,6 +78,8 @@ function checkedDependencies(
     'attemptStore',
     'connectionStore',
     'externalOrigin',
+    'invitationConfiguration',
+    'invitationStore',
     'publisherConfiguration',
     'sessionConfiguration',
     'sessionStore',
@@ -96,15 +103,9 @@ function checkedDependencies(
   for (const [store, methods] of [
     [
       decoded.sessionStore,
-      [
-        'issue',
-        'authenticate',
-        'provision',
-        'deprovision',
-        'changeRole',
-        'revoke',
-      ],
+      ['issue', 'authenticate', 'deprovision', 'changeRole', 'revoke'],
     ],
+    [decoded.invitationStore, ['accept', 'issue', 'revoke']],
     [decoded.connectionStore, ['withRefreshLock']],
     [decoded.attemptStore, ['start', 'complete', 'listForOperator']],
   ] as const) {
@@ -139,19 +140,55 @@ export function registerPublicationSurface(
     (() => {
       throw new AdministratorSessionError('ADMINISTRATOR_SESSION_ABSENT');
     })();
+  const sessionRoutesStore = Object.freeze({
+    issue: dependencies.sessionStore.issue.bind(dependencies.sessionStore),
+    authenticate: dependencies.sessionStore.authenticate.bind(
+      dependencies.sessionStore,
+    ),
+    revoke: dependencies.sessionStore.revoke.bind(dependencies.sessionStore),
+  });
+  const lifecycleStore = Object.freeze({
+    deprovision: dependencies.sessionStore.deprovision.bind(
+      dependencies.sessionStore,
+    ),
+    changeRole: dependencies.sessionStore.changeRole.bind(
+      dependencies.sessionStore,
+    ),
+  });
+  const invitationRoutesStore = Object.freeze({
+    issue: dependencies.invitationStore.issue.bind(
+      dependencies.invitationStore,
+    ),
+    revoke: dependencies.invitationStore.revoke.bind(
+      dependencies.invitationStore,
+    ),
+  });
+  const invitationAcceptanceStore = Object.freeze({
+    accept: dependencies.invitationStore.accept.bind(
+      dependencies.invitationStore,
+    ),
+  });
 
   // Session issuance is registered first; every protected adapter receives only
   // the single live-session resolver constructed above.
   registerAdministratorSessionRoutes(app, {
     verifyLoginRequest: dependencies.administratorIdentity.verifyLoginRequest,
-    sessionStore: dependencies.sessionStore,
+    sessionStore: sessionRoutesStore,
+    invitationStore: invitationAcceptanceStore,
     sessionConfiguration: dependencies.sessionConfiguration,
     externalOrigin: dependencies.externalOrigin,
   });
   registerAdministratorProvisioningRoutes(app, {
     authenticateAdministrator,
     actorIdForSubject: dependencies.administratorIdentity.actorIdForSubject,
-    sessionStore: dependencies.sessionStore,
+    sessionStore: lifecycleStore,
+    externalOrigin: dependencies.externalOrigin,
+  });
+  registerAdministratorInvitationRoutes(app, {
+    authenticateAdministrator,
+    actorIdForSubject: dependencies.administratorIdentity.actorIdForSubject,
+    invitationStore: invitationRoutesStore,
+    invitationConfiguration: dependencies.invitationConfiguration,
     externalOrigin: dependencies.externalOrigin,
   });
   registerPublicationRoutes(app, {

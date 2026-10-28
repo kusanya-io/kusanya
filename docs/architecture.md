@@ -273,10 +273,8 @@ access token for the Kusanya API is verified against exact issuer, audience, RS2
 signature and time bounds, then only the digest-derived issuer/subject actor reaches
 the immutable tenant binding. `main.ts` refuses missing identity, session, encrypted
 credential, Salesforce OAuth, timeout or validator configuration before listening.
-ADR 0052 extends that composition with a static no-store operator shell, same-tenant
-administrator enrolment and keyset pagination. The enrolment request supplies only
-an OIDC subject; the configured issuer derives its actor and the live session supplies
-the complete immutable tenant/org/origin/namespace tuple. Each attempt page repeats
+ADR 0052 extends that composition with a static no-store operator shell, administrator
+lifecycle controls and keyset pagination. Each attempt page repeats
 that full database authorization join and returns at most 100 least-data summaries;
 the opaque continuation cursor grants no authority. ADR 0053 adds a server-only,
 stdin-driven one-shot bootstrap for the first issuer-derived administrator and a
@@ -291,8 +289,14 @@ so demotion immediately re-scopes an existing cookie. Only administrators manage
 operators or authorize Salesforce, publishers may publish, and all three roles may
 read tenant-scoped publication history. Self-change and concurrent last-administrator
 demotion are refused; enrolment and role changes append atomic role audits.
-Privileged connection lifecycle, invitations, retention, scheduled reconciliation
-and CLI work remain outside this boundary.
+ADR 0055 replaces direct browser enrolment with expiring, revocable, single-use
+invitations. Issuance stores only a token digest and deliberately does not probe
+global membership. The verified invited subject accepts through first sign-in;
+binding, stored role, enrolment audit, invitation consumption and browser session
+commit atomically. Wrong-subject, expired, revoked, replayed and cross-tenant
+conflicts share one refusal, and the raw token never enters a URL or database.
+Privileged connection lifecycle, invitation delivery, retention, scheduled
+reconciliation and CLI work remain outside this boundary.
 
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure
