@@ -42,6 +42,9 @@ function origin(value: string): string {
 }
 
 function plainRecord(value: unknown): Record<string, unknown> {
+  // Fastify deliberately supplies parsed query objects with a null prototype.
+  // Own data descriptors are the trust boundary; requiring Object.prototype
+  // here would reject every valid cursor as well as the empty query.
   if (value === null || typeof value !== 'object' || types.isProxy(value))
     throw new PublicationAttemptPresentationInputError();
   const descriptors = Object.getOwnPropertyDescriptors(value);

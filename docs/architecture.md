@@ -278,9 +278,14 @@ administrator enrolment and keyset pagination. The enrolment request supplies on
 an OIDC subject; the configured issuer derives its actor and the live session supplies
 the complete immutable tenant/org/origin/namespace tuple. Each attempt page repeats
 that full database authorization join and returns at most 100 least-data summaries;
-the opaque continuation cursor grants no authority. Initial tenant bootstrap,
-privileged connection lifecycle, retention, scheduled reconciliation and CLI work
-remain outside this boundary.
+the opaque continuation cursor grants no authority. ADR 0053 adds a server-only,
+stdin-driven one-shot bootstrap for the first issuer-derived administrator and a
+same-origin, live-session, CSRF-protected peer-deprovisioning operation. Removal keeps
+the immutable binding as an inactive tombstone, revokes every session and appends a
+lifecycle audit in the same transaction. Ordered tenant binding locks prevent
+concurrent removals from orphaning a tenant; self-removal and last-administrator
+removal are refused. Privileged connection lifecycle, roles, retention, scheduled
+reconciliation and CLI work remain outside this boundary.
 
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure

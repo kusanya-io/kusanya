@@ -181,6 +181,29 @@ paths:
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Rejected' }
         '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      operationId: deprovisionTenantAdministrator
+      summary: Revoke one OIDC subject's access to the live administrator's tenant
+      security: [{ administratorSession: [], csrfToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [subject]
+              properties:
+                subject: { type: string, minLength: 1, maxLength: 512 }
+      responses:
+        '204':
+          description: Subject deactivated, audited and all of its sessions revoked
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Rejected' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /api/admin/salesforce/publications:
     post:
       operationId: publishSalesforceDefinition

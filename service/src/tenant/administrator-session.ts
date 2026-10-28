@@ -35,6 +35,12 @@ export interface AdministratorProvisioningInput {
   readonly namespacePrefix: string;
 }
 
+export interface AdministratorDeprovisioningInput {
+  readonly performedByActorId: string;
+  readonly targetActorId: string;
+  readonly tenantId: string;
+}
+
 export interface AdministratorSessionConfiguration {
   /** Canonical base64 for exactly 32 deployment-secret bytes. */
   readonly sessionSecret: string;
@@ -170,6 +176,20 @@ function provisioning(value: unknown): DecodedProvisioning {
   }
 }
 
+function deprovisioning(value: unknown): AdministratorDeprovisioningInput {
+  const input = plainRecord(value);
+  exactKeys(input, ['performedByActorId', 'targetActorId', 'tenantId']);
+  const performedByActorId = actorId(input.performedByActorId);
+  const targetActorId = actorId(input.targetActorId);
+  if (performedByActorId === targetActorId)
+    fail('ADMINISTRATOR_SESSION_CONFLICT');
+  return Object.freeze({
+    performedByActorId,
+    targetActorId,
+    tenantId: tenantId(input.tenantId),
+  });
+}
+
 function integer(value: unknown, minimum: number, maximum: number): number {
   if (
     typeof value !== 'number' ||
@@ -280,6 +300,78 @@ function decodeRow(
 export class AdministratorSessionStore {
   constructor(private readonly database: QueryExecutor) {}
 
+  /** Create the first tenant administrator once, from the server-only bootstrap CLI. */
+  async bootstrap(inputValue: AdministratorProvisioningInput): Promise<void> {
+    const input = provisioning(inputValue);
+    let result;
+    try {
+      result = await this.database.query(
+        `WITH tenant_lock AS MATERIALIZED (
+           SELECT pg_advisory_xact_lock(
+             hashtextextended('tenant:' || $2::text, 0)
+           )
+         ), actor_lock AS MATERIALIZED (
+           SELECT pg_advisory_xact_lock(
+             hashtextextended('actor:' || $1, 0)
+           )
+           FROM tenant_lock
+         ), eligible AS MATERIALIZED (
+           SELECT $2::uuid AS tenant_id
+           FROM actor_lock
+           WHERE NOT EXISTS (
+             SELECT 1 FROM tenant_administrator_bindings
+             WHERE tenant_id = $2::uuid OR actor_id = $1
+           )
+         ), tenant AS (
+           INSERT INTO tenant_administrator_tenants (
+             tenant_id, expected_salesforce_org_id,
+             authorization_origin, namespace_prefix
+           )
+           SELECT tenant_id, $3, $4, $5 FROM eligible
+           ON CONFLICT (tenant_id) DO UPDATE SET tenant_id = EXCLUDED.tenant_id
+           WHERE tenant_administrator_tenants.expected_salesforce_org_id =
+                   EXCLUDED.expected_salesforce_org_id
+             AND tenant_administrator_tenants.authorization_origin =
+                   EXCLUDED.authorization_origin
+             AND tenant_administrator_tenants.namespace_prefix =
+                   EXCLUDED.namespace_prefix
+           RETURNING tenant_id
+         ), actor AS (
+           INSERT INTO tenant_administrator_bindings (actor_id, tenant_id)
+           SELECT $1, tenant_id FROM tenant
+           RETURNING actor_id, tenant_id
+         ), audit AS (
+           INSERT INTO tenant_administrator_lifecycle_audits (
+             tenant_id, performed_by_actor_id, target_actor_id, action
+           )
+           SELECT tenant_id, actor_id, actor_id, 'bootstrap' FROM actor
+           RETURNING administrator_lifecycle_audit_id
+         )
+         SELECT administrator_lifecycle_audit_id FROM audit`,
+        [
+          input.actorId,
+          input.tenantId,
+          input.expectedSalesforceOrgId,
+          input.authorizationOrigin,
+          input.namespacePrefix,
+        ],
+      );
+    } catch (error) {
+      if (
+        error !== null &&
+        typeof error === 'object' &&
+        !types.isProxy(error) &&
+        Object.getOwnPropertyDescriptor(error, 'code')?.value === '23505'
+      )
+        fail('ADMINISTRATOR_SESSION_CONFLICT');
+      fail('ADMINISTRATOR_SESSION_STORAGE');
+    }
+    if (result.rowCount === 0 && result.rows.length === 0)
+      fail('ADMINISTRATOR_SESSION_CONFLICT');
+    if (result.rowCount !== 1 || result.rows.length !== 1)
+      fail('ADMINISTRATOR_SESSION_STORAGE');
+  }
+
   /** Idempotently provision one immutable actor-to-tenant binding. */
   async provision(inputValue: AdministratorProvisioningInput): Promise<void> {
     const input = provisioning(inputValue);
@@ -323,6 +415,7 @@ export class AdministratorSessionStore {
            SELECT $1, tenant_id FROM tenant
            ON CONFLICT (actor_id) DO UPDATE SET actor_id = EXCLUDED.actor_id
            WHERE tenant_administrator_bindings.tenant_id = EXCLUDED.tenant_id
+             AND tenant_administrator_bindings.active
            RETURNING actor_id
          )
          SELECT actor_id FROM actor`,
@@ -350,6 +443,66 @@ export class AdministratorSessionStore {
       fail('ADMINISTRATOR_SESSION_STORAGE');
   }
 
+  /** Atomically deactivate one same-tenant actor, revoke sessions and append an audit. */
+  async deprovision(
+    inputValue: AdministratorDeprovisioningInput,
+  ): Promise<void> {
+    const input = deprovisioning(inputValue);
+    let result;
+    try {
+      result = await this.database.query(
+        `WITH tenant_lock AS MATERIALIZED (
+           SELECT pg_advisory_xact_lock(
+             hashtextextended('tenant:' || $3::text, 0)
+           )
+         ), locked AS MATERIALIZED (
+           SELECT binding.actor_id, binding.tenant_id
+           FROM tenant_lock
+           JOIN tenant_administrator_bindings binding
+             ON binding.tenant_id = $3::uuid
+            AND binding.active
+           ORDER BY binding.actor_id
+           FOR UPDATE OF binding
+         ), eligible AS MATERIALIZED (
+           SELECT target.actor_id, target.tenant_id
+           FROM locked performer
+           JOIN locked target
+             ON performer.actor_id = $1
+            AND target.actor_id = $2
+            AND target.tenant_id = performer.tenant_id
+           WHERE $1 <> $2
+             AND (SELECT count(*) FROM locked) > 1
+         ), disabled AS (
+           UPDATE tenant_administrator_bindings binding
+           SET active = false, deprovisioned_at = clock_timestamp()
+           FROM eligible
+           WHERE binding.actor_id = eligible.actor_id
+             AND binding.tenant_id = eligible.tenant_id
+           RETURNING binding.actor_id, binding.tenant_id
+         ), revoked AS (
+           DELETE FROM administrator_sessions session
+           USING disabled
+           WHERE session.actor_id = disabled.actor_id
+           RETURNING session.actor_id
+         ), audit AS (
+           INSERT INTO tenant_administrator_lifecycle_audits (
+             tenant_id, performed_by_actor_id, target_actor_id, action
+           )
+           SELECT tenant_id, $1, actor_id, 'deprovision' FROM disabled
+           RETURNING administrator_lifecycle_audit_id
+         )
+         SELECT administrator_lifecycle_audit_id FROM audit`,
+        [input.performedByActorId, input.targetActorId, input.tenantId],
+      );
+    } catch {
+      fail('ADMINISTRATOR_SESSION_STORAGE');
+    }
+    if (result.rowCount === 0 && result.rows.length === 0)
+      fail('ADMINISTRATOR_SESSION_CONFLICT');
+    if (result.rowCount !== 1 || result.rows.length !== 1)
+      fail('ADMINISTRATOR_SESSION_STORAGE');
+  }
+
   /** Issue a fresh post-login session, atomically invalidating the actor's old one. */
   async issue(
     trustedActorId: string,
@@ -369,6 +522,7 @@ export class AdministratorSessionStore {
                 clock_timestamp() + ($3 * interval '1 second')
          FROM tenant_administrator_bindings
          WHERE actor_id = $2
+           AND active
          ON CONFLICT (actor_id) DO UPDATE SET
            session_digest = EXCLUDED.session_digest,
            expires_at = EXCLUDED.expires_at,
@@ -413,7 +567,8 @@ export class AdministratorSessionStore {
          JOIN tenant_administrator_bindings b ON b.actor_id = s.actor_id
          JOIN tenant_administrator_tenants t ON t.tenant_id = b.tenant_id
          WHERE s.session_digest = $1
-           AND s.expires_at > clock_timestamp()`,
+           AND s.expires_at > clock_timestamp()
+           AND b.active`,
         [digest],
       );
     } catch {

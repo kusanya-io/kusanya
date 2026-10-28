@@ -211,6 +211,93 @@ void test('provisions an exact immutable actor binding and normalizes the org ID
   assert.equal(memory.bindings.get(actor)?.tenant_id, tenantId);
 });
 
+void test('bootstraps once with tenant and actor locks plus an atomic lifecycle audit', async () => {
+  const queries: { text: string; values: unknown[] }[] = [];
+  const store = new AdministratorSessionStore({
+    async query<Row>(text: string, values: unknown[] = []) {
+      queries.push({ text, values });
+      return {
+        rowCount: 1,
+        rows: [{ administrator_lifecycle_audit_id: '1' } as Row],
+      } satisfies QueryResult<Row>;
+    },
+  });
+  await store.bootstrap(provisioning);
+  assert.equal(queries.length, 1);
+  assert.match(queries[0]!.text, /pg_advisory_xact_lock/);
+  assert.match(
+    queries[0]!.text,
+    /WHERE tenant_id = \$2::uuid OR actor_id = \$1/,
+  );
+  assert.match(queries[0]!.text, /tenant_administrator_lifecycle_audits/);
+  assert.match(queries[0]!.text, /'bootstrap'/);
+  assert.deepEqual(queries[0]!.values, [
+    actor,
+    tenantId,
+    orgId,
+    provisioning.authorizationOrigin,
+    provisioning.namespacePrefix,
+  ]);
+
+  const replay = new AdministratorSessionStore({
+    async query<Row>() {
+      return { rowCount: 0, rows: [] } satisfies QueryResult<Row>;
+    },
+  });
+  await assert.rejects(replay.bootstrap(provisioning), {
+    message: 'ADMINISTRATOR_SESSION_CONFLICT',
+  });
+});
+
+void test('deprovisions atomically without permitting self-removal or rebinding', async () => {
+  const queries: string[] = [];
+  const store = new AdministratorSessionStore({
+    async query<Row>(text: string) {
+      queries.push(text);
+      return {
+        rowCount: 1,
+        rows: [{ administrator_lifecycle_audit_id: '2' } as Row],
+      } satisfies QueryResult<Row>;
+    },
+  });
+  await store.deprovision({
+    performedByActorId: actor,
+    targetActorId: 'administrator:departing',
+    tenantId,
+  });
+  assert.equal(queries.length, 1);
+  assert.match(queries[0]!, /FOR UPDATE OF binding/);
+  assert.match(queries[0]!, /SELECT count\(\*\) FROM locked/);
+  assert.match(queries[0]!, /SET active = false/);
+  assert.match(queries[0]!, /DELETE FROM administrator_sessions/);
+  assert.match(queries[0]!, /tenant_administrator_lifecycle_audits/);
+  assert.match(queries[0]!, /'deprovision'/);
+
+  await assert.rejects(
+    store.deprovision({
+      performedByActorId: actor,
+      targetActorId: actor,
+      tenantId,
+    }),
+    { message: 'ADMINISTRATOR_SESSION_CONFLICT' },
+  );
+  assert.equal(queries.length, 1);
+
+  const absent = new AdministratorSessionStore({
+    async query<Row>() {
+      return { rowCount: 0, rows: [] } satisfies QueryResult<Row>;
+    },
+  });
+  await assert.rejects(
+    absent.deprovision({
+      performedByActorId: actor,
+      targetActorId: 'administrator:absent',
+      tenantId,
+    }),
+    { message: 'ADMINISTRATOR_SESSION_CONFLICT' },
+  );
+});
+
 void test('refuses invalid namespaces and tenant-wide Salesforce disagreements before issuing a session', async () => {
   const memory = memoryDatabase();
   const store = new AdministratorSessionStore(memory.database);

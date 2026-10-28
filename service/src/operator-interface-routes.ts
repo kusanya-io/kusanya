@@ -46,6 +46,7 @@ const script = `
     token: document.getElementById('access-token'),
     provision: document.getElementById('provision-form'),
     subject: document.getElementById('oidc-subject'),
+    deprovision: document.getElementById('deprovision'),
     publish: document.getElementById('publish-form'),
     formVersion: document.getElementById('form-version'),
     logout: document.getElementById('logout'),
@@ -137,6 +138,18 @@ const script = `
       setStatus('Administrator enrolled for this tenant.');
     } catch (error) { setStatus(error.message); }
   });
+  elements.deprovision.addEventListener('click', async () => {
+    try {
+      const response = await request(endpoints.provision, {
+        method: 'DELETE',
+        headers: { ...protectedHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject: elements.subject.value })
+      });
+      if (!response.ok) throw new Error(fixedFailure(response));
+      elements.subject.value = '';
+      setStatus('Administrator access removed for this tenant.');
+    } catch (error) { setStatus(error.message); }
+  });
   elements.publish.addEventListener('submit', async (event) => {
     event.preventDefault();
     try {
@@ -213,7 +226,7 @@ const html = `<!doctype html>
           <p class="muted">The OIDC subject is mapped by the configured identity provider and can join only this tenant.</p>
           <form id="provision-form">
             <label>OIDC subject<input id="oidc-subject" name="subject" required maxlength="512" autocomplete="off"></label>
-            <button type="submit">Enroll administrator</button>
+            <div class="actions"><button type="submit">Enroll administrator</button><button id="deprovision" class="secondary" type="button">Remove administrator</button></div>
           </form>
         </section>
         <section class="card" aria-labelledby="publish-title">

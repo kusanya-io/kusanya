@@ -64,6 +64,8 @@ void test('uses only mounted same-origin APIs and keeps bearer and CSRF values i
   assert.match(response.body, /cache: 'no-store'/);
   assert.match(response.body, /redirect: 'error'/);
   assert.match(response.body, /elements\.token\.value = ''/);
+  assert.match(response.body, /method: 'DELETE'/);
+  assert.match(response.body, /Administrator access removed for this tenant\./);
   assert.match(
     response.body,
     /Human judgement is required before any publication retry\./,

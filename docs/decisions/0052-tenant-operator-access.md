@@ -36,8 +36,10 @@ host-only session, validates its session-derived CSRF token, and only then parse
 query and body. It calls the existing serializable `AdministratorSessionStore`
 provisioning operation with the live session's complete tenant tuple. Existing
 actor-to-tenant bindings remain immutable; a subject already bound elsewhere returns
-the same fixed unavailable response as any storage refusal, exposing neither actor
-existence nor the other tenant. Initial bootstrap stays an audited
+the same fixed unavailable response as any storage refusal, exposing no actor or
+tenant detail and never identifying the other tenant. A caller can still distinguish
+successful enrolment from the generic unavailable outcome; the route does not claim
+to hide that one outcome bit. Initial bootstrap stays an audited
 operator/deployment concern outside this route.
 
 ### Paginate with an untrusted, non-authoritative cursor
