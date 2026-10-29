@@ -6,21 +6,22 @@ published package metadata; upstream licences/notices remain authoritative.
 
 ## Direct dependencies
 
-| Component         | Dependency                     | Pinned version                | Licence                                      |
-| ----------------- | ------------------------------ | ----------------------------- | -------------------------------------------- |
-| Root tooling      | Prettier                       | 3.9.6                         | MIT                                          |
-| Root tooling      | prettier-plugin-apex           | 2.3.0                         | MIT                                          |
-| Service runtime   | Fastify                        | 5.12.7                        | MIT                                          |
-| Service runtime   | pg                             | 8.23.0                        | MIT                                          |
-| Service runtime   | jose                           | 6.2.12                        | MIT                                          |
-| Service tooling   | TypeScript                     | 5.9.3                         | Apache-2.0                                   |
-| Service tooling   | ESLint                         | 10.10.0                       | MIT                                          |
-| Service tooling   | @eslint/js                     | 10.0.1                        | MIT                                          |
-| Service tooling   | typescript-eslint              | 8.70.0                        | MIT                                          |
-| Service tooling   | @types/node                    | 24.13.4                       | MIT                                          |
-| Service tooling   | @types/pg                      | 8.23.1                        | MIT                                          |
-| Container runtime | Node.js / Debian bookworm-slim | 24.19.0                       | Node MIT plus bundled third-party/OS notices |
-| Database          | PostgreSQL                     | 17 (local verification 17.11) | PostgreSQL License                           |
+| Component          | Dependency                     | Pinned version                | Licence                                      |
+| ------------------ | ------------------------------ | ----------------------------- | -------------------------------------------- |
+| Root tooling       | Prettier                       | 3.9.6                         | MIT                                          |
+| Root tooling       | prettier-plugin-apex           | 2.3.0                         | MIT                                          |
+| Service runtime    | Fastify                        | 5.12.7                        | MIT                                          |
+| Service runtime    | pg                             | 8.23.0                        | MIT                                          |
+| Service runtime    | jose                           | 6.2.12                        | MIT                                          |
+| Service tooling    | TypeScript                     | 5.9.3                         | Apache-2.0                                   |
+| Service tooling    | ESLint                         | 10.10.0                       | MIT                                          |
+| Service tooling    | @eslint/js                     | 10.0.1                        | MIT                                          |
+| Service tooling    | typescript-eslint              | 8.70.0                        | MIT                                          |
+| Service tooling    | @types/node                    | 24.13.4                       | MIT                                          |
+| Service tooling    | @types/pg                      | 8.23.1                        | MIT                                          |
+| Container runtime  | Node.js / Debian bookworm-slim | 24.19.0                       | Node MIT plus bundled third-party/OS notices |
+| Test image tooling | OpenSSL (Debian package)       | Test-stage package repository | Apache-2.0                                   |
+| Database           | PostgreSQL                     | 17 (local verification 17.11) | PostgreSQL License                           |
 
 Direct npm versions/licences were read from the npm registry on 2026-09-10. Both
 root/service lockfiles pin the full dependency resolution. The generated
@@ -34,6 +35,10 @@ the checkout/setup-node actions to reviewed commit hashes (MIT).
 Local workflow validation for issue #5 uses actionlint 1.7.12 (MIT) and
 ShellCheck 0.11.0 (GPL-3.0), standalone development tools, not service/runtime
 dependencies. No tool binaries are committed or shipped with the product.
+The service test stage installs Debian's OpenSSL package solely to create a
+short-lived localhost certificate for the ADR 0058 wire-contract integration test.
+The final runtime stage starts from the clean Node base, so OpenSSL and generated
+test keys are not copied into the shipped service image.
 The container retains upstream licences/notices. Recheck the full image inventory
 before a release, including operating-system packages and copied npm notices.
 

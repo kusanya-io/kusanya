@@ -3,6 +3,10 @@ import { TextDecoder, types } from 'node:util';
 import type { Diagnostic } from './compiler/types.js';
 import { publicationRoutePaths } from './publication/publication-routes.js';
 import { administratorSessionRoutePaths } from './tenant/administrator-routes.js';
+import {
+  administratorSessionCookieName,
+  parseAdministratorSessionSetCookie,
+} from './tenant/administrator-cookie.js';
 
 const maximumInputBytes = 24_576;
 const maximumResponseBytes = 65_536;
@@ -16,11 +20,9 @@ const idPattern = /^[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?$/;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const digestPattern = /^[0-9a-f]{64}$/;
-const sessionPattern = /^[A-Za-z0-9_-]{43}$/;
 const csrfPattern = /^[A-Za-z0-9_-]{43}$/;
 const diagnosticCodePattern = /^[A-Z][A-Z0-9_]{0,127}$/;
 const diagnosticLocationPattern = /^[\x20-\x7e]{1,512}$/;
-const cookieName = '__Host-kusanya_admin_session';
 
 type FetchImplementation = (
   input: string | URL | Request,
@@ -430,20 +432,13 @@ async function boundedFetch(
 
 function sessionCookie(response: Response): string {
   const cookie = response.headers.get('set-cookie');
-  if (cookie === null) fail();
-  const match = new RegExp(
-    `^${cookieName}=([A-Za-z0-9_-]{43}); Path=/; Max-Age=(\\d{1,5}); Secure; HttpOnly; SameSite=Lax$`,
-  ).exec(cookie);
-  const maxAge = Number(match?.[2]);
-  if (
-    match === null ||
-    !sessionPattern.test(match[1] ?? '') ||
-    !Number.isSafeInteger(maxAge) ||
-    maxAge < 60 ||
-    maxAge > 86_400
-  )
+  let opaqueSession: string;
+  try {
+    opaqueSession = parseAdministratorSessionSetCookie(cookie).opaqueSession;
+  } catch {
     fail();
-  return `${cookieName}=${match[1]}`;
+  }
+  return `${administratorSessionCookieName}=${opaqueSession}`;
 }
 
 async function csrf(response: Response, signal: AbortSignal): Promise<string> {
@@ -680,20 +675,23 @@ export async function publishDefinitionFromCli(
 }
 
 async function main(): Promise<void> {
+  // A pending Promise alone does not keep Node alive. Default to a distinct
+  // pre-result failure so even a transport with no live handle cannot exit green.
+  process.exitCode = 2;
   if (process.argv.length !== 2) fail();
   const result = await publishDefinitionFromCli(
     await readPublishCliInput(process.stdin),
   );
   process.stdout.write(`${JSON.stringify(result)}\n`);
-  if (
+  process.exitCode =
     result.publication.status !== 'published' ||
     result.sessionCleanup !== 'confirmed'
-  )
-    process.exitCode = 1;
+      ? 1
+      : 0;
 }
 
 if (process.argv[1]?.endsWith('publish-definition.js'))
   void main().catch(() => {
     process.stderr.write('Publication CLI failed\n');
-    process.exitCode = 1;
+    process.exitCode = 2;
   });

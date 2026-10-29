@@ -8,6 +8,7 @@ import {
   publishDefinitionFromCli,
   readPublishCliInput,
 } from '../../src/publish-definition.js';
+import { serializeAdministratorSessionCookie } from '../../src/tenant/administrator-cookie.js';
 
 const origin = 'https://service.example';
 const accessToken = `${'a'.repeat(24)}.${'b'.repeat(24)}.${'c'.repeat(24)}`;
@@ -28,7 +29,7 @@ function loginResponse(extra = ''): Response {
   return new Response(null, {
     status: 204,
     headers: {
-      'set-cookie': `__Host-kusanya_admin_session=${opaqueSession}; Path=/; Max-Age=900; Secure; HttpOnly; SameSite=Lax${extra}`,
+      'set-cookie': `${serializeAdministratorSessionCookie(opaqueSession, 900)}${extra}`,
     },
   });
 }
@@ -70,13 +71,18 @@ function sequence(
 async function runCli(
   source: string,
   arguments_: readonly string[] = [],
+  nodeArguments: readonly string[] = [],
 ): Promise<{ code: number | null; stderr: string; stdout: string }> {
   const executable = fileURLToPath(
     new URL('../../src/publish-definition.js', import.meta.url),
   );
-  const child = spawn(process.execPath, [executable, ...arguments_], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
+  const child = spawn(
+    process.execPath,
+    [...nodeArguments, executable, ...arguments_],
+    {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    },
+  );
   const stdout: Buffer[] = [];
   const stderr: Buffer[] = [];
   child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
@@ -406,11 +412,25 @@ void test('the executable reads stdin only and emits one fixed failure', async (
     await runCli(JSON.stringify({ ...input, accessToken: secret })),
     await runCli('', [secret]),
   ]) {
-    assert.equal(result.code, 1);
+    assert.equal(result.code, 2);
     assert.equal(result.stdout, '');
     assert.equal(result.stderr, 'Publication CLI failed\n');
     assert.doesNotMatch(JSON.stringify(result), new RegExp(secret));
   }
+});
+
+void test('the executable defaults to a failing exit when transport holds no live handle', async () => {
+  const result = await runCli(
+    JSON.stringify(input),
+    [],
+    [
+      '--import',
+      'data:text/javascript,globalThis.fetch=()=>new Promise(()=>{})',
+    ],
+  );
+  assert.equal(result.code, 2);
+  assert.equal(result.stdout, '');
+  assert.equal(result.stderr, '');
 });
 
 void test('refuses malformed or secret-bearing service responses and still revokes after publication starts', async () => {

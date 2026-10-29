@@ -307,6 +307,12 @@ and it has no database, vault or direct publisher capability. Partial, unresolve
 and uncertain transport results direct the operator to durable history rather than
 authorizing a retry. Privileged connection lifecycle, invitation delivery and
 scheduled reconciliation remain outside this boundary.
+ADR 0058 hardens that executable boundary: it begins with exit code 2 and clears it
+only after producing a safe result, reserves exit 1 for structured non-success, and
+shares one hardened cookie contract between browser routes and HTTP clients. A
+protected integration test launches the compiled binary through real TLS, the
+mounted application and PostgreSQL; its temporary OpenSSL certificate tooling is
+present only in the test image, not the runtime image.
 
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure
