@@ -12,6 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "bootstrap-administrator": "node dist/src/bootstrap-administrator.js",
     "migrate": "node dist/src/migrate.js",
+    "publish-definition": "node dist/src/publish-definition.js",
     "start": "node dist/src/main.js",
     "lint": "eslint src test --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",

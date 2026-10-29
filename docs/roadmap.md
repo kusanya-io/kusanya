@@ -427,3 +427,13 @@ unlinked and young rows remain protected. Scheduled reconciliation and retention
 unlinked Salesforce File cleanup, privileged retry, disconnect/rebind, the publish
 CLI and ODK Validate runtime assets remain future units. Note 39 remains open, and
 no C10 or Phase 1 completion claim is made.
+
+ADR 0057 advances note 34's publish-CLI strand without adding another credential
+path. One bounded stdin document drives the existing mounted login, CSRF, durable
+publication and logout sequence; the live service session alone selects the tenant,
+role, connection and namespace. Known refusals remain distinct from partial,
+unresolved and transport-uncertain outcomes, and none permits an automatic retry.
+C10 test 12 remains unclaimed until the seven supplied forms publish through a real
+CI identity. Scheduled reconciliation and retention, unlinked Salesforce File
+cleanup, privileged retry, disconnect/rebind and ODK Validate runtime assets remain
+future work. Note 39 remains open, and no Phase 1 completion claim is made.

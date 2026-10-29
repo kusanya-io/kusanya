@@ -59,6 +59,11 @@ digest and accepted only in the first verified login body. Binding, stored role,
 enrolment audit, invitation consumption and the first browser session commit in one
 PostgreSQL statement. Pending tokens are revocable; wrong-subject, expired, revoked,
 replayed and cross-tenant collisions share one authentication refusal.
+ADR 0056 adds database-enforced, administrator-only retention for old safely
+terminal publication attempts, with one surviving audit per deletion. ADR 0057 adds
+the stdin-driven CLI/CI client of the mounted service publication boundary. It has no
+tenant selector or direct Salesforce credential path, and uncertain outcomes require
+inspection rather than retry.
 
 Phase 1 also supplies a pure, bounded XForm compiler at `src/compiler/compile.ts`.
 It has no HTTP route, Salesforce access or publishing authority. See
@@ -146,6 +151,39 @@ each one-time token to its intended subject out of band. Use the operator interf
 to issue or revoke invitations at `administrator`, `publisher` or `reviewer`, or to
 change an accepted peer's role; self-change and demotion/removal of the final full
 administrator are refused.
+
+### Publish from a command line or CI
+
+ADR 0057 exposes no second Salesforce credential path. The command logs into the
+mounted service with a short-lived Kusanya API OIDC access token, obtains the opaque
+session and CSRF token, calls the existing durable publication route and logs out.
+Build it, then supply one exact JSON document through standard input:
+
+```sh
+npm run build
+npm run --silent publish-definition < /run/secrets/kusanya-publish-request.json
+```
+
+```json
+{
+  "accessToken": "<short-lived Kusanya API JWT>",
+  "formVersionId": "<15-or-18-character Salesforce ID>",
+  "serviceOrigin": "https://kusanya.example"
+}
+```
+
+Protect that input as a secret, never commit it, and never put the access token in
+an argument or URL. The service origin is one exact HTTPS origin without a path or
+explicit port. The token's verified issuer and subject select the live actor; the
+request cannot select a tenant, org or namespace. CI uses the same stdin contract
+with its approved workload identity and secret mechanism.
+
+Standard output is one bounded JSON result. Only `published` with
+`sessionCleanup: "confirmed"` exits zero. `rejected` is a known validation refusal;
+`partial` and `unresolved` require reconciliation; and `transport_unresolved`
+requires inspecting publication history before any retry. Cleanup is reported
+separately so an unconfirmed logout never hides a known publication result. Failures
+before a safe result print only `Publication CLI failed` to standard error.
 
 Only a live `administrator` may run publication-attempt retention from the operator
 interface. The request supplies no tenant, cutoff, status or attempt identifier.
@@ -310,9 +348,10 @@ from a field name. It validates one identifier, not a dotted traversal path.
 The `target*` methods validate one API identifier and preserve customer, standard
 or foreign-package names exactly. They are not SOQL builders or permission checks.
 REST accepts literal relative path segments, not URLs, query strings or escapes;
-the namespace becomes a path segment without its trailing `__`. Future CLI
-publish, XForm bindings and mapping adapters must reuse this boundary and keep
-question/XPath names separate from Salesforce names. They are not implemented yet.
+the namespace becomes a path segment without its trailing `__`. The publish CLI
+delegates namespace selection to the tenant-bound service publisher; it does not
+accept a namespace input. Future XForm binding and mapping adapters must reuse this
+boundary and keep question/XPath names separate from Salesforce names.
 
 Tests use empty and `ksny__` synthetic configurations, parent/child relationship
 names, standard/customer/foreign targets, malformed inputs and
