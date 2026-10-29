@@ -4,6 +4,9 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
 FROM dependencies AS test
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
 COPY tsconfig.json eslint.config.js ./
 COPY src ./src
 COPY test ./test

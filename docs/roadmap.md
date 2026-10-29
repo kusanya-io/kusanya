@@ -437,3 +437,12 @@ C10 test 12 remains unclaimed until the seven supplied forms publish through a r
 CI identity. Scheduled reconciliation and retention, unlinked Salesforce File
 cleanup, privileged retry, disconnect/rebind and ODK Validate runtime assets remain
 future work. Note 39 remains open, and no Phase 1 completion claim is made.
+
+ADR 0058 answers publish-CLI notes 123 to 125: the executable fails closed even when
+a pending transport owns no live Node handle, exit 2 distinguishes pre-result
+failure from a structured exit-1 outcome, and the server and client share one
+hardened cookie contract without coupling to attribute order. Protected integration
+now drives the shipped binary through real TLS, the mounted service and PostgreSQL.
+This is infrastructure evidence, not C10 test 12; the seven supplied forms and real
+CI workload identity remain outstanding. Note 39 and the remaining note 34 strands
+remain open.

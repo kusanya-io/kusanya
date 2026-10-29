@@ -179,11 +179,20 @@ request cannot select a tenant, org or namespace. CI uses the same stdin contrac
 with its approved workload identity and secret mechanism.
 
 Standard output is one bounded JSON result. Only `published` with
-`sessionCleanup: "confirmed"` exits zero. `rejected` is a known validation refusal;
-`partial` and `unresolved` require reconciliation; and `transport_unresolved`
-requires inspecting publication history before any retry. Cleanup is reported
-separately so an unconfirmed logout never hides a known publication result. Failures
-before a safe result print only `Publication CLI failed` to standard error.
+`sessionCleanup: "confirmed"` exits 0. Exit 1 means a structured non-success result
+was written: `rejected` is a known validation refusal; `partial` and `unresolved`
+require reconciliation; and `transport_unresolved` requires inspecting publication
+history before any retry. Exit 2 means no safe result document was produced and
+prints only `Publication CLI failed` to standard error. The executable starts in
+that failing state, so even a pending transport with no live Node handle cannot exit
+successfully. Cleanup is reported separately so an unconfirmed logout never hides a
+known publication result. None of the exit codes authorizes an automatic retry.
+
+ADR 0058 makes the hardened administrator cookie one shared server/client contract
+and adds a protected PostgreSQL integration test that launches the shipped binary
+through real TLS and the real mounted application. OpenSSL exists only in the test
+container stage to generate a temporary localhost certificate; it is absent from the
+runtime image.
 
 Only a live `administrator` may run publication-attempt retention from the operator
 interface. The request supplies no tenant, cutoff, status or attempt identifier.

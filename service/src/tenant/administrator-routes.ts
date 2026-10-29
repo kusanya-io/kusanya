@@ -7,6 +7,11 @@ import {
   AdministratorInvitationError,
   type AdministratorInvitationStore,
 } from './administrator-invitation.js';
+import {
+  administratorSessionCookieName,
+  isAdministratorSessionValue,
+  serializeAdministratorSessionCookie,
+} from './administrator-cookie.js';
 import type {
   AdministratorSessionConfiguration,
   AdministratorSessionStore,
@@ -20,8 +25,6 @@ import { AdministratorOidcError } from './oidc-login.js';
 const loginPath = '/api/admin/session/login';
 const csrfPath = '/api/admin/session/csrf';
 const logoutPath = '/api/admin/session/logout';
-const cookieName = '__Host-kusanya_admin_session';
-const sessionPattern = /^[A-Za-z0-9_-]{43}$/;
 const actorPattern = /^[A-Za-z0-9:_-]{1,128}$/;
 const csrfPattern = /^[A-Za-z0-9_-]{43}$/;
 const invitationPattern = /^[A-Za-z0-9_-]{43}$/;
@@ -136,19 +139,15 @@ function cookieValue(request: FastifyRequest): string | undefined {
   for (const part of header.split(';')) {
     const separator = part.indexOf('=');
     if (separator < 1) throw new AdministratorHttpInputError();
-    if (part.slice(0, separator).trim() === cookieName)
+    if (part.slice(0, separator).trim() === administratorSessionCookieName)
       matches.push(part.slice(separator + 1).trim());
   }
   if (matches.length > 1) throw new AdministratorHttpInputError();
   return matches[0];
 }
 
-function sessionCookie(value: string, maxAge: number): string {
-  return `${cookieName}=${value}; Path=/; Max-Age=${maxAge}; Secure; HttpOnly; SameSite=Lax`;
-}
-
 function clearSessionCookie(): string {
-  return sessionCookie('', 0);
+  return serializeAdministratorSessionCookie('', 0);
 }
 
 function safeEqual(left: string, right: string): boolean {
@@ -202,7 +201,10 @@ export function registerAdministratorSessionRoutes(
             );
       reply.header(
         'Set-Cookie',
-        sessionCookie(issued.opaqueSession, issued.expiresInSeconds),
+        serializeAdministratorSessionCookie(
+          issued.opaqueSession,
+          issued.expiresInSeconds,
+        ),
       );
       return reply.code(204).send();
     } catch (error) {
@@ -219,7 +221,7 @@ export function registerAdministratorSessionRoutes(
       if (!sameOrigin(request, origin) || !emptyRequest(request))
         return reply.code(400).send({ error: 'Request rejected' });
       const session = cookieValue(request);
-      if (session === undefined || !sessionPattern.test(session))
+      if (!isAdministratorSessionValue(session))
         throw new AdministratorHttpInputError();
       const context = trustedContext(
         await dependencies.sessionStore.authenticate(
@@ -247,7 +249,7 @@ export function registerAdministratorSessionRoutes(
       if (!sameOrigin(request, origin) || !emptyRequest(request))
         return reply.code(400).send({ error: 'Request rejected' });
       const session = cookieValue(request);
-      if (session === undefined || !sessionPattern.test(session))
+      if (!isAdministratorSessionValue(session))
         throw new AdministratorHttpInputError();
       const context = trustedContext(
         await dependencies.sessionStore.authenticate(
