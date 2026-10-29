@@ -4,11 +4,26 @@ import { test } from 'node:test';
 
 const contractUrl = new URL('../docs/openapi.yaml', import.meta.url);
 
+function pathBlock(contract, path) {
+  const lines = contract.split(/\r?\n/);
+  const start = lines.indexOf(`  ${path}:`);
+  if (start === -1) return undefined;
+  let end = start + 1;
+  while (
+    end < lines.length &&
+    !/^ {2}\//.test(lines[end]) &&
+    lines[end] !== 'components:'
+  )
+    end++;
+  return lines.slice(start + 1, end).join('\n');
+}
+
 void test('operator OpenAPI remains least-data and documents the lifecycle surface', async () => {
   const contract = await readFile(contractUrl, 'utf8');
-  const attemptPath = contract.match(
-    /  \/api\/admin\/salesforce\/publication-attempts:\n([\s\S]*?)\ncomponents:/,
-  )?.[1];
+  const attemptPath = pathBlock(
+    contract,
+    '/api/admin/salesforce/publication-attempts',
+  );
   assert.ok(attemptPath, 'publication attempt path is documented');
   for (const forbidden of [
     'actorId',
@@ -52,9 +67,7 @@ void test('operator OpenAPI remains least-data and documents the lifecycle surfa
     assert.match(summary, new RegExp(`^            - ${status}$`, 'm'));
   assert.equal((summary.match(/^            - /gm) ?? []).length, 7);
 
-  const administratorPath = contract.match(
-    /  \/api\/admin\/administrators:\n([\s\S]*?)\n  \/api\/admin\/administrator-invitations:/,
-  )?.[1];
+  const administratorPath = pathBlock(contract, '/api/admin/administrators');
   assert.ok(administratorPath, 'administrator lifecycle path is documented');
   assert.doesNotMatch(administratorPath, /^    post:$/m);
   assert.match(administratorPath, /^    patch:$/m);
@@ -72,9 +85,10 @@ void test('operator OpenAPI remains least-data and documents the lifecycle surfa
     /tenantId|actorId|salesforceOrgId|authorizationOrigin|namespacePrefix/,
   );
 
-  const invitationPath = contract.match(
-    /  \/api\/admin\/administrator-invitations:\n([\s\S]*?)\n  \/api\/admin\/salesforce\/publications:/,
-  )?.[1];
+  const invitationPath = pathBlock(
+    contract,
+    '/api/admin/administrator-invitations',
+  );
   assert.ok(invitationPath, 'administrator invitation path is documented');
   assert.match(invitationPath, /^    post:$/m);
   assert.match(invitationPath, /^    delete:$/m);
@@ -86,10 +100,42 @@ void test('operator OpenAPI remains least-data and documents the lifecycle surfa
     /tenantId|actorId|salesforceOrgId|authorizationOrigin|namespacePrefix/,
   );
 
-  const loginPath = contract.match(
-    /  \/api\/admin\/session\/login:\n([\s\S]*?)\n  \/api\/admin\/session\/csrf:/,
-  )?.[1];
+  const loginPath = pathBlock(contract, '/api/admin/session/login');
   assert.ok(loginPath, 'administrator login path is documented');
   assert.match(loginPath, /required: \[invitationToken\]/);
   assert.doesNotMatch(loginPath, /tenantId|actorId|role/);
+
+  const authorizationPath = pathBlock(
+    contract,
+    '/api/admin/salesforce/authorization',
+  );
+  assert.ok(authorizationPath, 'Salesforce authorization start is documented');
+  assert.match(authorizationPath, /^ {4}post:$/m);
+  assert.doesNotMatch(authorizationPath, /^ {4}(?:get|put|patch|delete):$/m);
+  assert.match(
+    authorizationPath,
+    /security: \[\{ administratorSession: \[\], csrfToken: \[\] \}\]/,
+  );
+  assert.doesNotMatch(authorizationPath, /in: query|requestBody:/);
+  assert.doesNotMatch(
+    authorizationPath,
+    /tenantId|actorId|salesforceOrgId|authorizationOrigin|namespacePrefix|refreshToken|accessToken/,
+  );
+
+  const callbackPath = pathBlock(contract, '/api/admin/salesforce/callback');
+  assert.ok(callbackPath, 'Salesforce authorization callback is documented');
+  assert.match(callbackPath, /^ {4}get:$/m);
+  assert.doesNotMatch(callbackPath, /^ {4}(?:post|put|patch|delete):$/m);
+  assert.match(
+    callbackPath,
+    /security: \[\{ administratorSession: \[\], oauthBrowserBinding: \[\] \}\]/,
+  );
+  for (const parameter of ['state', 'code', 'error', 'error_description'])
+    assert.match(callbackPath, new RegExp(`^ {8}- name: ${parameter}$`, 'm'));
+  assert.match(callbackPath, /status: \{ type: string, const: connected \}/);
+  assert.doesNotMatch(callbackPath, /requestBody:/);
+  assert.doesNotMatch(
+    callbackPath,
+    /tenantId|actorId|salesforceOrgId|namespacePrefix|refreshToken|accessToken/,
+  );
 });

@@ -164,33 +164,29 @@ function callbackCookie(
 void test('classifies every malformed administrator cookie as authentication failure', async (context) => {
   const { app } = createRouteApp();
   context.after(() => app.close());
-  for (const session of [
-    '',
-    's'.repeat(42),
-    's'.repeat(44),
-    's'.repeat(512),
-    'invalid cookie',
+  for (const cookie of [
+    '__Host-kusanya_admin_session=',
+    `__Host-kusanya_admin_session=${'s'.repeat(42)}`,
+    `__Host-kusanya_admin_session=${'s'.repeat(44)}`,
+    `__Host-kusanya_admin_session=${'s'.repeat(512)}`,
+    '__Host-kusanya_admin_session=invalid cookie',
+    'malformed',
+    '=malformed',
   ]) {
     const start = await app.inject({
       method: 'POST',
       url: tenantOAuthRoutePaths.start,
-      headers: startHeaders({
-        cookie: `__Host-kusanya_admin_session=${session}`,
-      }),
+      headers: startHeaders({ cookie }),
     });
-    assert.equal(start.statusCode, 401, session.length.toString());
+    assert.equal(start.statusCode, 401, cookie);
     assert.deepEqual(start.json(), { error: 'Authentication required' });
 
     const callback = await app.inject({
       method: 'GET',
       url: `${tenantOAuthRoutePaths.callback}?state=${'a'.repeat(43)}&code=synthetic-code`,
-      headers: {
-        cookie:
-          `__Host-kusanya_oauth_binding=${'0'.repeat(64)}; ` +
-          `__Host-kusanya_admin_session=${session}`,
-      },
+      headers: { cookie },
     });
-    assert.equal(callback.statusCode, 401, session.length.toString());
+    assert.equal(callback.statusCode, 401, cookie);
     assert.deepEqual(callback.json(), { error: 'Authentication required' });
   }
 });

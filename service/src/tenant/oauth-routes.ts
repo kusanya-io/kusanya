@@ -272,10 +272,10 @@ export function registerTenantOAuthRoutes(
     reply.header('Set-Cookie', browserCookie(bindingCookie, '', 0));
     try {
       const input = callbackInput(request.query);
-      const suppliedBinding = namedCookieValue(request, bindingCookie);
       const session = administratorSession(request);
       if (session === undefined)
         return reply.code(401).send({ error: 'Authentication required' });
+      const suppliedBinding = namedCookieValue(request, bindingCookie);
       let context: TrustedAdministratorContext;
       try {
         context = decodeTrustedAdministratorContext(

@@ -59,7 +59,9 @@ The shared cookie reader's exact 43-character acceptance remains unchanged. Star
 and callback deliberately classify a missing, malformed, expired, revoked or
 otherwise unusable administrator cookie as the same fixed `401 Authentication
 required`. This closes note 128 without widening the accepted credential set and
-without exposing a cookie-shape oracle.
+without exposing a cookie-shape oracle. On callback the adapter parses that
+administrator session before the separate browser-binding cookie, so malformed
+cookie-header syntax cannot bypass the fixed authentication classification.
 
 OAuth protocol input retains a separate classification: malformed or duplicate
 callback query values, state and browser binding return the fixed generic 400. A
@@ -84,8 +86,9 @@ capability in turn and keep the unsafe-logger refusal. Route tests pin 401 for e
 illegal, short and long administrator cookies on both start and callback while the
 existing hostile callback matrix continues to pin 400 for protocol input. Runtime
 tests remove every new environment setting and exercise both bounds and malformed
-secrets. The published OpenAPI contract contains no tenant selector or credential
-field.
+secrets. The root OpenAPI test extracts every path independently up to the next
+top-level path and pins both OAuth methods, security requirements, parameters and
+absence of tenant selectors or credential fields.
 
 This advances note 34 by mounting tenant connection authorization and closes note 128. It does not add privileged disconnect/rebind, scheduled reconciliation,
 privileged retry, unlinked File cleanup, a real CI workload publication, ODK Validate
