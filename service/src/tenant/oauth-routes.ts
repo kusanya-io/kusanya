@@ -19,12 +19,11 @@ import {
   decodeTrustedAdministratorContext,
   type TrustedAdministratorContext,
 } from './administrator-session.js';
+import { readAdministratorSessionCookie } from './administrator-cookie.js';
 
 const startPath = '/api/admin/salesforce/authorization';
 const callbackPath = '/api/admin/salesforce/callback';
-const administratorCookie = '__Host-kusanya_admin_session';
 const bindingCookie = '__Host-kusanya_oauth_binding';
-const opaquePattern = /^[A-Za-z0-9_-]{43,512}$/;
 const csrfPattern = /^[A-Za-z0-9_-]{43}$/;
 const statePattern = /^[A-Za-z0-9_-]{43}$/;
 const digestPattern = /^[0-9a-f]{64}$/;
@@ -54,7 +53,7 @@ function exactString(value: unknown, pattern: RegExp, maximum: number): string {
   return value;
 }
 
-function cookieValue(
+function namedCookieValue(
   request: FastifyRequest,
   name: string,
 ): string | undefined {
@@ -69,6 +68,14 @@ function cookieValue(
   }
   if (matches.length > 1) throw new AdministratorRouteInputError();
   return matches[0];
+}
+
+function administratorSession(request: FastifyRequest): string | undefined {
+  try {
+    return readAdministratorSessionCookie(request.headers.cookie);
+  } catch {
+    throw new AdministratorRouteInputError();
+  }
 }
 
 function safeEqual(left: string, right: string): boolean {
@@ -195,8 +202,8 @@ export function registerTenantOAuthRoutes(
     try {
       if (!emptyRequest(request))
         return reply.code(400).send({ error: 'Request rejected' });
-      const session = cookieValue(request, administratorCookie);
-      if (session === undefined || !opaquePattern.test(session))
+      const session = administratorSession(request);
+      if (session === undefined)
         return reply.code(401).send({ error: 'Authentication required' });
       let context: TrustedAdministratorContext;
       try {
@@ -259,9 +266,9 @@ export function registerTenantOAuthRoutes(
     reply.header('Set-Cookie', browserCookie(bindingCookie, '', 0));
     try {
       const input = callbackInput(request.query);
-      const suppliedBinding = cookieValue(request, bindingCookie);
-      const session = cookieValue(request, administratorCookie);
-      if (session === undefined || !opaquePattern.test(session))
+      const suppliedBinding = namedCookieValue(request, bindingCookie);
+      const session = administratorSession(request);
+      if (session === undefined)
         return reply.code(401).send({ error: 'Authentication required' });
       let context: TrustedAdministratorContext;
       try {

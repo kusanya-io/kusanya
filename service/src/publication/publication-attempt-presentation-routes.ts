@@ -12,14 +12,13 @@ import {
   decodeTrustedAdministratorContext,
   type TrustedAdministratorContext,
 } from '../tenant/administrator-session.js';
+import { readAdministratorSessionCookie } from '../tenant/administrator-cookie.js';
 import {
   publicationAttemptOperatorCursor,
   type PublicationAttemptStore,
 } from './publication-attempt-store.js';
 
 const attemptsPath = '/api/admin/salesforce/publication-attempts';
-const cookieName = '__Host-kusanya_admin_session';
-const sessionPattern = /^[A-Za-z0-9_-]{43}$/;
 const csrfPattern = /^[A-Za-z0-9_-]{43}$/;
 
 class PublicationAttemptPresentationInputError extends Error {}
@@ -89,17 +88,11 @@ function requestCursor(request: FastifyRequest): string | undefined {
 }
 
 function cookieValue(request: FastifyRequest): string | undefined {
-  const header = request.headers.cookie;
-  if (header === undefined) return undefined;
-  const matches: string[] = [];
-  for (const part of header.split(';')) {
-    const separator = part.indexOf('=');
-    if (separator < 1) throw new PublicationAttemptPresentationInputError();
-    if (part.slice(0, separator).trim() === cookieName)
-      matches.push(part.slice(separator + 1).trim());
+  try {
+    return readAdministratorSessionCookie(request.headers.cookie);
+  } catch {
+    throw new PublicationAttemptPresentationInputError();
   }
-  if (matches.length > 1) throw new PublicationAttemptPresentationInputError();
-  return matches[0];
 }
 
 function safeEqual(left: string, right: string): boolean {
@@ -197,7 +190,7 @@ export function registerPublicationAttemptPresentationRoutes(
       let context: TrustedAdministratorContext;
       try {
         const opaqueSession = cookieValue(request);
-        if (opaqueSession === undefined || !sessionPattern.test(opaqueSession))
+        if (opaqueSession === undefined)
           throw new PublicationAttemptPresentationInputError();
         context = decodeTrustedAdministratorContext(
           await dependencies.authenticateAdministrator(opaqueSession),

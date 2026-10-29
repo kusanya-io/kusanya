@@ -12,6 +12,7 @@ import {
   decodeTrustedAdministratorContext,
   type TrustedAdministratorContext,
 } from '../tenant/administrator-session.js';
+import { readAdministratorSessionCookie } from '../tenant/administrator-cookie.js';
 import type { TenantConnectionSessionStore } from '../tenant/salesforce-session.js';
 import type { ValidateXForm } from './odk-validate.js';
 import type { PublicationAttemptStore } from './publication-attempt-store.js';
@@ -19,8 +20,6 @@ import { publishTenantSalesforceDefinition } from './tenant-salesforce-publisher
 import type { TenantSalesforcePublisherConfiguration } from './tenant-salesforce-publisher.js';
 
 const publishPath = '/api/admin/salesforce/publications';
-const cookieName = '__Host-kusanya_admin_session';
-const sessionPattern = /^[A-Za-z0-9_-]{43}$/;
 const csrfPattern = /^[A-Za-z0-9_-]{43}$/;
 const idPattern = /^[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?$/;
 
@@ -98,17 +97,11 @@ function emptyQuery(request: FastifyRequest): boolean {
 }
 
 function cookieValue(request: FastifyRequest): string | undefined {
-  const header = request.headers.cookie;
-  if (header === undefined) return undefined;
-  const matches: string[] = [];
-  for (const part of header.split(';')) {
-    const separator = part.indexOf('=');
-    if (separator < 1) throw new PublicationHttpInputError();
-    if (part.slice(0, separator).trim() === cookieName)
-      matches.push(part.slice(separator + 1).trim());
+  try {
+    return readAdministratorSessionCookie(request.headers.cookie);
+  } catch {
+    throw new PublicationHttpInputError();
   }
-  if (matches.length > 1) throw new PublicationHttpInputError();
-  return matches[0];
 }
 
 function safeEqual(left: string, right: string): boolean {
@@ -147,8 +140,7 @@ export function registerPublicationRoutes(
     let context: TrustedAdministratorContext;
     try {
       const opaqueSession = cookieValue(request);
-      if (opaqueSession === undefined || !sessionPattern.test(opaqueSession))
-        throw new PublicationHttpInputError();
+      if (opaqueSession === undefined) throw new PublicationHttpInputError();
       context = decodeTrustedAdministratorContext(
         await dependencies.authenticateAdministrator(opaqueSession),
       );

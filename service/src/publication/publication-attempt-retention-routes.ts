@@ -12,11 +12,10 @@ import {
   decodeTrustedAdministratorContext,
   type TrustedAdministratorContext,
 } from '../tenant/administrator-session.js';
+import { readAdministratorSessionCookie } from '../tenant/administrator-cookie.js';
 import type { PublicationAttemptStore } from './publication-attempt-store.js';
 
 const retentionPath = '/api/admin/publication-attempts/retention';
-const cookieName = '__Host-kusanya_admin_session';
-const sessionPattern = /^[A-Za-z0-9_-]{43}$/;
 const csrfPattern = /^[A-Za-z0-9_-]{43}$/;
 
 class PublicationAttemptRetentionInputError extends Error {}
@@ -67,17 +66,11 @@ function plainRecord(value: unknown): Record<string, unknown> {
 }
 
 function cookieValue(request: FastifyRequest): string | undefined {
-  const header = request.headers.cookie;
-  if (header === undefined) return undefined;
-  const matches: string[] = [];
-  for (const part of header.split(';')) {
-    const separator = part.indexOf('=');
-    if (separator < 1) throw new PublicationAttemptRetentionInputError();
-    if (part.slice(0, separator).trim() === cookieName)
-      matches.push(part.slice(separator + 1).trim());
+  try {
+    return readAdministratorSessionCookie(request.headers.cookie);
+  } catch {
+    throw new PublicationAttemptRetentionInputError();
   }
-  if (matches.length > 1) throw new PublicationAttemptRetentionInputError();
-  return matches[0];
 }
 
 function safeEqual(left: string, right: string): boolean {
@@ -126,7 +119,7 @@ export function registerPublicationAttemptRetentionRoutes(
       let context: TrustedAdministratorContext;
       try {
         const opaqueSession = cookieValue(request);
-        if (opaqueSession === undefined || !sessionPattern.test(opaqueSession))
+        if (opaqueSession === undefined)
           throw new PublicationAttemptRetentionInputError();
         context = decodeTrustedAdministratorContext(
           await dependencies.authenticateAdministrator(opaqueSession),

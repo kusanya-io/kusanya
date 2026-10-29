@@ -102,6 +102,13 @@ acceptance test: C10 test 12 still requires the seven supplied forms through the
 selected real CI workload identity. Note 39 and the remaining note 34 strands remain
 open.
 
+A follow-up folds every administrator request-cookie reader into the same module;
+route-specific wrappers preserve each endpoint's generic failure response while the
+name, value shape and duplicate refusal have one implementation. The service runbook
+also records `OPENSSL_EXECUTABLE` and the Windows fallback used by the integration
+test. These maintenance changes answer notes 126 and 127 if independently verified;
+they do not change the CLI, route authority or acceptance-test claims above.
+
 ## Revisit when
 
 Changing the administrator cookie, CLI output or exit contract, replacing Node's

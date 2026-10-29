@@ -8,8 +8,8 @@ import {
   type AdministratorInvitationStore,
 } from './administrator-invitation.js';
 import {
-  administratorSessionCookieName,
   isAdministratorSessionValue,
+  readAdministratorSessionCookie,
   serializeAdministratorSessionCookie,
 } from './administrator-cookie.js';
 import type {
@@ -133,17 +133,11 @@ function emptyRequest(request: FastifyRequest): boolean {
 }
 
 function cookieValue(request: FastifyRequest): string | undefined {
-  const header = request.headers.cookie;
-  if (header === undefined) return undefined;
-  const matches: string[] = [];
-  for (const part of header.split(';')) {
-    const separator = part.indexOf('=');
-    if (separator < 1) throw new AdministratorHttpInputError();
-    if (part.slice(0, separator).trim() === administratorSessionCookieName)
-      matches.push(part.slice(separator + 1).trim());
+  try {
+    return readAdministratorSessionCookie(request.headers.cookie);
+  } catch {
+    throw new AdministratorHttpInputError();
   }
-  if (matches.length > 1) throw new AdministratorHttpInputError();
-  return matches[0];
 }
 
 function clearSessionCookie(): string {

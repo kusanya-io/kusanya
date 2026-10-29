@@ -5,11 +5,12 @@ import {
   normalizeSalesforceOrgId,
   type QueryExecutor,
 } from './connection-store.js';
+import { isAdministratorSessionValue } from './administrator-cookie.js';
 
 const actorPattern = /^[A-Za-z0-9:_-]{1,128}$/;
 const tenantPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const sessionPattern = /^[A-Za-z0-9_-]{43}$/;
+const csrfPattern = /^[A-Za-z0-9_-]{43}$/;
 const digestPattern = /^[0-9a-f]{64}$/;
 const administratorNamespacePattern = /^(?:|[a-z][a-z0-9]{0,14}__)$/;
 
@@ -295,7 +296,7 @@ function configuration(value: unknown): {
 }
 
 function opaqueSession(value: unknown): string {
-  if (typeof value !== 'string' || !sessionPattern.test(value))
+  if (!isAdministratorSessionValue(value))
     fail('ADMINISTRATOR_SESSION_INPUT');
   return value;
 }
@@ -327,7 +328,7 @@ export function decodeTrustedAdministratorContext(
   ]);
   if (
     typeof input.csrfToken !== 'string' ||
-    !sessionPattern.test(input.csrfToken)
+    !csrfPattern.test(input.csrfToken)
   )
     fail('ADMINISTRATOR_SESSION_INPUT');
   try {
