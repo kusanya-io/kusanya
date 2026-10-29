@@ -296,8 +296,7 @@ function configuration(value: unknown): {
 }
 
 function opaqueSession(value: unknown): string {
-  if (!isAdministratorSessionValue(value))
-    fail('ADMINISTRATOR_SESSION_INPUT');
+  if (!isAdministratorSessionValue(value)) fail('ADMINISTRATOR_SESSION_INPUT');
   return value;
 }
 
@@ -326,10 +325,7 @@ export function decodeTrustedAdministratorContext(
     'role',
     'tenantId',
   ]);
-  if (
-    typeof input.csrfToken !== 'string' ||
-    !csrfPattern.test(input.csrfToken)
-  )
+  if (typeof input.csrfToken !== 'string' || !csrfPattern.test(input.csrfToken))
     fail('ADMINISTRATOR_SESSION_INPUT');
   try {
     return Object.freeze({
