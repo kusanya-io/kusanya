@@ -161,6 +161,40 @@ function callbackCookie(
   return `${bindingCookieValue}; __Host-kusanya_admin_session=${session}`;
 }
 
+void test('classifies every malformed administrator cookie as authentication failure', async (context) => {
+  const { app } = createRouteApp();
+  context.after(() => app.close());
+  for (const session of [
+    '',
+    's'.repeat(42),
+    's'.repeat(44),
+    's'.repeat(512),
+    'invalid cookie',
+  ]) {
+    const start = await app.inject({
+      method: 'POST',
+      url: tenantOAuthRoutePaths.start,
+      headers: startHeaders({
+        cookie: `__Host-kusanya_admin_session=${session}`,
+      }),
+    });
+    assert.equal(start.statusCode, 401, session.length.toString());
+    assert.deepEqual(start.json(), { error: 'Authentication required' });
+
+    const callback = await app.inject({
+      method: 'GET',
+      url: `${tenantOAuthRoutePaths.callback}?state=${'a'.repeat(43)}&code=synthetic-code`,
+      headers: {
+        cookie:
+          `__Host-kusanya_oauth_binding=${'0'.repeat(64)}; ` +
+          `__Host-kusanya_admin_session=${session}`,
+      },
+    });
+    assert.equal(callback.statusCode, 401, session.length.toString());
+    assert.deepEqual(callback.json(), { error: 'Authentication required' });
+  }
+});
+
 void test('starts from only the verified session binding and ignores forged tenant headers', async (context) => {
   const sessions: string[] = [];
   const { app, memory } = createRouteApp({
@@ -490,7 +524,8 @@ void test('rejects duplicate cookies and hostile authenticated contexts without 
         `__Host-kusanya_admin_session=${'t'.repeat(43)}`,
     },
   });
-  assert.equal(duplicate.statusCode, 400);
+  assert.equal(duplicate.statusCode, 401);
+  assert.deepEqual(duplicate.json(), { error: 'Authentication required' });
   assert.equal(memory.rows.size, 0);
 });
 

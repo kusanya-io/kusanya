@@ -222,10 +222,12 @@ access token only for the attempt. ADR 0040 adds an internal one-time authorizat
 start and callback: only a state digest and trusted tenant/org binding reach
 PostgreSQL, PKCE is derived under a deployment secret, state is consumed before the
 bounded exchange, and the signed Salesforce identity must match the expected org.
-ADR 0041 adds an unmounted Fastify adapter around that protocol. Its injected
+ADR 0041 adds a Fastify adapter around that protocol. Its injected
 administrator verifier receives only an opaque host cookie and returns the immutable
 tenant/org binding; a same-origin CSRF check protects start and a separate HMAC
-cookie binds callback state to the initiating browser. ADR 0042 supplies the internal
+cookie binds callback state to the initiating browser. ADR 0059 mounts it through
+the production administrator composition after all identity, audit and
+deployment-secret prerequisites exist. ADR 0042 supplies the internal
 opaque session issuer and immutable provisioning store: only a digest is persisted,
 one session per actor is replaced atomically, PostgreSQL is checked for every request,
 and callback completion requires the exact initiating session to remain live. ADR

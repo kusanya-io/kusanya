@@ -5,6 +5,8 @@ import type { TenantSalesforcePublisherConfiguration } from './publication/tenan
 import type { OdkValidateConfiguration } from './publication/odk-validate.js';
 import type { AdministratorSessionConfiguration } from './tenant/administrator-session.js';
 import type { AdministratorInvitationConfiguration } from './tenant/administrator-invitation.js';
+import type { TenantOAuthConfiguration } from './tenant/oauth-authorization.js';
+import { tenantOAuthRoutePaths } from './tenant/oauth-routes.js';
 import {
   readTenantCredentialVault,
   type TenantCredentialVault,
@@ -16,6 +18,7 @@ export interface PublicationSurfaceRuntimeConfig {
   readonly oidc: AdministratorOidcConfiguration;
   readonly session: AdministratorSessionConfiguration;
   readonly invitation: AdministratorInvitationConfiguration;
+  readonly oauth: TenantOAuthConfiguration;
   readonly publisher: TenantSalesforcePublisherConfiguration;
   readonly validator: OdkValidateConfiguration;
   readonly credentialVault: TenantCredentialVault;
@@ -24,6 +27,17 @@ export interface PublicationSurfaceRuntimeConfig {
 function required(env: NodeJS.ProcessEnv, name: string): string {
   const value = env[name];
   if (value === undefined || value.length < 1)
+    throw new ConfigurationError(name);
+  return value;
+}
+
+function requiredToken(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  maximum: number,
+): string {
+  const value = required(env, name);
+  if (value.length > maximum || !/^[\x21-\x7e]+$/.test(value))
     throw new ConfigurationError(name);
   return value;
 }
@@ -60,11 +74,11 @@ function exactHttpsOrigin(env: NodeJS.ProcessEnv, name: string): string {
   return value;
 }
 
-function sessionSecret(env: NodeJS.ProcessEnv): string {
-  const value = required(env, 'ADMIN_SESSION_SECRET');
+function canonicalSecret(env: NodeJS.ProcessEnv, name: string): string {
+  const value = required(env, name);
   const decoded = Buffer.from(value, 'base64');
   if (decoded.length !== 32 || decoded.toString('base64') !== value)
-    throw new ConfigurationError('ADMIN_SESSION_SECRET');
+    throw new ConfigurationError(name);
   return value;
 }
 
@@ -90,6 +104,13 @@ export function readPublicationSurfaceRuntimeConfig(
     perRequestTimeoutMs,
     120_000,
   );
+  const externalOrigin = exactHttpsOrigin(env, 'ADMIN_EXTERNAL_ORIGIN');
+  const oauthClientId = requiredToken(env, 'SALESFORCE_OAUTH_CLIENT_ID', 256);
+  const oauthClientSecret = requiredToken(
+    env,
+    'SALESFORCE_OAUTH_CLIENT_SECRET',
+    4096,
+  );
   required(env, 'TENANT_CREDENTIAL_ACTIVE_KEY_ID');
   required(env, 'TENANT_CREDENTIAL_KEYS');
   let credentialVault: TenantCredentialVault;
@@ -99,22 +120,35 @@ export function readPublicationSurfaceRuntimeConfig(
     throw new ConfigurationError('TENANT_CREDENTIAL_KEYS');
   }
   return Object.freeze({
-    externalOrigin: exactHttpsOrigin(env, 'ADMIN_EXTERNAL_ORIGIN'),
+    externalOrigin,
     oidc: Object.freeze({
       issuer: required(env, 'ADMIN_OIDC_ISSUER'),
       audience: required(env, 'ADMIN_OIDC_AUDIENCE'),
       jwksUri: required(env, 'ADMIN_OIDC_JWKS_URI'),
     }),
     session: Object.freeze({
-      sessionSecret: sessionSecret(env),
+      sessionSecret: canonicalSecret(env, 'ADMIN_SESSION_SECRET'),
       ttlSeconds: integer(env, 'ADMIN_SESSION_TTL_SECONDS', 60, 86_400),
     }),
     invitation: Object.freeze({
       ttlSeconds: integer(env, 'ADMIN_INVITATION_TTL_SECONDS', 300, 604_800),
     }),
+    oauth: Object.freeze({
+      clientId: oauthClientId,
+      clientSecret: oauthClientSecret,
+      redirectUri: `${externalOrigin}${tenantOAuthRoutePaths.callback}`,
+      stateSecret: canonicalSecret(env, 'SALESFORCE_OAUTH_STATE_SECRET'),
+      timeoutMs: integer(env, 'SALESFORCE_OAUTH_TIMEOUT_MS', 1, 30_000),
+      transactionTtlSeconds: integer(
+        env,
+        'SALESFORCE_OAUTH_TRANSACTION_TTL_SECONDS',
+        60,
+        900,
+      ),
+    }),
     publisher: Object.freeze({
-      clientId: required(env, 'SALESFORCE_OAUTH_CLIENT_ID'),
-      clientSecret: required(env, 'SALESFORCE_OAUTH_CLIENT_SECRET'),
+      clientId: oauthClientId,
+      clientSecret: oauthClientSecret,
       refreshTimeoutMs: integer(
         env,
         'SALESFORCE_REFRESH_TIMEOUT_MS',

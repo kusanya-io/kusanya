@@ -16,8 +16,9 @@ a PostgreSQL row lock across replicas, a rotated refresh token is encrypted and
 committed before access is exposed, and the returned org and instance must match the
 stored binding. A local rejecting deadline releases that row lock even if an injected
 transport ignores its abort signal. ADR 0040 adds the internal one-time OAuth start
-and callback protocol. ADR 0041 adds an unmounted HTTP adapter with an injected
-trusted-session contract, same-origin CSRF and browser-bound callback state. ADR 0042
+and callback protocol. ADR 0041 adds an HTTP adapter with an injected trusted-session
+contract, same-origin CSRF and browser-bound callback state; ADR 0059 mounts it in
+the production composition. ADR 0042
 adds the internal opaque session issuer, live revocation and immutable actor-to-tenant
 provisioning. ADR 0044 adds the browser login/CSRF/logout composition and makes
 hardened request logging a runtime prerequisite for administrator adapters.
@@ -280,16 +281,19 @@ HTTPS origin; `ADMIN_OIDC_ISSUER`, `ADMIN_OIDC_AUDIENCE` and
 `ADMIN_OIDC_JWKS_URI`; canonical 32-byte `ADMIN_SESSION_SECRET` and bounded
 `ADMIN_SESSION_TTL_SECONDS`; bounded `ADMIN_INVITATION_TTL_SECONDS`;
 `SALESFORCE_OAUTH_CLIENT_ID` and
-`SALESFORCE_OAUTH_CLIENT_SECRET`; all three bounded Salesforce timeout settings;
+`SALESFORCE_OAUTH_CLIENT_SECRET`; a separate canonical 32-byte
+`SALESFORCE_OAUTH_STATE_SECRET`; bounded authorization timeout and transaction TTL;
+all three bounded publication/refresh timeout settings;
 and absolute `ODK_VALIDATE_JAVA_EXECUTABLE` and `ODK_VALIDATE_JAR_PATH` values.
 There are no development fallbacks. Missing or malformed values stop `main.ts`
 before it opens PostgreSQL. The committed `.env.example` names every setting but
 contains placeholders only.
 
 The internal ADR 0040 authorization boundary creates a short-lived Salesforce
-authorization URL and completes its callback. ADR 0041 adds an unmounted HTTP route
-adapter that can be registered only with a concrete trusted administrator-session
-verifier. It stores only a state digest and trusted tenant/org metadata in
+authorization URL and completes its callback. ADR 0041 adds an HTTP route adapter
+that can be registered only with a concrete trusted administrator-session verifier;
+ADR 0059 mounts it in the same fail-closed production composition as the other
+administrator routes. It stores only a state digest and trusted tenant/org metadata in
 `tenant_oauth_transactions`; the PKCE verifier is derived under a deployment secret.
 The callback consumes state once before exchanging the code and only then writes the
 encrypted refresh token through `TenantConnectionStore`. ADR 0045 makes that write
@@ -302,6 +306,16 @@ a same-origin, session-authenticated POST with session-bound CSRF; callback comp
 requires an HMAC browser binding to the exact still-active initiating session and
 returns no connection metadata. Real Salesforce provider descriptions are discarded
 at the HTTP edge.
+
+`POST /api/admin/salesforce/authorization` accepts no body, query or tenant selector.
+It requires a live `administrator` role, the exact application origin and the
+session-derived CSRF token, then redirects to the tenant's stored Salesforce login
+origin. `GET /api/admin/salesforce/callback` requires the same still-live initiating
+session and the one-time browser-binding cookie. Missing, invalid or malformed
+administrator cookies all return the same generic 401; malformed OAuth callback
+inputs and bindings return a generic 400. This deliberate split closes note 128
+without weakening the exact 43-character session contract. Automatic request
+logging remains disabled so the callback code and state never enter request logs.
 
 `AdministratorSessionStore` issues fresh random sessions only after a stable trusted
 actor is provisioned to a tenant whose normalized org/origin/namespace tuple is

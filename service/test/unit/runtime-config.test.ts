@@ -16,6 +16,9 @@ const valid = {
   TENANT_CREDENTIAL_KEYS: `current:${Buffer.alloc(32, 8).toString('base64')}`,
   SALESFORCE_OAUTH_CLIENT_ID: 'salesforce-client',
   SALESFORCE_OAUTH_CLIENT_SECRET: 'salesforce-secret',
+  SALESFORCE_OAUTH_STATE_SECRET: Buffer.alloc(32, 9).toString('base64'),
+  SALESFORCE_OAUTH_TIMEOUT_MS: '10000',
+  SALESFORCE_OAUTH_TRANSACTION_TTL_SECONDS: '300',
   SALESFORCE_REFRESH_TIMEOUT_MS: '10000',
   SALESFORCE_REQUEST_TIMEOUT_MS: '10000',
   SALESFORCE_PUBLICATION_TIMEOUT_MS: '120000',
@@ -34,11 +37,20 @@ void test('mounted surface configuration is complete, bounded and immutable', ()
   assert.equal(config.session.ttlSeconds, 28800);
   assert.equal(config.invitation.ttlSeconds, 86400);
   assert.equal(config.publisher.overallTimeoutMs, 120000);
+  assert.deepEqual(config.oauth, {
+    clientId: valid.SALESFORCE_OAUTH_CLIENT_ID,
+    clientSecret: valid.SALESFORCE_OAUTH_CLIENT_SECRET,
+    redirectUri: 'https://kusanya.example/api/admin/salesforce/callback',
+    stateSecret: valid.SALESFORCE_OAUTH_STATE_SECRET,
+    timeoutMs: 10000,
+    transactionTtlSeconds: 300,
+  });
   assert.equal(config.validator.jarPath, valid.ODK_VALIDATE_JAR_PATH);
   assert.ok(Object.isFrozen(config));
   assert.ok(Object.isFrozen(config.oidc));
   assert.ok(Object.isFrozen(config.session));
   assert.ok(Object.isFrozen(config.invitation));
+  assert.ok(Object.isFrozen(config.oauth));
 });
 
 void test('main runtime refuses every absent guard setting without leaking values', () => {
@@ -61,11 +73,18 @@ void test('mounted runtime refuses malformed secrets, origins, paths and bounds'
     ['ADMIN_EXTERNAL_ORIGIN', 'http://secret.example'],
     ['ADMIN_EXTERNAL_ORIGIN', 'https://secret.example/path'],
     ['ADMIN_SESSION_SECRET', 'secret-value'],
+    ['SALESFORCE_OAUTH_CLIENT_ID', `client\nsecret-value`],
+    ['SALESFORCE_OAUTH_CLIENT_ID', 'x'.repeat(257)],
+    ['SALESFORCE_OAUTH_CLIENT_SECRET', 'x'.repeat(4097)],
+    ['SALESFORCE_OAUTH_STATE_SECRET', 'secret-value'],
     ['TENANT_CREDENTIAL_KEYS', 'secret-value'],
     ['ADMIN_SESSION_TTL_SECONDS', '59'],
     ['ADMIN_INVITATION_TTL_SECONDS', '299'],
     ['ADMIN_INVITATION_TTL_SECONDS', '604801'],
     ['SALESFORCE_REQUEST_TIMEOUT_MS', '30001'],
+    ['SALESFORCE_OAUTH_TIMEOUT_MS', '30001'],
+    ['SALESFORCE_OAUTH_TRANSACTION_TTL_SECONDS', '59'],
+    ['SALESFORCE_OAUTH_TRANSACTION_TTL_SECONDS', '901'],
     ['SALESFORCE_PUBLICATION_TIMEOUT_MS', '9999'],
     ['ODK_VALIDATE_JAVA_EXECUTABLE', 'java'],
     ['ODK_VALIDATE_JAR_PATH', 'secret.jar'],

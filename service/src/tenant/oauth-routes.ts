@@ -35,7 +35,10 @@ export interface TenantOAuthRouteDependencies {
   readonly authenticateAdministrator: (
     opaqueSession: string,
   ) => Promise<unknown>;
-  readonly transactionStore: TenantOAuthTransactionStore;
+  readonly transactionStore: Pick<
+    TenantOAuthTransactionStore,
+    'begin' | 'consume'
+  >;
   readonly connectionStore: Pick<TenantConnectionStore, 'saveAuthorization'>;
   readonly oauthConfiguration: TenantOAuthConfiguration;
   /** Exact public HTTPS origin that owns these routes and the session cookie. */
@@ -74,7 +77,10 @@ function administratorSession(request: FastifyRequest): string | undefined {
   try {
     return readAdministratorSessionCookie(request.headers.cookie);
   } catch {
-    throw new AdministratorRouteInputError();
+    // A malformed credential is still an authentication failure. Keeping this
+    // distinction here prevents callback/query input errors from being widened
+    // while making every unusable administrator credential one fixed 401.
+    return undefined;
   }
 }
 
