@@ -1,6 +1,6 @@
 # ADR 0060: Portable validation for authored JavaScript rules
 
-- Status: Accepted
+- Status: Proposed; implementation awaiting independent verification
 - Date: 2026-10-29
 - Brief sections: C1.2, C4, C10.12, C11 Phase 1
 - Decision owner: Cobitech Solutions
@@ -33,8 +33,9 @@ Treat `validationScript` as opaque authoring source:
 - never parse, evaluate, interpolate, serialize or log its contents;
 - compile only the ordinary `constraint`, `regex`, minimum and maximum fields;
 - return `VALIDATION_SCRIPT_NOT_EXECUTED` for every nonempty script; and
-- additionally return `VALIDATION_SCRIPT_WITHOUT_PORTABLE_RULE` when neither an
-  XPath constraint nor a regex accompanies it.
+- additionally return `VALIDATION_SCRIPT_WITHOUT_PORTABLE_RULE` when the complete
+  compiled bind has no constraint at all. Authored XPath, regex, numeric bounds and
+  repeat-source bounds each suppress that second warning.
 
 Sections, repeats and notes may not carry a script and still fail through their
 existing container/note option guards. Other question types receive the warning

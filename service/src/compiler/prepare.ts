@@ -52,6 +52,7 @@ export function prepareForm(input: unknown): PreparationResult {
     const logic = new Map<string, RenderLogic>();
     const dependencies = new Map<string, Set<string>>();
     const warnings: Diagnostic[] = [];
+    const validationScripts: { name: string; location: string }[] = [];
     const counts: { path: string; value: string }[] = [];
     const paths = new Map(graph.nodes.map((node) => [node.path, node]));
     for (const node of graph.nodes) {
@@ -299,11 +300,7 @@ export function prepareForm(input: unknown): PreparationResult {
           code: 'VALIDATION_SCRIPT_NOT_EXECUTED',
           location,
         });
-        if (!question.constraint && !question.regex)
-          warnings.push({
-            code: 'VALIDATION_SCRIPT_WITHOUT_PORTABLE_RULE',
-            location,
-          });
+        validationScripts.push({ name: question.name, location });
       }
       if (question.defaultValue !== undefined) {
         if (question.calculation)
@@ -426,6 +423,19 @@ export function prepareForm(input: unknown): PreparationResult {
         )
           throw new CompileError('UNSUPPORTED_OPEN_REPEAT_LIMIT');
       } else throw new CompileError('REPEAT_OPTIONS');
+    }
+
+    for (const script of validationScripts) {
+      if (logic.get(script.name)!.constraint) continue;
+      const after = warnings.findIndex(
+        (warning) =>
+          warning.code === 'VALIDATION_SCRIPT_NOT_EXECUTED' &&
+          warning.location === script.location,
+      );
+      warnings.splice(after + 1, 0, {
+        code: 'VALIDATION_SCRIPT_WITHOUT_PORTABLE_RULE',
+        location: script.location,
+      });
     }
 
     const rulesByTarget = new Map<

@@ -287,6 +287,20 @@ void test('reviewer warnings explain that JavaScript is never collector validati
   assert.ok(result.html.includes('never executed or delivered'));
   assert.ok(result.html.includes('receive no equivalent validation rule'));
   assert.ok(!result.html.includes('AUTHOR_SCRIPT_SENTINEL'));
+
+  const bounded = reviewerFixture();
+  bounded.form.questions[2]!.validationScript = 'BOUNDED_SCRIPT_SENTINEL';
+  const boundedResult = renderPrintView(bounded.form, bounded.mappings);
+  assert.ok(boundedResult.ok);
+  if (!boundedResult.ok) return;
+  assert.ok(boundedResult.html.includes('VALIDATION_SCRIPT_NOT_EXECUTED'));
+  assert.ok(
+    !boundedResult.html.includes('VALIDATION_SCRIPT_WITHOUT_PORTABLE_RULE'),
+  );
+  assert.ok(
+    !boundedResult.html.includes('receive no equivalent validation rule'),
+  );
+  assert.ok(!boundedResult.html.includes('BOUNDED_SCRIPT_SENTINEL'));
 });
 
 void test('invalid/unsupported definitions and malformed mapping summaries return diagnostics with no partial HTML', () => {

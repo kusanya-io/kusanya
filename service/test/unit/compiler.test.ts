@@ -89,6 +89,50 @@ void test('uses only portable constraints when a JavaScript validation is author
     },
   ]);
   assert.ok(!JSON.stringify(result).includes('VALIDATION_SCRIPT_SENTINEL'));
+
+  for (const bounds of [
+    { minimum: 0 },
+    { maximum: 10 },
+    { minimum: 0, maximum: 10 },
+  ]) {
+    const bounded = compileForm(
+      simpleForm([
+        question('answer', {
+          type: 'integer',
+          validationScript: 'BOUNDED_SCRIPT_SENTINEL',
+          ...bounds,
+        }),
+      ]),
+    );
+    assert.equal(bounded.ok, true, JSON.stringify(bounded));
+    if (!bounded.ok) continue;
+    assert.deepEqual(bounded.warnings, [
+      {
+        code: 'VALIDATION_SCRIPT_NOT_EXECUTED',
+        location: 'questions[0]',
+      },
+    ]);
+    assert.ok(bounded.xml.includes('constraint="'));
+    assert.ok(!JSON.stringify(bounded).includes('BOUNDED_SCRIPT_SENTINEL'));
+  }
+
+  const repeatSource = mixedRepeatForm();
+  repeatSource.questions[2]!.validationScript = 'REPEAT_SCRIPT_SENTINEL';
+  const repeated = compileForm(repeatSource);
+  assert.equal(repeated.ok, true, JSON.stringify(repeated));
+  if (!repeated.ok) return;
+  assert.ok(
+    repeated.warnings.some(
+      (warning) => warning.code === 'VALIDATION_SCRIPT_NOT_EXECUTED',
+    ),
+  );
+  assert.ok(
+    !repeated.warnings.some(
+      (warning) => warning.code === 'VALIDATION_SCRIPT_WITHOUT_PORTABLE_RULE',
+    ),
+  );
+  assert.ok(repeated.xml.includes('(. &gt;= 0) and (. &lt;= 40)'));
+  assert.ok(!JSON.stringify(repeated).includes('REPEAT_SCRIPT_SENTINEL'));
 });
 
 void test('is deterministic under record reordering and does not mutate source', () => {

@@ -298,8 +298,10 @@ defaults and open-repeat limits also fail. Omitted/false options retain their
 default meaning; author-only Notes/Regex Example are intentionally omitted, not
 unimplemented collector behavior. A nonempty `validationScript` is retained only
 as opaque authoring data and never executed or serialized. It always produces
-`VALIDATION_SCRIPT_NOT_EXECUTED`; without an XPath constraint or regex it also
-produces `VALIDATION_SCRIPT_WITHOUT_PORTABLE_RULE`. No translation, external itemset, mapping
+`VALIDATION_SCRIPT_NOT_EXECUTED`; when the complete compiled bind has no constraint
+at all it also produces `VALIDATION_SCRIPT_WITHOUT_PORTABLE_RULE`. Authored XPath,
+regex, numeric bounds and repeat-source bounds each count as a portable collector
+constraint. No translation, external itemset, mapping
 execution, Salesforce target validation, form snapshot or publication is present.
 
 ## Verification and optional offline ODK probe
