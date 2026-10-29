@@ -199,8 +199,7 @@ export function prepareForm(input: unknown): PreparationResult {
         question.cascadeLevel !== undefined ||
         question.requireLivePhoto ||
         question.mediaMaxSeconds !== undefined ||
-        question.prefillSource ||
-        question.validationScript
+        question.prefillSource
       )
         throw new CompileError('UNSUPPORTED_QUESTION_OPTION');
       if (
@@ -233,6 +232,7 @@ export function prepareForm(input: unknown): PreparationResult {
           question.calculation ||
           question.constraint ||
           question.regex ||
+          question.validationScript ||
           question.minimum !== undefined ||
           question.maximum !== undefined)
       )
@@ -244,6 +244,7 @@ export function prepareForm(input: unknown): PreparationResult {
           question.calculation ||
           question.constraint ||
           question.regex ||
+          question.validationScript ||
           question.minimum !== undefined ||
           question.maximum !== undefined)
       )
@@ -293,6 +294,17 @@ export function prepareForm(input: unknown): PreparationResult {
         throw new CompileError('REGEX_TYPE');
       if (question.regex && question.regex.length > 4096)
         throw new CompileError('EXPRESSION_LIMIT');
+      if (question.validationScript) {
+        warnings.push({
+          code: 'VALIDATION_SCRIPT_NOT_EXECUTED',
+          location,
+        });
+        if (!question.constraint && !question.regex)
+          warnings.push({
+            code: 'VALIDATION_SCRIPT_WITHOUT_PORTABLE_RULE',
+            location,
+          });
+      }
       if (question.defaultValue !== undefined) {
         if (question.calculation)
           throw new CompileError('DEFAULT_CALCULATION_CONFLICT');

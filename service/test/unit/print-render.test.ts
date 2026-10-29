@@ -276,9 +276,22 @@ void test('compiler warnings use canonical paths and explain the client-specific
   assert.ok(html.includes('raw submission remains retained for audit'));
 });
 
+void test('reviewer warnings explain that JavaScript is never collector validation', () => {
+  const { form, mappings } = reviewerFixture();
+  form.questions[1]!.validationScript = 'AUTHOR_SCRIPT_SENTINEL';
+  const result = renderPrintView(form, mappings);
+  assert.ok(result.ok);
+  if (!result.ok) return;
+  assert.ok(result.html.includes('VALIDATION_SCRIPT_NOT_EXECUTED'));
+  assert.ok(result.html.includes('VALIDATION_SCRIPT_WITHOUT_PORTABLE_RULE'));
+  assert.ok(result.html.includes('never executed or delivered'));
+  assert.ok(result.html.includes('receive no equivalent validation rule'));
+  assert.ok(!result.html.includes('AUTHOR_SCRIPT_SENTINEL'));
+});
+
 void test('invalid/unsupported definitions and malformed mapping summaries return diagnostics with no partial HTML', () => {
   const { form, mappings } = reviewerFixture();
-  form.questions[1]!.validationScript = 'AUTHOR_SECRET_THROW';
+  form.questions[1]!.prefillSource = 'AUTHOR_SECRET_THROW';
   const rejected = renderPrintView(form, mappings);
   assert.deepEqual(rejected, compileForm(form));
   assert.ok(!JSON.stringify(rejected).includes('AUTHOR_SECRET_THROW'));

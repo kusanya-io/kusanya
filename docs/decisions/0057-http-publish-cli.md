@@ -117,12 +117,12 @@ hostile inputs, cookie attributes, bounded response bodies, accessor/proxy refus
 credential non-reflection and the compiled executable's stdin-only contract.
 
 This advances note 34's publish-CLI strand. It does not by itself prove the seven
-supplied forms publish from a real CI identity, so C10 test 12 and the Phase 1 gate
-are not claimed. Scheduled reconciliation and retention, unlinked Salesforce File
+supplied forms publish from a real CI identity (C10.11), or prove portable
+validation in stock Collect (C10.12), so the Phase 1 gate is not claimed. Scheduled reconciliation and retention, unlinked Salesforce File
 cleanup, privileged retry, disconnect/rebind and the ODK Validate runtime assets
 also remain future units. Note 39 remains open.
 
 ## Revisit when
 
-Running C10 test 12, selecting the production CI workload identity, adding scheduled
+Running C10.11, separately running C10.12, selecting the production CI workload identity, adding scheduled
 reconciliation, or changing the administrator session and publication contracts.

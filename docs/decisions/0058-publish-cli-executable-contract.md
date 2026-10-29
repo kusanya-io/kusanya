@@ -98,8 +98,9 @@ cleanup, and removes all generated certificates and database rows. The test-only
 OpenSSL package increases the test image but not the runtime image.
 
 This unit answers notes 123, 124 and 125 if independently verified. It claims no C10
-acceptance test: C10 test 12 still requires the seven supplied forms through the
-selected real CI workload identity. Note 39 and the remaining note 34 strands remain
+acceptance test: C10.11 still requires the seven supplied forms through a selected
+real CI workload identity, and C10.12 separately requires stock-Collect validation
+equivalence. Note 39 and the remaining note 34 strands remain
 open.
 
 A follow-up folds every administrator request-cookie reader into the same module;
@@ -112,4 +113,4 @@ they do not change the CLI, route authority or acceptance-test claims above.
 ## Revisit when
 
 Changing the administrator cookie, CLI output or exit contract, replacing Node's
-global fetch, selecting the production workload identity, or running C10 test 12.
+global fetch, selecting the production workload identity, or running C10.11/C10.12.

@@ -132,14 +132,15 @@ integer and six fractional digits; no exponent notation or silent rounding.
 Numeric skip range ordering uses scaled integers to preserve the authored decimal
 comparison. General runtime XPath arithmetic is not a fixed-point engine.
 
-Unsupported configured features fail compilation: `end`, JavaScript validation,
-prefill sources, cascade filters/scores, same-page flag, repeat-as-table flag,
+Unsupported configured features fail compilation: `end`, prefill sources,
+cascade filters/scores, same-page flag, repeat-as-table flag,
 live-photo enforcement, media duration limits, unsupported appearances/defaults
 and open-repeat maxima. False/unset options retain their default meaning. The
 explicit `field-list` appearance is allowed only on sections whose immediate
 children are non-containers. Existing drafts may store unsupported options; this
-unit does not promise that every saved definition compiles. In particular,
-rejecting JavaScript does not complete C10.12.
+unit does not promise that every saved definition compiles. ADR 0060 supersedes
+this ADR's original JavaScript rejection: scripts remain opaque and unexecuted,
+while portable constraints compile with explicit warnings.
 
 ### Validation tooling and planned runtime matrix
 
@@ -154,7 +155,7 @@ The probe refuses a different JAR hash and requires malformed-form and invalid-X
 negative controls to fail as well as four valid fixtures to pass.
 
 For later runtime compatibility work, plan to test
-[ODK Collect v2026.3.4](https://github.com/getodk/collect/releases/tag/v2026.3.4) and
+[ODK Collect v2026.3.5](https://github.com/getodk/collect/releases/tag/v2026.3.5) (advanced from the original v2026.3.4 target by ADR 0060) and
 [Enketo Core 7.2.5](https://github.com/enketo/enketo-core/releases/tag/7.2.5).
 These are test-matrix targets, not a deployed/approved Enketo
 server selection, installed dependencies, or a compatibility/security claim.
