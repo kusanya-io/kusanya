@@ -92,11 +92,14 @@ and retention, executable ingestion of the package-pinned repeat-count policy, a
 general edited-XLSForm import.
 No model unit claims C10 tests 10/12. Do not mark Phase 1 complete from model tests.
 
-ADR 0044 adds the unmounted administrator browser composition: a trusted injected
+ADR 0044 adds the administrator browser composition: a trusted injected
 login verifier issues the exact host-only cookie, a live same-origin bootstrap
 returns CSRF, and database-first logout clears both server row and browser cookie.
-Both browser adapters now refuse hosts with automatic request logging, closing note 94. External identity selection, mounting/secret wiring and the actor-to-Salesforce
-`005` audit remain under note 34.
+Both browser adapters now refuse hosts with automatic request logging, closing note 94.
+External identity selection, mounting/secret wiring and the actor-to-Salesforce
+`005` audit were subsequently supplied by ADRs 0045, 0050 and 0059. The Salesforce
+authorization start and callback now share the mounted production composition;
+privileged disconnect/rebind remains under note 34.
 
 The runtime-regression unit (ADR 0015) adds optional Enketo 9.0.1/JavaRosa 6.0.0
 engine probes. Bill's later Collect v2026.3.4 emulator run confirmed nested count

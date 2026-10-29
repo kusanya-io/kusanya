@@ -9,6 +9,7 @@ import {
 } from '../../src/publication-surface.js';
 import { AdministratorSessionError } from '../../src/tenant/administrator-session.js';
 import { AdministratorOidcError } from '../../src/tenant/oidc-login.js';
+import { TenantOAuthTransactionStore } from '../../src/tenant/oauth-authorization.js';
 
 const config = readConfig({
   DATABASE_URL: 'postgresql://kusanya@localhost:5432/kusanya',
@@ -67,6 +68,22 @@ function dependencies(): PublicationSurfaceDependencies {
       async withRefreshLock() {
         throw new Error('not reached');
       },
+      async saveAuthorization() {
+        throw new Error('not reached');
+      },
+    },
+    oauthTransactionStore: new TenantOAuthTransactionStore({
+      async query() {
+        return { rowCount: 1, rows: [] };
+      },
+    }),
+    oauthConfiguration: {
+      clientId: 'synthetic-client',
+      clientSecret: 'synthetic-secret',
+      redirectUri: `${origin}/api/admin/salesforce/callback`,
+      stateSecret: Buffer.alloc(32, 2).toString('base64'),
+      timeoutMs: 1000,
+      transactionTtlSeconds: 300,
     },
     attemptStore: {
       async start() {
@@ -106,7 +123,7 @@ function dependencies(): PublicationSurfaceDependencies {
   };
 }
 
-void test('the real app mounts login, CSRF, publication and least-data presentation', async (contextTest) => {
+void test('the real app mounts login, Salesforce authorization, publication and presentation', async (contextTest) => {
   const app = createApp(
     config,
     { async ping() {}, async close() {} },
@@ -171,6 +188,39 @@ void test('the real app mounts login, CSRF, publication and least-data presentat
   });
   assert.equal(retained.statusCode, 200);
   assert.deepEqual(retained.json(), { deletedCount: 0 });
+  const authorization = await app.inject({
+    method: 'POST',
+    url: '/api/admin/salesforce/authorization',
+    headers: {
+      origin,
+      cookie: `__Host-kusanya_admin_session=${opaqueSession}`,
+      'x-csrf-token': csrfToken,
+    },
+  });
+  assert.equal(authorization.statusCode, 303);
+  const location = new URL(String(authorization.headers.location));
+  assert.equal(location.origin, 'https://login.salesforce.com');
+  assert.equal(location.searchParams.get('client_id'), 'synthetic-client');
+  assert.match(
+    String(authorization.headers['set-cookie']),
+    /^__Host-kusanya_oauth_binding=[0-9a-f]{64}; Path=\/; Max-Age=300; Secure; HttpOnly; SameSite=Lax$/,
+  );
+  assert.equal(authorization.headers['cache-control'], 'no-store');
+  const callback = await app.inject({
+    method: 'GET',
+    url: `/api/admin/salesforce/callback?state=${'a'.repeat(43)}&code=synthetic-code`,
+    headers: {
+      cookie:
+        `__Host-kusanya_oauth_binding=${'0'.repeat(64)}; ` +
+        '__Host-kusanya_admin_session=malformed',
+    },
+  });
+  assert.equal(callback.statusCode, 401);
+  assert.deepEqual(callback.json(), { error: 'Authentication required' });
+  assert.equal(
+    callback.headers['set-cookie'],
+    '__Host-kusanya_oauth_binding=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax',
+  );
   const operatorInterface = await app.inject({
     method: 'GET',
     url: '/admin',
@@ -467,6 +517,26 @@ void test('composition refuses an unhardened host and any missing capability', a
         }),
       /PUBLICATION_SURFACE_CONFIGURATION/,
       key,
+    );
+    await app.close();
+  }
+  for (const [storeName, method] of [
+    ['oauthTransactionStore', 'begin'],
+    ['oauthTransactionStore', 'consume'],
+    ['connectionStore', 'saveAuthorization'],
+  ] as const) {
+    const app = createApp(config, { async ping() {}, async close() {} }, false);
+    const base = dependencies();
+    const store = { ...base[storeName] } as Record<string, unknown>;
+    delete store[method];
+    assert.throws(
+      () =>
+        registerPublicationSurface(app, {
+          ...base,
+          [storeName]: store,
+        }),
+      /PUBLICATION_SURFACE_CONFIGURATION/,
+      `${storeName}.${method}`,
     );
     await app.close();
   }

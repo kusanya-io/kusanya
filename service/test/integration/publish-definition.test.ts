@@ -27,6 +27,7 @@ import {
 } from '../../src/tenant/connection-store.js';
 import { createTenantCredentialVault } from '../../src/tenant/credential-vault.js';
 import { AdministratorOidcError } from '../../src/tenant/oidc-login.js';
+import { TenantOAuthTransactionStore } from '../../src/tenant/oauth-authorization.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const databaseRequired = process.env.REQUIRE_DATABASE_TESTS === 'true';
@@ -172,6 +173,13 @@ void test(
     });
     const sessionStore = new AdministratorSessionStore(executor);
     const attemptStore = new PublicationAttemptStore(executor);
+    const connectionStore = new TenantConnectionStore(
+      executor,
+      createTenantCredentialVault({
+        activeKeyId: 'test',
+        keys: { test: Buffer.alloc(32, 74).toString('base64') },
+      }),
+    );
     const temporary = await mkdtemp(join(tmpdir(), 'kusanya-publish-cli-'));
     const resources: {
       app?: FastifyInstance;
@@ -261,13 +269,16 @@ void test(
         invitationStore: new AdministratorInvitationStore(executor),
         invitationConfiguration: { ttlSeconds: 3600 },
         sessionConfiguration,
-        connectionStore: new TenantConnectionStore(
-          executor,
-          createTenantCredentialVault({
-            activeKeyId: 'test',
-            keys: { test: Buffer.alloc(32, 74).toString('base64') },
-          }),
-        ),
+        connectionStore,
+        oauthTransactionStore: new TenantOAuthTransactionStore(executor),
+        oauthConfiguration: {
+          clientId: 'synthetic-client',
+          clientSecret: 'synthetic-secret',
+          redirectUri: `${externalOrigin}/api/admin/salesforce/callback`,
+          stateSecret: Buffer.alloc(32, 75).toString('base64'),
+          timeoutMs: 1000,
+          transactionTtlSeconds: 300,
+        },
         attemptStore,
         publisherConfiguration: {
           clientId: 'synthetic-client',

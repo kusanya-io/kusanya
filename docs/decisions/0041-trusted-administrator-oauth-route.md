@@ -41,7 +41,9 @@ configured callback URL before routes can register.
 
 This began as a composition contract, not an identity provider. ADR 0050 later
 selects OIDC, wires the session issuer/verifier and mounts the approved publication
-surface; the separate Salesforce connection adapter remains outside that surface.
+surface; ADR 0059 subsequently mounts the Salesforce connection adapter inside that
+same fail-closed surface after its identity, role, audit and secret prerequisites
+were independently verified.
 The composition may not
 derive context from a reverse-proxy header unless that header has a separately
 reviewed, cryptographically authenticated boundary.
@@ -102,14 +104,14 @@ This advances note 34 through a reviewable HTTP adapter but does not close it. A
 0042 supplies the internal session issuer and immutable provisioning store, but a
 concrete identity verifier and approved provisioning operator, deployment secret
 wiring, privileged disconnect/rebind, final publisher composition
-and publish CLI remain. The adapter is intentionally absent from the running app and
-OpenAPI until those mounting requirements are implemented. No live Salesforce grant,
+and publish CLI remain. ADR 0059 implements those mounting requirements and
+publishes the two route contracts in OpenAPI. No live Salesforce grant,
 metadata, package, scratch org, C10 acceptance test, publish-ready state or Phase 1
 completion is claimed.
 
 ## Revisit when
 
-The administrator identity provider and provisioning workflow are selected, the
-routes are mounted, actor/Salesforce-user audits are persisted, privileged rebind or
+The administrator identity provider or provisioning workflow changes,
+actor/Salesforce-user audits change, privileged rebind or
 disconnect is exposed, the public origin changes, or multiple concurrent grants per
 tenant are required.

@@ -380,7 +380,7 @@ export class TenantOAuthTransactionStore {
 }
 
 export async function beginTenantSalesforceAuthorization(
-  store: TenantOAuthTransactionStore,
+  store: Pick<TenantOAuthTransactionStore, 'begin'>,
   inputValue: StartTenantAuthorizationInput,
   configurationValue: TenantOAuthConfiguration,
 ): Promise<TenantAuthorizationStart> {
@@ -684,7 +684,7 @@ async function exchangeAuthorizationCode(
 }
 
 export async function completeTenantSalesforceAuthorization(
-  transactionStore: TenantOAuthTransactionStore,
+  transactionStore: Pick<TenantOAuthTransactionStore, 'consume'>,
   connectionStore: Pick<TenantConnectionStore, 'saveAuthorization'>,
   trustedActorId: string,
   callbackValue: TenantAuthorizationCallback,

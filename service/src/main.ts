@@ -7,6 +7,7 @@ import { readPublicationSurfaceRuntimeConfig } from './runtime-config.js';
 import { AdministratorSessionStore } from './tenant/administrator-session.js';
 import { AdministratorInvitationStore } from './tenant/administrator-invitation.js';
 import { TenantConnectionStore } from './tenant/connection-store.js';
+import { TenantOAuthTransactionStore } from './tenant/oauth-authorization.js';
 import { createAdministratorOidcIdentity } from './tenant/oidc-login.js';
 
 async function main(): Promise<void> {
@@ -28,16 +29,19 @@ async function main(): Promise<void> {
   const sessionStore = new AdministratorSessionStore(executor);
   const invitationStore = new AdministratorInvitationStore(executor);
   const attemptStore = new PublicationAttemptStore(executor);
+  const connectionStore = new TenantConnectionStore(
+    executor,
+    runtime.credentialVault,
+  );
   const app = createApp(config, database, true, {
     administratorIdentity,
     sessionStore,
     invitationStore,
     invitationConfiguration: runtime.invitation,
     sessionConfiguration: runtime.session,
-    connectionStore: new TenantConnectionStore(
-      executor,
-      runtime.credentialVault,
-    ),
+    connectionStore,
+    oauthTransactionStore: new TenantOAuthTransactionStore(executor),
+    oauthConfiguration: runtime.oauth,
     attemptStore,
     publisherConfiguration: runtime.publisher,
     validateXForm: createOdkValidateValidator(runtime.validator),

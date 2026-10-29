@@ -22,6 +22,12 @@ import type {
 } from './tenant/administrator-session.js';
 import { AdministratorSessionError } from './tenant/administrator-session.js';
 import type { AdministratorOidcIdentity } from './tenant/oidc-login.js';
+import type { TenantConnectionStore } from './tenant/connection-store.js';
+import type {
+  TenantOAuthConfiguration,
+  TenantOAuthTransactionStore,
+} from './tenant/oauth-authorization.js';
+import { registerTenantOAuthRoutes } from './tenant/oauth-routes.js';
 import type { TenantConnectionSessionStore } from './tenant/salesforce-session.js';
 
 export interface PublicationSurfaceDependencies {
@@ -36,7 +42,13 @@ export interface PublicationSurfaceDependencies {
   >;
   readonly invitationConfiguration: AdministratorInvitationConfiguration;
   readonly sessionConfiguration: AdministratorSessionConfiguration;
-  readonly connectionStore: TenantConnectionSessionStore;
+  readonly connectionStore: TenantConnectionSessionStore &
+    Pick<TenantConnectionStore, 'saveAuthorization'>;
+  readonly oauthTransactionStore: Pick<
+    TenantOAuthTransactionStore,
+    'begin' | 'consume'
+  >;
+  readonly oauthConfiguration: TenantOAuthConfiguration;
   readonly attemptStore: Pick<
     PublicationAttemptStore,
     'start' | 'complete' | 'listForOperator' | 'applyRetention'
@@ -81,6 +93,8 @@ function checkedDependencies(
     'externalOrigin',
     'invitationConfiguration',
     'invitationStore',
+    'oauthConfiguration',
+    'oauthTransactionStore',
     'publisherConfiguration',
     'sessionConfiguration',
     'sessionStore',
@@ -107,7 +121,8 @@ function checkedDependencies(
       ['issue', 'authenticate', 'deprovision', 'changeRole', 'revoke'],
     ],
     [decoded.invitationStore, ['accept', 'issue', 'revoke']],
-    [decoded.connectionStore, ['withRefreshLock']],
+    [decoded.connectionStore, ['withRefreshLock', 'saveAuthorization']],
+    [decoded.oauthTransactionStore, ['begin', 'consume']],
     [
       decoded.attemptStore,
       ['start', 'complete', 'listForOperator', 'applyRetention'],
@@ -193,6 +208,24 @@ export function registerPublicationSurface(
     actorIdForSubject: dependencies.administratorIdentity.actorIdForSubject,
     invitationStore: invitationRoutesStore,
     invitationConfiguration: dependencies.invitationConfiguration,
+    externalOrigin: dependencies.externalOrigin,
+  });
+  registerTenantOAuthRoutes(app, {
+    authenticateAdministrator,
+    transactionStore: Object.freeze({
+      begin: dependencies.oauthTransactionStore.begin.bind(
+        dependencies.oauthTransactionStore,
+      ),
+      consume: dependencies.oauthTransactionStore.consume.bind(
+        dependencies.oauthTransactionStore,
+      ),
+    }),
+    connectionStore: Object.freeze({
+      saveAuthorization: dependencies.connectionStore.saveAuthorization.bind(
+        dependencies.connectionStore,
+      ),
+    }),
+    oauthConfiguration: dependencies.oauthConfiguration,
     externalOrigin: dependencies.externalOrigin,
   });
   registerPublicationRoutes(app, {

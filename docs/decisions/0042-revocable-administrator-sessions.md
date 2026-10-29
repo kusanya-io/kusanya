@@ -1,6 +1,6 @@
 # ADR 0042: Revocable administrator sessions and immutable provisioning
 
-- Status: Accepted; verified in PR #77 and refined by ADRs 0043-0044
+- Status: Accepted; verified in PR #77 and refined by ADRs 0043-0044 and 0059
 - Date: 2026-10-19
 - Brief sections: C1.3a, C2, C4 Tenant Connection, C8, C11 Phase 1
 - Decision owner: Cobitech Solutions
@@ -8,8 +8,8 @@
 
 ## Context
 
-ADR 0041 defines an unmounted OAuth route adapter but deliberately injects its
-administrator-session verifier. A concrete verifier must not accept a tenant header,
+ADR 0041 originally defined the OAuth route adapter unmounted and deliberately
+injected its administrator-session verifier; ADR 0059 later mounts it. A concrete verifier must not accept a tenant header,
 turn an attacker-selected pre-login cookie into an authenticated session, or cache a
 revoked assertion. The same actor must not silently move between tenants or expected
 Salesforce orgs. Independent review also raised note 95: logout or revocation between

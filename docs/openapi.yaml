@@ -295,6 +295,78 @@ paths:
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Rejected' }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /api/admin/salesforce/authorization:
+    post:
+      operationId: startTenantSalesforceAuthorization
+      summary: Begin one administrator-bound Salesforce authorization grant
+      description: >-
+        Administrator only. The request has no body, query or tenant selector.
+        The redirect and browser-binding cookie contain no refresh token.
+      security: [{ administratorSession: [], csrfToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      responses:
+        '303':
+          description: Redirect to the tenant's configured Salesforce authorization origin
+          headers:
+            Location:
+              schema: { type: string, format: uri }
+            Set-Cookie:
+              description: Secure HttpOnly host-only SameSite=Lax one-time browser binding
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string, const: no-store }
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Rejected' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/admin/salesforce/callback:
+    get:
+      operationId: completeTenantSalesforceAuthorization
+      summary: Complete the one-time Salesforce authorization callback
+      description: >-
+        Requires the exact still-live initiating administrator session and its
+        one-time browser binding. Supply exactly state plus either code or error;
+        an optional error_description is discarded and never reflected or logged.
+      security: [{ administratorSession: [], oauthBrowserBinding: [] }]
+      parameters:
+        - name: state
+          in: query
+          required: true
+          schema: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+        - name: code
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 4096 }
+        - name: error
+          in: query
+          required: false
+          schema: { type: string, pattern: '^[A-Za-z0-9_.-]{1,256}$' }
+        - name: error_description
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 1024 }
+      responses:
+        '200':
+          description: Encrypted tenant connection and authorization audit committed atomically
+          headers:
+            Set-Cookie:
+              description: Expires the one-time browser-binding cookie
+              schema: { type: string }
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status]
+                properties:
+                  status: { type: string, const: connected }
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Rejected' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /api/admin/salesforce/publications:
     post:
       operationId: publishSalesforceDefinition
@@ -412,6 +484,10 @@ components:
       type: apiKey
       in: header
       name: X-CSRF-Token
+    oauthBrowserBinding:
+      type: apiKey
+      in: cookie
+      name: __Host-kusanya_oauth_binding
   parameters:
     ExactOrigin:
       name: Origin
