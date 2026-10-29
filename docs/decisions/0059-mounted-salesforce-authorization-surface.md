@@ -84,7 +84,8 @@ capability in turn and keep the unsafe-logger refusal. Route tests pin 401 for e
 illegal, short and long administrator cookies on both start and callback while the
 existing hostile callback matrix continues to pin 400 for protocol input. Runtime
 tests remove every new environment setting and exercise both bounds and malformed
-secrets. The OpenAPI tripwire refuses tenant selectors or credential fields.
+secrets. The published OpenAPI contract contains no tenant selector or credential
+field.
 
 This advances note 34 by mounting tenant connection authorization and closes note 128. It does not add privileged disconnect/rebind, scheduled reconciliation,
 privileged retry, unlinked File cleanup, a real CI workload publication, ODK Validate
