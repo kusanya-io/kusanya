@@ -299,9 +299,14 @@ ADR 0056 adds administrator-only, database-policy-owned retention for publicatio
 attempts. Each call has no selector and removes at most 100 old safely terminal rows
 from the live tenant. PostgreSQL protects unresolved, indeterminate and unlinked
 evidence, rechecks the actor's live full-administrator role, and writes a surviving
-per-attempt audit in the same transaction. Privileged connection lifecycle,
-invitation delivery, scheduled reconciliation and CLI work remain outside this
-boundary.
+per-attempt audit in the same transaction. ADR 0057 adds a stdin-driven CLI/CI client
+of the same mounted HTTPS composition. It exchanges a short-lived Kusanya API OIDC
+token for the hardened host session, obtains CSRF, calls the durable publication
+route and logs out. It accepts no tenant, org, namespace or Salesforce credential,
+and it has no database, vault or direct publisher capability. Partial, unresolved
+and uncertain transport results direct the operator to durable history rather than
+authorizing a retry. Privileged connection lifecycle, invitation delivery and
+scheduled reconciliation remain outside this boundary.
 
 Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
 blocked. Source stays namespace-local with an empty project namespace. The pure
