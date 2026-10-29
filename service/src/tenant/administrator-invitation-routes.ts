@@ -18,10 +18,9 @@ import {
   type AdministratorRole,
   type TrustedAdministratorContext,
 } from './administrator-session.js';
+import { readAdministratorSessionCookie } from './administrator-cookie.js';
 
 const invitationPath = '/api/admin/administrator-invitations';
-const cookieName = '__Host-kusanya_admin_session';
-const sessionPattern = /^[A-Za-z0-9_-]{43}$/;
 const csrfPattern = /^[A-Za-z0-9_-]{43}$/;
 const invitationIdPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -114,17 +113,11 @@ function emptyQuery(request: FastifyRequest): boolean {
 }
 
 function cookieValue(request: FastifyRequest): string | undefined {
-  const header = request.headers.cookie;
-  if (header === undefined) return undefined;
-  const matches: string[] = [];
-  for (const part of header.split(';')) {
-    const separator = part.indexOf('=');
-    if (separator < 1) throw new AdministratorInvitationInputError();
-    if (part.slice(0, separator).trim() === cookieName)
-      matches.push(part.slice(separator + 1).trim());
+  try {
+    return readAdministratorSessionCookie(request.headers.cookie);
+  } catch {
+    throw new AdministratorInvitationInputError();
   }
-  if (matches.length > 1) throw new AdministratorInvitationInputError();
-  return matches[0];
 }
 
 function safeEqual(left: string, right: string): boolean {
@@ -145,7 +138,7 @@ async function authorize(
   dependencies: AdministratorInvitationRouteDependencies,
 ): Promise<TrustedAdministratorContext> {
   const opaqueSession = cookieValue(request);
-  if (opaqueSession === undefined || !sessionPattern.test(opaqueSession))
+  if (opaqueSession === undefined)
     throw new AdministratorInvitationInputError();
   return decodeTrustedAdministratorContext(
     await dependencies.authenticateAdministrator(opaqueSession),

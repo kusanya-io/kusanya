@@ -5,6 +5,7 @@ import {
   AdministratorSessionCookieError,
   isAdministratorSessionValue,
   parseAdministratorSessionSetCookie,
+  readAdministratorSessionCookie,
   serializeAdministratorSessionCookie,
 } from '../../src/tenant/administrator-cookie.js';
 
@@ -62,6 +63,27 @@ void test('server serialization refuses unsafe values and lifetimes', () => {
   ] as const)
     assert.throws(
       () => serializeAdministratorSessionCookie(value, maxAge),
+      AdministratorSessionCookieError,
+    );
+});
+
+void test('every route reads one administrator session through the shared contract', () => {
+  assert.equal(readAdministratorSessionCookie(undefined), undefined);
+  assert.equal(readAdministratorSessionCookie('ordinary=value'), undefined);
+  assert.equal(
+    readAdministratorSessionCookie(
+      `ordinary=value; ${administratorSessionCookieName}=${opaqueSession}`,
+    ),
+    opaqueSession,
+  );
+  for (const header of [
+    null,
+    'malformed',
+    `${administratorSessionCookieName}=short`,
+    `${administratorSessionCookieName}=${opaqueSession}; ${administratorSessionCookieName}=${opaqueSession}`,
+  ])
+    assert.throws(
+      () => readAdministratorSessionCookie(header),
       AdministratorSessionCookieError,
     );
 });

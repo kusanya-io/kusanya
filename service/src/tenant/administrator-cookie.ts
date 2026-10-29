@@ -21,6 +21,29 @@ export function isAdministratorSessionValue(value: unknown): value is string {
   return typeof value === 'string' && sessionPattern.test(value);
 }
 
+/** Read one valid administrator session from a Cookie header, never duplicates. */
+export function readAdministratorSessionCookie(
+  header: unknown,
+): string | undefined {
+  if (header === undefined) return undefined;
+  if (typeof header !== 'string') fail();
+  const matches: string[] = [];
+  for (const part of header.split(';')) {
+    const separator = part.indexOf('=');
+    if (separator < 1) fail();
+    if (part.slice(0, separator).trim() === cookieName)
+      matches.push(part.slice(separator + 1).trim());
+  }
+  if (matches.length > 1) fail();
+  const opaqueSession = matches[0];
+  if (
+    opaqueSession !== undefined &&
+    !isAdministratorSessionValue(opaqueSession)
+  )
+    fail();
+  return opaqueSession;
+}
+
 /** Emit the sole canonical Set-Cookie form; an empty value is only for clearing. */
 export function serializeAdministratorSessionCookie(
   value: string,

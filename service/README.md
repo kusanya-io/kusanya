@@ -194,6 +194,10 @@ through real TLS and the real mounted application. OpenSSL exists only in the te
 container stage to generate a temporary localhost certificate; it is absent from the
 runtime image.
 
+The real-TLS integration test requires OpenSSL. Set `OPENSSL_EXECUTABLE` to its
+absolute executable path when `openssl` is not on `PATH`; Windows otherwise uses
+`C:\Program Files\Git\usr\bin\openssl.exe`.
+
 Only a live `administrator` may run publication-attempt retention from the operator
 interface. The request supplies no tenant, cutoff, status or attempt identifier.
 PostgreSQL applies the tenant's stored policy (90 days by default, constrained to
