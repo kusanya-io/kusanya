@@ -29,9 +29,15 @@ test('definition import REST boundary is narrow, bounded and non-disclosing', ()
     resource.indexOf("checkPermission('Import_Kusanya_Definition')") <
       resource.indexOf('request.requestBody'),
   );
+  assert.match(resource, /rejectDuplicateKeys\(requestText\)/);
+  assert.match(resource, /adaptReservedWireKeys\(requestText\)/);
   assert.match(
     resource,
-    /rejectDuplicateKeys\(request\.requestBody\.toString\(\)\)/,
+    /moveWireKey\(\(Map<String, Object>\) value, 'hint', 'hintValue'\)/,
+  );
+  assert.match(
+    resource,
+    /moveWireKey\(\(Map<String, Object>\) value, 'join', 'joinValue'\)/,
   );
   assert.match(resource, /JSON\.deserializeStrict\(/);
   assert.equal(
@@ -97,6 +103,8 @@ test('hosted tests cover full graph, late rollback, duplicates and denied users'
     /refusesMalformedOversizedAndUngrantedRequestsBeforeDml/,
   );
   assert.match(source, /"schemaVersion":1,"schemaVersion":1/);
+  assert.match(source, /'"hintValue":'/);
+  assert.match(source, /'"joinValue":'/);
   assert.match(source, /AUTHOR_ONLY_IMPORT_SENTINEL/);
   assert.match(source, /Limits\.getDmlStatements\(\)/);
 });

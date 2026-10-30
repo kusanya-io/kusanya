@@ -449,9 +449,7 @@ export function importEditedXlsFormTables(
     const editable: QuestionDefinition[] = prepared.graph.nodes.map((node) => ({
       ...node.definition,
     }));
-    const byName = new Map(
-      editable.map((question) => [question.name, question]),
-    );
+    const changedRelevance = new Set<string>();
     let questionIndex = 0;
     for (let rowIndex = 0; rowIndex < actualSurvey.length; rowIndex++) {
       location = `tables.sheets.survey[${rowIndex}]`;
@@ -503,6 +501,7 @@ export function importEditedXlsFormTables(
         );
       if (actual[10] !== expected[10]) {
         setQuestionText(question, 'relevant', optionalText(actual[10]!));
+        changedRelevance.add(question.name);
       }
       if (actual[11] !== expected[11])
         setQuestionText(question, 'appearance', optionalText(actual[11]!));
@@ -579,11 +578,9 @@ export function importEditedXlsFormTables(
       },
       questions: editable,
       choiceLists,
-      skipRules: source.bundle.definition.skipRules.filter((rule) => {
-        const question = byName.get(rule.question)!;
-        const original = prepared.graph.byName.get(rule.question)!.definition;
-        return question.relevant === original.relevant;
-      }),
+      skipRules: source.bundle.definition.skipRules.filter(
+        (rule) => !changedRelevance.has(rule.question),
+      ),
     };
     const edited = exportAuthoringBundle(definition, source.bundle.mappings);
     if (!edited.ok) return edited;
@@ -596,15 +593,24 @@ export function importEditedXlsFormTables(
       location = `tables.sheets.${name}`;
       const actual = tables.sheets[name];
       const expected = regenerated.tables.sheets[name];
-      if (
-        actual.length !== expected.length ||
-        actual.some(
-          (row, rowIndex) =>
-            row.length !== expected[rowIndex]!.length ||
-            row.some((cell, column) => cell !== expected[rowIndex]![column]),
-        )
-      )
+      const original = baseline.tables.sheets[name];
+      if (actual.length !== expected.length)
         return failure('XLSFORM_EDIT_PROJECTION', location);
+      for (let rowIndex = 0; rowIndex < actual.length; rowIndex++) {
+        if (actual[rowIndex]!.length !== expected[rowIndex]!.length) {
+          location = `tables.sheets.${name}[${rowIndex}]`;
+          return failure('XLSFORM_EDIT_PROJECTION', location);
+        }
+        for (let column = 0; column < actual[rowIndex]!.length; column++) {
+          if (
+            actual[rowIndex]![column] !== expected[rowIndex]![column] &&
+            actual[rowIndex]![column] !== original[rowIndex]![column]
+          ) {
+            location = `tables.sheets.${name}[${rowIndex}][${column}]`;
+            return failure('XLSFORM_EDIT_PROJECTION', location);
+          }
+        }
+      }
     }
     return edited;
   } catch (error) {

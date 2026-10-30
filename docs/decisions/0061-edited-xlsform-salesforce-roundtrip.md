@@ -38,6 +38,13 @@ replaces the specialized regex/minimum/maximum source fields. A changed relevanc
 replaces the stored skip rules targeting that question. Unprojected mappings,
 Author Notes and validation-script source remain from `kusanya_source`.
 
+Expression cells are editable only in the compiler printer's canonical spelling;
+the importer reports the exact noncanonical cell without echoing its text. When one
+edit changes another generated cell, such as switching a repeat from fixed to an
+answer count, that dependent cell may retain its original exported value and is
+recomputed from the returned definition. Clearing skip-derived relevance removes
+the corresponding stored rules.
+
 The source sheet is consistency data, not a signature. After translating edits,
 the importer regenerates the complete profile and requires every visible cell to
 equal the canonical result. The same ZIP, XML, formula, package and resource bounds
@@ -50,6 +57,10 @@ Add an integration-only Apex REST resource at
 `/services/apexrest/v1/definitions/import`. It accepts schema version 1 portable
 definition and mapping objects, never Salesforce record IDs. The service validates
 bounds, portable keys, API-name grammar and all portable references before DML.
+Because Apex reserves `hint` and `join` as identifiers, the resource first moves
+those two exact public keys to private DTO names at their schema-defined paths;
+private spellings in input are refused and strict DTO decoding still rejects every
+unknown field. The wire contract remains `hint`/`join` in both directions.
 It then inserts one Draft Form, Draft Form Version and their questions, choices,
 skip rules and mappings under a savepoint. Every DML operation uses user mode. Any
 late trigger, picklist, CRUD/FLS or relationship failure rolls back the entire
@@ -61,10 +72,12 @@ Describe customer targets, read target records, select credentials, create users
 or grant collectors Salesforce access. Existing publication validation remains
 responsible for target-object compatibility.
 
-Portable choice-list names are retained in Salesforce `Name` and emitted unchanged
-by the snapshot reader when unique and valid. Pre-existing human or duplicate names
-continue to receive deterministic snapshot-local keys. Salesforce has no portable
-Form key field, so the exact comparison normalises only `definition.form.key`.
+Choice List and Mapping `Name` remain human-readable model fields, not stable export
+identities. The existing snapshot reader assigns deterministic snapshot-local keys
+and resolves every relationship through those keys. They do not affect compiled XML:
+choices are inlined and mappings are outside the compiler definition. Salesforce
+has no portable Form key field, so the XML comparison normalises
+`definition.form.key`, the only generated identity that reaches those bytes.
 
 ### C10.10 harness
 
@@ -73,7 +86,8 @@ per-request access-token provider. It sends exactly two bounded, non-redirecting
 HTTPS requests to one Salesforce origin: atomic import, then the existing read-only
 definition snapshot. It compiles the imported workbook and returned snapshot after
 normalising the Form key, and succeeds only when the XML strings are byte-identical.
-It reports both SHA-256 values; matching hashes never substitute for byte comparison.
+It derives the request count at the injected transport and reports both SHA-256
+values on success and mismatch; matching hashes never substitute for byte comparison.
 
 The harness stores no credential, does not retry, does not publish and does not
 claim the imported Draft is production-ready. C10.10 passes only after the verifier

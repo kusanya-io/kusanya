@@ -189,7 +189,12 @@ question labels and collector hints, required/read-only/default/calculation/
 constraint/relevance/appearance/repeat options, and choice labels. Mappings, Author
 Notes and validation-script source are retained from `kusanya_source` because the
 visible sheets cannot represent them. Canonical regeneration must explain every
-visible edit; there is no best-effort or partial import.
+visible edit; there is no best-effort or partial import. Expression edits must use
+the compiler printer's canonical parentheses and spacing, and a refusal identifies
+the exact cell without reflecting its contents. Clearing generated relevance drops
+its skip rules. Dependent generated cells may remain at their original exported
+value when another accepted edit changes them; the returned definition recomputes
+their canonical value.
 
 `verifySalesforceXlsFormRoundTrip` from
 `service/dist/src/interchange/salesforce-roundtrip.js` combines that importer with
@@ -197,7 +202,9 @@ the integration-only Salesforce boundaries. The caller injects one exact
 `*.salesforce.com` origin and a fresh token provider. The harness makes exactly two
 POST requests: `/v1/definitions/import`, then `/v1/publications/definition`. It
 normalises only the generated Form key and requires compiled XForm XML byte
-equality, returning both SHA-256 values. It performs no retry or publication.
+equality, returning a measured request count and both SHA-256 values on success or
+mismatch. Snapshot-local Choice List and Mapping keys resolve relationships but do
+not enter compiled XML. The harness performs no retry or publication.
 
 The Apex import is all-or-none under a savepoint and user-mode DML. It creates a
 Draft Form and Draft Form Version only; target Describe validation still occurs at

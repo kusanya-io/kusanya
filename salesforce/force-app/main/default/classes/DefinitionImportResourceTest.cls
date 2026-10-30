@@ -16,7 +16,7 @@ private class DefinitionImportResourceTest {
             RestResponse response = invoke(
                 'POST',
                 'application/json',
-                JSON.serialize(sample())
+                wire(sample())
             );
             Assert.areEqual(201, response.statusCode);
             Map<String, Object> result = (Map<String, Object>) JSON.deserializeUntyped(
@@ -46,12 +46,16 @@ private class DefinitionImportResourceTest {
             Assert.areEqual(3, questions.size());
             List<Object> lists = (List<Object>) definition.get('choiceLists');
             Assert.areEqual(
-                'yes_no',
+                'choice_list_1',
                 ((Map<String, Object>) lists[0]).get('name')
             );
             String serialized = JSON.serialize(snapshot);
             Assert.isFalse(serialized.contains(String.valueOf(versionId)));
             Assert.isTrue(serialized.contains('AUTHOR_ONLY_IMPORT_SENTINEL'));
+            Assert.isTrue(serialized.contains('"hint":"Collector hint"'));
+            Assert.isTrue(serialized.contains('"join":"all"'));
+            Assert.isFalse(serialized.contains('hintValue'));
+            Assert.isFalse(serialized.contains('joinValue'));
         }
     }
 
@@ -68,7 +72,7 @@ private class DefinitionImportResourceTest {
             RestResponse response = invoke(
                 'POST',
                 'application/json',
-                JSON.serialize(invalid)
+                wire(invalid)
             );
             Assert.areEqual(400, response.statusCode);
             Assert.areEqual(
@@ -98,8 +102,10 @@ private class DefinitionImportResourceTest {
                     '{}',
                     '{"schemaVersion":1,"extra":true}',
                     '{"schemaVersion":1,"schemaVersion":1}',
+                    wire(sample()).replace('"hint":', '"hintValue":'),
+                    wire(sample()).replace('"join":', '"joinValue":'),
                     '{"schemaVersion":1,"definition":{},"mappingBundle":{},"extra":true}',
-                    JSON.serialize(sample())
+                    wire(sample())
                         .replace(
                             '"definition":',
                             '"unknown":true,"definition":'
@@ -125,8 +131,7 @@ private class DefinitionImportResourceTest {
             DefinitionImportResource.requestByteLimit = 10;
             Assert.areEqual(
                 413,
-                invoke('POST', 'application/json', JSON.serialize(sample()))
-                    .statusCode
+                invoke('POST', 'application/json', wire(sample())).statusCode
             );
             Assert.areEqual(0, [SELECT COUNT() FROM Form__c]);
         }
@@ -170,6 +175,7 @@ private class DefinitionImportResourceTest {
         answer.parent = 'students';
         answer.choiceList = 'yes_no';
         answer.label = 'Present?';
+        answer.hintValue = 'Collector hint';
 
         DefinitionImportService.ChoiceInput yes = new DefinitionImportService.ChoiceInput();
         yes.value = 'yes';
@@ -191,7 +197,7 @@ private class DefinitionImportResourceTest {
         rule.sourceQuestion = 'student_count';
         rule.operator = 'greater_than';
         rule.value = '0';
-        rule.join = 'all';
+        rule.joinValue = 'all';
         rule.action = 'show';
 
         DefinitionImportService.FieldInput mainField = new DefinitionImportService.FieldInput();
@@ -248,6 +254,12 @@ private class DefinitionImportResourceTest {
         input.definition = definition;
         input.mappingBundle = mappings;
         return input;
+    }
+
+    private static String wire(DefinitionImportService.ImportEnvelope input) {
+        return JSON.serialize(input)
+            .replace('"hintValue":', '"hint":')
+            .replace('"joinValue":', '"join":');
     }
 
     private static DefinitionImportService.QuestionInput question(

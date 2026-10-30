@@ -93,9 +93,10 @@ an XLSForm-style projection and a strict XLSX wrapper (ADRs 0017/0018). ADR 0061
 adds a separate bounded visible-cell editor and an integration-only atomic import
 of that portable graph into a Draft Salesforce version. A two-request harness reads
 the graph back and compares compiled XML after normalising only the generated Form
-key. This is not arbitrary third-party XLSForm conversion or publication; collector
-output still goes through the compiler allowlist. C10.10 requires independent
-fresh-org evidence on the exact head.
+key. Snapshot-local Choice List/Mapping keys remain internal and do not enter those
+bytes. This is not arbitrary third-party XLSForm conversion or publication;
+collector output still goes through the compiler allowlist. C10.10 requires
+independent fresh-org evidence on the exact head.
 
 Mapping definitions store a reference/main/repeat dependency graph and explicit
 question-or-constant field sources. They preserve once-only answers shared across

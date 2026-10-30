@@ -45,7 +45,7 @@ public with sharing class DefinitionImportService {
         public Integer order;
         public String type;
         public String label;
-        public String hint;
+        public String hintValue;
         public String authorNotes;
         public Boolean required;
         public Boolean readOnly;
@@ -90,7 +90,7 @@ public with sharing class DefinitionImportService {
         public String operator;
         public String value;
         public String valueTo;
-        public String join;
+        public String joinValue;
         public String action;
     }
     public class MappingBundleInput {
@@ -221,7 +221,7 @@ public with sharing class DefinitionImportService {
                         Order__c = definition.order,
                         Type__c = definition.type,
                         Label__c = definition.label,
-                        Hint__c = definition.hint,
+                        Hint__c = definition.hintValue,
                         Author_Notes__c = definition.authorNotes,
                         Required__c = definition.required == true,
                         Read_Only__c = definition.readOnly == true,
@@ -258,7 +258,17 @@ public with sharing class DefinitionImportService {
             for (Integer index = 0; index < records.size(); index++) {
                 result.put(ready[index].name, records[index].Id);
             }
-            pending.removeAll(ready);
+            Set<String> insertedNames = new Set<String>();
+            for (QuestionInput definition : ready) {
+                insertedNames.add(definition.name);
+            }
+            List<QuestionInput> remaining = new List<QuestionInput>();
+            for (QuestionInput definition : pending) {
+                if (!insertedNames.contains(definition.name)) {
+                    remaining.add(definition);
+                }
+            }
+            pending = remaining;
         }
         return result;
     }
@@ -302,7 +312,7 @@ public with sharing class DefinitionImportService {
                     Operator__c = definition.operator,
                     Value__c = definition.value,
                     Value_To__c = definition.valueTo,
-                    Join__c = definition.join,
+                    Join__c = definition.joinValue,
                     Action__c = definition.action
                 )
             );
@@ -361,7 +371,17 @@ public with sharing class DefinitionImportService {
             for (Integer index = 0; index < records.size(); index++) {
                 result.put(ready[index].key, records[index].Id);
             }
-            pending.removeAll(ready);
+            Set<String> insertedKeys = new Set<String>();
+            for (MappingInput definition : ready) {
+                insertedKeys.add(definition.key);
+            }
+            List<MappingInput> remaining = new List<MappingInput>();
+            for (MappingInput definition : pending) {
+                if (!insertedKeys.contains(definition.key)) {
+                    remaining.add(definition);
+                }
+            }
+            pending = remaining;
         }
         return result;
     }
@@ -437,7 +457,7 @@ public with sharing class DefinitionImportService {
             )
                 refuse();
             optionalText(question.label, 32768);
-            optionalText(question.hint, 32768);
+            optionalText(question.hintValue, 32768);
             optionalText(question.authorNotes, 32768);
             optionalText(question.defaultValue, 32768);
             optionalText(question.calculation, 32768);

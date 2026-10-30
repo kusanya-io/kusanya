@@ -120,7 +120,12 @@ void test('refuses a fresh-org definition whose compiled XML differs', async () 
     diagnostics: [
       { code: 'XLSFORM_SALESFORCE_MISMATCH', location: 'roundtrip' },
     ],
+    sourceSha256: result.sourceSha256,
+    importedSha256: result.importedSha256,
   });
+  assert.match(result.sourceSha256 ?? '', /^[0-9a-f]{64}$/);
+  assert.match(result.importedSha256 ?? '', /^[0-9a-f]{64}$/);
+  assert.notEqual(result.sourceSha256, result.importedSha256);
 });
 
 void test('fails closed for hostile configuration, responses and deadlines', async () => {

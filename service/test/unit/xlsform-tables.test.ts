@@ -127,6 +127,60 @@ void test('imports bounded visible edits while retaining unprojected authoring a
   if (compiled.ok) assert.ok(compiled.xml.includes('Edited student count'));
 });
 
+void test('applies cleared skip relevance and repeat-mode edits with derived cells', () => {
+  const source = reviewerFixture();
+  const exported = exportXlsFormTables(source.form, source.mappings);
+  assert.ok(exported.ok);
+  const edited = structuredClone(exported.tables);
+  const reason = edited.sheets.survey.find((entry) => entry[1] === 'reason');
+  const samples = edited.sheets.survey.find((entry) => entry[1] === 'samples');
+  assert.ok(reason);
+  assert.ok(samples);
+  reason[10] = '';
+  samples[12] = '${student_count}';
+
+  const imported = importEditedXlsFormTables(edited);
+  assert.ok(imported.ok, JSON.stringify(imported));
+  assert.equal(
+    imported.bundle.definition.skipRules.some(
+      (rule) => rule.question === 'reason',
+    ),
+    false,
+  );
+  const repeat = imported.bundle.definition.questions.find(
+    (question) => question.name === 'samples',
+  );
+  assert.equal(repeat?.repeatMode, 'from_answer');
+  assert.equal(repeat?.repeatSourceQuestion, 'student_count');
+  assert.equal(repeat?.repeatCount, undefined);
+  assert.equal(compileForm(imported.bundle.definition).ok, true);
+});
+
+void test('reports the exact noncanonical edited expression cell', () => {
+  const exported = exportXlsFormTables(
+    simpleForm([
+      question('computed', {
+        type: 'calculate',
+        calculation: "concat('a', 'b')",
+      }),
+    ]),
+    emptyMappings,
+  );
+  assert.ok(exported.ok);
+  const edited = structuredClone(exported.tables);
+  edited.sheets.survey[1]![7] = "concat('a','b')";
+  const imported = importEditedXlsFormTables(edited);
+  assert.deepEqual(imported, {
+    ok: false,
+    diagnostics: [
+      {
+        code: 'XLSFORM_EDIT_PROJECTION',
+        location: 'tables.sheets.survey[1][7]',
+      },
+    ],
+  });
+});
+
 void test('edited import refuses structural identity, row and literal-value drift', () => {
   const exported = exportXlsFormTables(mixedRepeatForm(), emptyMappings);
   assert.ok(exported.ok);

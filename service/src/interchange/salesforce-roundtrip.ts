@@ -18,13 +18,18 @@ export interface SalesforceRoundTripConfiguration {
 }
 
 export type SalesforceRoundTripResult =
-  | { readonly ok: false; readonly diagnostics: readonly Diagnostic[] }
+  | {
+      readonly ok: false;
+      readonly diagnostics: readonly Diagnostic[];
+      readonly sourceSha256?: string;
+      readonly importedSha256?: string;
+    }
   | {
       readonly ok: true;
       readonly formVersionId: string;
       readonly sourceSha256: string;
       readonly importedSha256: string;
-      readonly requestCount: 2;
+      readonly requestCount: number;
     };
 
 type FetchImplementation = (
@@ -217,6 +222,7 @@ export async function verifySalesforceXlsFormRoundTrip(
     return failure('XLSFORM_SALESFORCE_INPUT');
   }
   const deadline = performance.now() + config.overall;
+  let requestCount = 0;
   const post = async (
     path: string,
     payload: string,
@@ -243,6 +249,7 @@ export async function verifySalesforceXlsFormRoundTrip(
           throw new RoundTripFailure('XLSFORM_SALESFORCE_TOKEN');
         if (controller.signal.aborted)
           throw new RoundTripFailure('XLSFORM_SALESFORCE_TIMEOUT');
+        requestCount++;
         const response = await fetchImplementation(
           `${config.origin}/services/apexrest${path}`,
           {
@@ -321,13 +328,20 @@ export async function verifySalesforceXlsFormRoundTrip(
     const sourceSha256 = digest(source.xml);
     const importedSha256 = digest(destination.xml);
     if (source.xml !== destination.xml)
-      return failure('XLSFORM_SALESFORCE_MISMATCH');
+      return {
+        ok: false,
+        diagnostics: [
+          { code: 'XLSFORM_SALESFORCE_MISMATCH', location: 'roundtrip' },
+        ],
+        sourceSha256,
+        importedSha256,
+      };
     return {
       ok: true,
       formVersionId: created.formVersionId,
       sourceSha256,
       importedSha256,
-      requestCount: 2,
+      requestCount,
     };
   } catch (error) {
     return failure(

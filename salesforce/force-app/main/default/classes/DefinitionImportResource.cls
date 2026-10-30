@@ -37,9 +37,10 @@ global with sharing class DefinitionImportResource {
             return;
         }
         try {
-            rejectDuplicateKeys(request.requestBody.toString());
+            String requestText = request.requestBody.toString();
+            rejectDuplicateKeys(requestText);
             DefinitionImportService.ImportEnvelope input = (DefinitionImportService.ImportEnvelope) JSON.deserializeStrict(
-                request.requestBody.toString(),
+                adaptReservedWireKeys(requestText),
                 DefinitionImportService.ImportEnvelope.class
             );
             Id versionId = DefinitionImportService.importDefinition(input);
@@ -52,6 +53,37 @@ global with sharing class DefinitionImportResource {
             response.responseBody = Blob.valueOf(output.getAsString());
         } catch (Exception error) {
             writeFailure(400, 'DEFINITION_IMPORT_REFUSED');
+        }
+    }
+
+    private static String adaptReservedWireKeys(String body) {
+        Map<String, Object> envelope = (Map<String, Object>) JSON.deserializeUntyped(
+            body
+        );
+        Map<String, Object> definition = (Map<String, Object>) envelope.get(
+            'definition'
+        );
+        List<Object> questions = (List<Object>) definition.get('questions');
+        for (Object value : questions) {
+            moveWireKey((Map<String, Object>) value, 'hint', 'hintValue');
+        }
+        List<Object> rules = (List<Object>) definition.get('skipRules');
+        for (Object value : rules) {
+            moveWireKey((Map<String, Object>) value, 'join', 'joinValue');
+        }
+        return JSON.serialize(envelope);
+    }
+
+    private static void moveWireKey(
+        Map<String, Object> record,
+        String wireName,
+        String internalName
+    ) {
+        if (record.containsKey(internalName))
+            refuseJson();
+        if (record.containsKey(wireName)) {
+            record.put(internalName, record.get(wireName));
+            record.remove(wireName);
         }
     }
 
