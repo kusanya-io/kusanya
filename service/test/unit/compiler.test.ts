@@ -12,6 +12,7 @@ import {
   question,
   scalarForm,
   simpleForm,
+  validationEquivalenceForm,
 } from '../fixtures/compiler.js';
 
 function xml(input: unknown): string {
@@ -51,11 +52,87 @@ void test('compiles mixed once-only sections and sibling repeats without leaking
   assert.ok(
     !JSON.stringify(compileForm(input)).includes('AUTHOR_ONLY_SENTINEL_4197'),
   );
-  input.questions[0]!.validationScript = 'AUTHOR_ONLY_SENTINEL_4197';
+});
+
+void test('uses only portable constraints when a JavaScript validation is authored', () => {
+  const portable = compileForm(validationEquivalenceForm());
+  assert.equal(portable.ok, true, JSON.stringify(portable));
+  if (!portable.ok) return;
+  assert.deepEqual(portable.warnings, [
+    {
+      code: 'VALIDATION_SCRIPT_NOT_EXECUTED',
+      location: 'questions[0]',
+    },
+  ]);
   assert.ok(
-    !JSON.stringify(compileForm(input)).includes('AUTHOR_ONLY_SENTINEL_4197'),
+    portable.xml.includes(
+      'regex(., &apos;^([01][0-9]|2[0-3]):[0-5][0-9]$&apos;)',
+    ),
   );
-  reject(input, 'UNSUPPORTED_QUESTION_OPTION');
+  assert.ok(!portable.xml.includes('tw.visit_time'));
+  assert.ok(!JSON.stringify(portable).includes('throw new Error'));
+
+  const missing = simpleForm([
+    question('answer', { validationScript: 'VALIDATION_SCRIPT_SENTINEL' }),
+  ]);
+  const result = compileForm(missing);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  if (!result.ok) return;
+  assert.deepEqual(result.warnings, [
+    {
+      code: 'VALIDATION_SCRIPT_NOT_EXECUTED',
+      location: 'questions[0]',
+    },
+    {
+      code: 'VALIDATION_SCRIPT_WITHOUT_PORTABLE_RULE',
+      location: 'questions[0]',
+    },
+  ]);
+  assert.ok(!JSON.stringify(result).includes('VALIDATION_SCRIPT_SENTINEL'));
+
+  for (const bounds of [
+    { minimum: 0 },
+    { maximum: 10 },
+    { minimum: 0, maximum: 10 },
+  ]) {
+    const bounded = compileForm(
+      simpleForm([
+        question('answer', {
+          type: 'integer',
+          validationScript: 'BOUNDED_SCRIPT_SENTINEL',
+          ...bounds,
+        }),
+      ]),
+    );
+    assert.equal(bounded.ok, true, JSON.stringify(bounded));
+    if (!bounded.ok) continue;
+    assert.deepEqual(bounded.warnings, [
+      {
+        code: 'VALIDATION_SCRIPT_NOT_EXECUTED',
+        location: 'questions[0]',
+      },
+    ]);
+    assert.ok(bounded.xml.includes('constraint="'));
+    assert.ok(!JSON.stringify(bounded).includes('BOUNDED_SCRIPT_SENTINEL'));
+  }
+
+  const repeatSource = mixedRepeatForm();
+  repeatSource.questions[2]!.validationScript = 'REPEAT_SCRIPT_SENTINEL';
+  const repeated = compileForm(repeatSource);
+  assert.equal(repeated.ok, true, JSON.stringify(repeated));
+  if (!repeated.ok) return;
+  assert.ok(
+    repeated.warnings.some(
+      (warning) => warning.code === 'VALIDATION_SCRIPT_NOT_EXECUTED',
+    ),
+  );
+  assert.ok(
+    !repeated.warnings.some(
+      (warning) => warning.code === 'VALIDATION_SCRIPT_WITHOUT_PORTABLE_RULE',
+    ),
+  );
+  assert.ok(repeated.xml.includes('(. &gt;= 0) and (. &lt;= 40)'));
+  assert.ok(!JSON.stringify(repeated).includes('REPEAT_SCRIPT_SENTINEL'));
 });
 
 void test('is deterministic under record reordering and does not mutate source', () => {
@@ -254,7 +331,6 @@ void test('rejects invalid XML controls/lone surrogates but safely preserves Uni
 void test('fails unsupported configured features explicitly rather than silently dropping semantics', () => {
   for (const extra of [
     { samePage: true },
-    { validationScript: 'return true' },
     { prefillSource: 'target.Name' },
     { requireLivePhoto: true },
     { mediaMaxSeconds: 30 },
@@ -276,6 +352,26 @@ void test('fails unsupported configured features explicitly rather than silently
   );
   reject(
     simpleForm([question('a', { type: 'note', required: true })]),
+    'NOTE_OPTIONS',
+  );
+  for (const type of ['section', 'repeat'] as const)
+    reject(
+      simpleForm([
+        question('group', {
+          type,
+          validationScript: 'return true',
+        }),
+        question('answer', { parent: 'group' }),
+      ]),
+      'CONTAINER_OPTIONS',
+    );
+  reject(
+    simpleForm([
+      question('instruction', {
+        type: 'note',
+        validationScript: 'return true',
+      }),
+    ]),
     'NOTE_OPTIONS',
   );
 });

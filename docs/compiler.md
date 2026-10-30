@@ -64,7 +64,8 @@ const result = compileForm({
     name: 'visit_time', order: 1, type: 'text', label: 'Visit time',
     hint: 'Use HH:MM', authorNotes: 'Reviewer-only instruction',
     regex: '^([01][0-9]|2[0-3]):[0-5][0-9]$',
-    constraintMessage: 'Use a 24-hour time', required: true
+    constraintMessage: 'Use a 24-hour time', required: true,
+    validationScript: "if (!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(tw.visit_time.value)) { throw new Error('Use HH:MM'); }"
   }],
   choiceLists: [],
   skipRules: []
@@ -79,8 +80,10 @@ if (!result.ok) {
 '@ | node --input-type=module
 ```
 
-The hint appears in XML; Author Notes do not. This example demonstrates compilation
-of a regex constraint, not execution in Collect or C10.12 equivalence.
+The hint and regex constraint appear in XML; Author Notes and JavaScript do not.
+The result carries `VALIDATION_SCRIPT_NOT_EXECUTED`. This demonstrates the C10.12
+source shape and portable output, but stock-Collect behavior remains a separate
+runtime check under ADR 0060.
 
 ## Input contract
 
@@ -288,12 +291,17 @@ plain decimal notation with up to 12 integer and six fractional digits. Numeric
 range ordering uses scaled integers. These checks do not turn arbitrary XPath
 arithmetic or client decimal values into a fixed-precision service.
 
-Configured `end`, `validationScript`, `prefillSource`, `samePage`,
-`repeatAsTable`, `cascadeLevel`, `requireLivePhoto`, `mediaMaxSeconds`, nonempty
+Configured `end`, `prefillSource`, `samePage`, `repeatAsTable`, `cascadeLevel`,
+`requireLivePhoto`, `mediaMaxSeconds`, nonempty
 choice Filter Value and defined Score fail explicitly. Unsupported appearances,
 defaults and open-repeat limits also fail. Omitted/false options retain their
 default meaning; author-only Notes/Regex Example are intentionally omitted, not
-unimplemented collector behavior. No translation, external itemset, mapping
+unimplemented collector behavior. A nonempty `validationScript` is retained only
+as opaque authoring data and never executed or serialized. It always produces
+`VALIDATION_SCRIPT_NOT_EXECUTED`; when the complete compiled bind has no constraint
+at all it also produces `VALIDATION_SCRIPT_WITHOUT_PORTABLE_RULE`. Authored XPath,
+regex, numeric bounds and repeat-source bounds each count as a portable collector
+constraint. No translation, external itemset, mapping
 execution, Salesforce target validation, form snapshot or publication is present.
 
 ## Verification and optional offline ODK probe

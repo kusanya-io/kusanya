@@ -19,6 +19,8 @@ const reviewedXmlHashes = {
   nested: '640dff3dfe85c23ee982dbcc0d4b626d5b88f3d47aeb566e055b76c8812b67f3',
   scalars: '29f4a1ba3fd6bfdcafafe663adf9371ab917ac5809d63f376d47e2d40cb904b4',
   quoted: 'fc41cf5c8cac426f020d3ca52ce4c18c6c44b91bf70a2d70d0e4d23494ad0d55',
+  validationEquivalence:
+    '7e629c7ece2eeb9f75f42535837db62c0c5fe12be1cad52f9d1989cb099b975d',
 };
 
 void test('shared preparation preserves reviewed fixture XML bytes and public contract', () => {
@@ -120,13 +122,22 @@ void test('author annotations remain internal and failures return only structura
   assert.ok(!compiled.includes('REGEX_EXAMPLE_PREPARE_7301'));
 
   input.questions[0]!.validationScript = 'AUTHOR_ONLY_PREPARE_7301';
-  assert.deepEqual(prepareForm(input), {
-    ok: false,
-    diagnostics: [
-      { code: 'UNSUPPORTED_QUESTION_OPTION', location: 'questions[0]' },
-    ],
-  });
-  assert.deepEqual(compileForm(input), prepareForm(input));
+  const withScript = prepareForm(input);
+  assert.equal(withScript.ok, true);
+  if (!withScript.ok) throw new Error('Fixture with script must prepare');
+  assert.deepEqual(withScript.warnings, [
+    {
+      code: 'VALIDATION_SCRIPT_NOT_EXECUTED',
+      location: 'questions[0]',
+    },
+    {
+      code: 'VALIDATION_SCRIPT_WITHOUT_PORTABLE_RULE',
+      location: 'questions[0]',
+    },
+  ]);
+  assert.ok(
+    !JSON.stringify(compileForm(input)).includes('AUTHOR_ONLY_PREPARE_7301'),
+  );
 });
 
 void test('preparation retains expanded XML preflight bounds before any renderer runs', () => {

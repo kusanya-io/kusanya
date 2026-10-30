@@ -52,6 +52,7 @@ export function prepareForm(input: unknown): PreparationResult {
     const logic = new Map<string, RenderLogic>();
     const dependencies = new Map<string, Set<string>>();
     const warnings: Diagnostic[] = [];
+    const validationScripts: { name: string; location: string }[] = [];
     const counts: { path: string; value: string }[] = [];
     const paths = new Map(graph.nodes.map((node) => [node.path, node]));
     for (const node of graph.nodes) {
@@ -199,8 +200,7 @@ export function prepareForm(input: unknown): PreparationResult {
         question.cascadeLevel !== undefined ||
         question.requireLivePhoto ||
         question.mediaMaxSeconds !== undefined ||
-        question.prefillSource ||
-        question.validationScript
+        question.prefillSource
       )
         throw new CompileError('UNSUPPORTED_QUESTION_OPTION');
       if (
@@ -233,6 +233,7 @@ export function prepareForm(input: unknown): PreparationResult {
           question.calculation ||
           question.constraint ||
           question.regex ||
+          question.validationScript ||
           question.minimum !== undefined ||
           question.maximum !== undefined)
       )
@@ -244,6 +245,7 @@ export function prepareForm(input: unknown): PreparationResult {
           question.calculation ||
           question.constraint ||
           question.regex ||
+          question.validationScript ||
           question.minimum !== undefined ||
           question.maximum !== undefined)
       )
@@ -293,6 +295,13 @@ export function prepareForm(input: unknown): PreparationResult {
         throw new CompileError('REGEX_TYPE');
       if (question.regex && question.regex.length > 4096)
         throw new CompileError('EXPRESSION_LIMIT');
+      if (question.validationScript) {
+        warnings.push({
+          code: 'VALIDATION_SCRIPT_NOT_EXECUTED',
+          location,
+        });
+        validationScripts.push({ name: question.name, location });
+      }
       if (question.defaultValue !== undefined) {
         if (question.calculation)
           throw new CompileError('DEFAULT_CALCULATION_CONFLICT');
@@ -414,6 +423,19 @@ export function prepareForm(input: unknown): PreparationResult {
         )
           throw new CompileError('UNSUPPORTED_OPEN_REPEAT_LIMIT');
       } else throw new CompileError('REPEAT_OPTIONS');
+    }
+
+    for (const script of validationScripts) {
+      if (logic.get(script.name)!.constraint) continue;
+      const after = warnings.findIndex(
+        (warning) =>
+          warning.code === 'VALIDATION_SCRIPT_NOT_EXECUTED' &&
+          warning.location === script.location,
+      );
+      warnings.splice(after + 1, 0, {
+        code: 'VALIDATION_SCRIPT_WITHOUT_PORTABLE_RULE',
+        location: script.location,
+      });
     }
 
     const rulesByTarget = new Map<

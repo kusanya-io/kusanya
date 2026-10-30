@@ -16,6 +16,7 @@ import {
   quotedForm,
   scalarForm,
   simpleForm,
+  validationEquivalenceForm,
 } from '../fixtures/compiler.js';
 import { largeReviewerFixture, reviewerFixture } from '../fixtures/print.js';
 
@@ -52,6 +53,7 @@ void test('round-trips supported compiler and reviewer fixtures through source a
       nestedRepeatForm(),
       scalarForm(),
       quotedForm(),
+      validationEquivalenceForm(),
     ].map((form) => ({ form, mappings: emptyMappings })),
     reviewer,
     large,
@@ -73,6 +75,27 @@ void test('round-trips supported compiler and reviewer fixtures through source a
     );
     assert.deepEqual(exported.warnings, imported.warnings);
   }
+});
+
+void test('projects the portable validation rule while keeping JavaScript in authoring source only', () => {
+  const exported = exportXlsFormTables(
+    validationEquivalenceForm(),
+    emptyMappings,
+  );
+  assert.ok(exported.ok);
+  const visible = JSON.stringify({
+    ...exported.tables.sheets,
+    kusanya_source: undefined,
+  });
+  assert.ok(row(exported.tables, 'visit_time').constraint!.includes('regex('));
+  assert.ok(!visible.includes('tw.visit_time'));
+  assert.ok(!visible.includes('throw new Error'));
+  const source = exported.tables.sheets.kusanya_source
+    .slice(1)
+    .map((entry) => entry[1])
+    .join('');
+  assert.ok(source.includes('tw.visit_time'));
+  assert.ok(source.includes('throw new Error'));
 });
 
 void test('projects standard survey/choices/settings columns and exactly balanced nested containers', () => {
@@ -529,7 +552,7 @@ void test('export refuses an overlong visible cell but preserves the same text i
 
 void test('unsupported compiler definitions and malformed mapping input propagate failure without partial tables', () => {
   const form = simpleForm([
-    question('answer', { validationScript: 'HOSTILE_SENTINEL' }),
+    question('answer', { prefillSource: 'HOSTILE_SENTINEL' }),
   ]);
   const exported = exportXlsFormTables(form, emptyMappings);
   assert.equal(exported.ok, false);

@@ -16,8 +16,8 @@ ADR 0029 separately governs the confirmed count-reduction difference.
 | --------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | Compiler source tests | Existing Node 24 service toolchain                                                | Generated paths/wrappers, deterministic bytes and author-note exclusion                                |
 | Browser engine        | Enketo Core 9.0.1; Transformer 4.2.0; installed Chromium version recorded per run | Real transformation, `Form` initialization, input changes, model/DOM repeats and saved-instance reload |
-| JVM engine            | JavaRosa 6.0.0, as pinned by Collect v2026.3.4                                    | Parsing, traversal, answers, instance serialization/reload and engine count behavior                   |
-| Android application   | ODK Collect v2026.3.4 on Bill's BlueStacks Pie64 emulator                         | Actual nested-count navigation, finalized XML and count-reduction behavior                             |
+| JVM engine            | JavaRosa 6.0.0, as pinned by the historical Collect v2026.3.4 run                 | Parsing, traversal, answers, instance serialization/reload and engine count behavior                   |
+| Android application   | Historical repeat evidence: v2026.3.4; C10.12 validation target: v2026.3.5        | Actual nested-count navigation, finalized XML, count reduction and portable validation                 |
 
 Node 22.23.2, Playwright Core 1.63.0 and esbuild 0.28.2 are isolated optional
 tooling, not service runtime dependencies. The runtime package lockfile and JVM
@@ -29,6 +29,67 @@ production records, credentials, Task links, Salesforce operations or submission
 to a server. Keep output in the working checkout's ignored `work/` directories.
 Neither a passing probe nor this document authorizes installs, device changes,
 scratch orgs, CI changes or hosted Enketo deployment.
+
+## C10.12: portable validation in stock Collect
+
+ADR 0060 adds one separate acceptance fixture: a required time entered as `text`,
+the HH:MM regex `^([01][0-9]|2[0-3]):[0-5][0-9]$`, and opaque TaroWorks-style
+JavaScript authored from that same pattern. Kusanya never executes or emits the
+script. The regex bind is the only collector rule.
+
+Build and export the exact synthetic fixture from a reviewed checkout:
+
+```powershell
+npm.cmd --prefix service run build
+New-Item -ItemType Directory -Force work/c10-12 | Out-Null
+@'
+import { createHash } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+import { compileForm } from './service/dist/src/compiler/compile.js';
+import { validationEquivalenceForm } from './service/dist/test/fixtures/compiler.js';
+const result = compileForm(validationEquivalenceForm());
+if (!result.ok) throw new Error(JSON.stringify(result.diagnostics));
+const sha256 = createHash('sha256').update(result.xml).digest('hex');
+if (sha256 !== '7e629c7ece2eeb9f75f42535837db62c0c5fe12be1cad52f9d1989cb099b975d')
+  throw new Error('C10.12 fixture bytes changed');
+if (result.xml.includes('tw.visit_time') || result.xml.includes('throw new Error'))
+  throw new Error('Validation script reached collector XML');
+writeFileSync('work/c10-12/validation-equivalence.xml', result.xml);
+console.log(JSON.stringify({ sha256, warnings: result.warnings }));
+'@ | node --input-type=module
+node scripts/check-compiler-odk.mjs work/odk-validate/ODK-Validate-v1.20.0.jar 'C:\Program Files\Zulu\zulu-21\bin\java.exe'
+```
+
+ODK Validate remains only a parsing check. The C10.12 runtime check uses Bill's
+approved BlueStacks Pie64 synthetic-test emulator, Android 9 and unmodified stock
+ODK Collect v2026.3.5, or an independently controlled equivalent with the exact
+version recorded. Do not install or upgrade Collect, change device settings, use a
+tenant credential, contact a form server, or inspect unrelated projects/data.
+
+1. Transfer only `work/c10-12/validation-equivalence.xml` into a fresh offline
+   synthetic project/form using the separately approved device procedure.
+2. Confirm the form title/key and record the artifact SHA-256 above.
+3. Leave the answer blank and try to advance: required validation must refuse it.
+4. Enter `24:00`, then `09:60`; each must remain on the question and show
+   `Use HH:MM in 24-hour time.`
+5. In the same unsent synthetic draft, enter `00:00`, `09:30` and `23:59` one at
+   a time, returning to the question after each; every value must advance to the
+   end screen without any server submission.
+6. Record Collect/Android/emulator versions and only synthetic screenshots. Bill
+   decides whether the test form/drafts are retained or removed afterward.
+
+A source/unit/ODK-Validate pass is C10.12 readiness, not acceptance. The acceptance
+claim requires the stock-Collect observations on the exact reviewed XML and an
+independent verifier review. C10.11's seven-form CLI run is unrelated and remains a
+Phase 5 migration test.
+
+Builder evidence on 2026-10-29 used the exact SHA-256 above in the approved
+BlueStacks Pie64 synthetic project, Android 9 and unmodified stock Collect
+v2026.3.5. Blank, `24:00` and `09:60` were refused; the two invalid values showed
+`Use HH:MM in 24-hour time.`. Values `00:00`, `09:30` and `23:59` each advanced to
+the end screen in the same unsent draft. No form was finalized or submitted and no
+server, tenant, Salesforce org or credential was used. This is builder evidence;
+the C10.12 claim remains subject to independent exact-head reproduction.
 
 ## Reproduce source checks
 

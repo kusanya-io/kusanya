@@ -436,8 +436,8 @@ path. One bounded stdin document drives the existing mounted login, CSRF, durabl
 publication and logout sequence; the live service session alone selects the tenant,
 role, connection and namespace. Known refusals remain distinct from partial,
 unresolved and transport-uncertain outcomes, and none permits an automatic retry.
-C10 test 12 remains unclaimed until the seven supplied forms publish through a real
-CI identity. Scheduled reconciliation and retention, unlinked Salesforce File
+C10 test 11 remains unclaimed until the seven supplied forms publish through a real
+CI identity; C10.12 is the separate stock-Collect validation-equivalence test. Scheduled reconciliation and retention, unlinked Salesforce File
 cleanup, privileged retry, disconnect/rebind and ODK Validate runtime assets remain
 future work. Note 39 remains open, and no Phase 1 completion claim is made.
 
@@ -446,6 +446,14 @@ a pending transport owns no live Node handle, exit 2 distinguishes pre-result
 failure from a structured exit-1 outcome, and the server and client share one
 hardened cookie contract without coupling to attribute order. Protected integration
 now drives the shipped binary through real TLS, the mounted service and PostgreSQL.
-This is infrastructure evidence, not C10 test 12; the seven supplied forms and real
-CI workload identity remain outstanding. Note 39 and the remaining note 34 strands
+This is infrastructure evidence, not C10.11 or C10.12; the seven supplied forms and
+real CI workload identity remain outstanding for C10.11. Note 39 and the remaining note 34 strands
 remain open.
+
+ADR 0060 admits an authored JavaScript validation only as opaque, unexecuted source.
+The compiler emits explicit warnings and enforces collector behavior solely through
+the accompanying XPath constraint or regex. A synthetic time-as-text fixture uses
+one HH:MM pattern in its JavaScript source and portable regex, is byte-pinned, and
+passes ODK Validate. C10.12 still requires the exact reviewed bytes to refuse and
+accept the recorded boundary values in stock ODK Collect v2026.3.5. The seven-form
+CLI workload is C10.11 in Phase 5, not part of this Phase 1 claim.

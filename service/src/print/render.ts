@@ -165,6 +165,14 @@ export function renderPrintView(
           put(
             '<p>Count reduction is client-specific: Collect can retain trailing answered rows while Enketo removes them. Kusanya uses the submitted count as authoritative during ingestion and excludes trailing instances beyond that count; the raw submission remains retained for audit.</p>',
           );
+        if (warning.code === 'VALIDATION_SCRIPT_NOT_EXECUTED')
+          put(
+            '<p>The authored JavaScript is retained for review but is never executed or delivered. Only the compiled XPath constraint or regex can validate collector input.</p>',
+          );
+        if (warning.code === 'VALIDATION_SCRIPT_WITHOUT_PORTABLE_RULE')
+          put(
+            '<p>No XPath constraint or regex accompanies this script, so stock collectors receive no equivalent validation rule.</p>',
+          );
         put('</li>');
       }
       put('</ul></section>');

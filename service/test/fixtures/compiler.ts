@@ -198,6 +198,22 @@ export function scalarForm(): FormDefinition {
   return form;
 }
 
+/** Exact synthetic shape required by brief C10.12. */
+export function validationEquivalenceForm(): FormDefinition {
+  const hhmmPattern = '^([01][0-9]|2[0-3]):[0-5][0-9]$';
+  return simpleForm([
+    question('visit_time', {
+      type: 'text',
+      label: 'Visit time',
+      hint: 'Enter a 24-hour time as HH:MM.',
+      required: true,
+      regex: hhmmPattern,
+      constraintMessage: 'Use HH:MM in 24-hour time.',
+      validationScript: `if (!/${hhmmPattern}/.test(tw.visit_time.value)) { throw new Error('Use HH:MM'); }`,
+    }),
+  ]);
+}
+
 export function quotedForm(): FormDefinition {
   const literal = `a' or true() or "<&\r\n\t💧`;
   const form = simpleForm([
@@ -231,4 +247,5 @@ export const odkFixtures = {
   nested: nestedRepeatForm,
   scalars: scalarForm,
   quoted: quotedForm,
+  validationEquivalence: validationEquivalenceForm,
 };
