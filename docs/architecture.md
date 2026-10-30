@@ -88,15 +88,15 @@ collector responses. No endpoint, Salesforce access, authorization, mapping
 execution or publication approval is added. Future hosted reviewer delivery
 requires a separate access-control design; a document's CSP is not that boundary.
 
-The [authoring interchange unit](interchange.md) adds a versioned JSON envelope
-around the supported definition and mapping snapshots (ADR 0017). An XLSForm-style
-table profile projects that source into recognizable rows and retains the complete
-source in an extension table. Import regenerates all tables and refuses conflicting
-edits. ADR 0018 adds a strict XLSX wrapper with literal text cells and bounded ZIP/XML
-decoding. These are author-only snapshots, not an additional source of truth, a
-general edited-XLSForm importer, a Salesforce import or a publication channel.
-Exact Kusanya XML round trips do not establish third-party XLSForm conversion
-equivalence or C10.10. Collector output continues through the compiler allowlist.
+The [authoring interchange boundary](interchange.md) adds a versioned JSON envelope,
+an XLSForm-style projection and a strict XLSX wrapper (ADRs 0017/0018). ADR 0061
+adds a separate bounded visible-cell editor and an integration-only atomic import
+of that portable graph into a Draft Salesforce version. A two-request harness reads
+the graph back and compares compiled XML after normalising only the generated Form
+key. Snapshot-local Choice List/Mapping keys remain internal and do not enter those
+bytes. This is not arbitrary third-party XLSForm conversion or publication;
+collector output still goes through the compiler allowlist. C10.10 requires
+independent fresh-org evidence on the exact head.
 
 Mapping definitions store a reference/main/repeat dependency graph and explicit
 question-or-constant field sources. They preserve once-only answers shared across
