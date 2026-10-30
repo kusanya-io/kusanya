@@ -4,6 +4,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { CompileError, type Diagnostic } from '../compiler/types.js';
 import {
   exportXlsFormTables,
+  importEditedXlsFormTables,
   importXlsFormTables,
   type XlsFormTables,
 } from './xlsform-tables.js';
@@ -261,9 +262,9 @@ function parseWorksheet(xml: string): string[][] {
   return rows;
 }
 
-/** Import only Kusanya's strict, formula-free workbook subset. */
-export function importXlsFormWorkbook(
+function importWorkbook(
   input: unknown,
+  importer: typeof importXlsFormTables,
 ): ReturnType<typeof importXlsFormTables> {
   let location = 'workbook';
   try {
@@ -324,9 +325,23 @@ export function importXlsFormWorkbook(
       }
       tables.sheets[name] = parseWorksheet(xml);
     }
-    return importXlsFormTables(tables);
+    return importer(tables);
   } catch (error) {
     if (error instanceof CompileError) return failure(error.code, location);
     throw error;
   }
+}
+
+/** Import only Kusanya's strict, formula-free workbook subset without edits. */
+export function importXlsFormWorkbook(
+  input: unknown,
+): ReturnType<typeof importXlsFormTables> {
+  return importWorkbook(input, importXlsFormTables);
+}
+
+/** Import bounded visible edits from the same strict, formula-free workbook. */
+export function importEditedXlsFormWorkbook(
+  input: unknown,
+): ReturnType<typeof importXlsFormTables> {
+  return importWorkbook(input, importEditedXlsFormTables);
 }

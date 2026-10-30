@@ -5,6 +5,7 @@ import { compileForm } from '../../src/compiler/compile.js';
 import { exportAuthoringBundle } from '../../src/interchange/bundle.js';
 import {
   exportXlsFormWorkbook,
+  importEditedXlsFormWorkbook,
   importXlsFormWorkbook,
 } from '../../src/interchange/xlsx-workbook.js';
 import { question, simpleForm } from '../fixtures/compiler.js';
@@ -47,6 +48,25 @@ void test('round-trips deterministic XLSX bytes to the same bundle and compiled 
   const canonical = exportAuthoringBundle(form, mappings);
   assert.ok(canonical.ok);
   assert.deepEqual(imported.bundle.mappings, canonical.bundle.mappings);
+});
+
+void test('imports bounded visible workbook edits through the strict package reader', () => {
+  const exported = exportXlsFormWorkbook(
+    simpleForm([question('answer', { label: 'Original label' })]),
+    emptyMappings,
+  );
+  assert.ok(exported.ok);
+  const edited = rewrite(exported.workbook, (entries) => {
+    const path = 'xl/worksheets/sheet1.xml';
+    const xml = strFromU8(entries[path]!);
+    assert.ok(xml.includes('Original label'));
+    entries[path] = strToU8(xml.replace('Original label', 'Edited label'));
+  });
+  assert.equal(importXlsFormWorkbook(edited).ok, false);
+  const imported = importEditedXlsFormWorkbook(edited);
+  assert.ok(imported.ok, JSON.stringify(imported));
+  assert.equal(imported.bundle.definition.questions[0]!.label, 'Edited label');
+  assert.equal(imported.bundle.definition.questions[0]!.name, 'answer');
 });
 
 void test('writes every cell as exact inline text so formula prefixes never execute', () => {

@@ -5,7 +5,9 @@ import { prepareForm } from '../compiler/prepare.js';
 import {
   CompileError,
   type Diagnostic,
+  type FormDefinition,
   type QuestionNode,
+  type QuestionDefinition,
   type QuestionType,
 } from '../compiler/types.js';
 import { exportAuthoringBundle, importAuthoringBundle } from './bundle.js';
@@ -351,6 +353,260 @@ export function importXlsFormTables(
         return failure('XLSFORM_PROJECTION_MISMATCH', location);
     }
     return source;
+  } catch (error) {
+    if (error instanceof CompileError) return failure(error.code, location);
+    throw error;
+  }
+}
+
+function optionalText(value: string): string | undefined {
+  return value === '' ? undefined : value;
+}
+
+function setQuestionText(
+  question: QuestionDefinition,
+  key:
+    | 'label'
+    | 'hint'
+    | 'defaultValue'
+    | 'calculation'
+    | 'constraint'
+    | 'constraintMessage'
+    | 'relevant'
+    | 'appearance'
+    | 'repeatSourceQuestion',
+  value: string | undefined,
+): void {
+  if (value === undefined) delete question[key];
+  else question[key] = value;
+}
+
+function yes(value: string): boolean {
+  if (value === '') return false;
+  if (value === 'yes') return true;
+  throw new CompileError('XLSFORM_EDIT_VALUE');
+}
+
+/**
+ * Import bounded edits to the visible profile while retaining author-only and
+ * mapping data from the embedded source. Structural row identities stay fixed:
+ * this is an edit path for a Kusanya export, not an arbitrary XLSForm converter.
+ */
+export function importEditedXlsFormTables(
+  input: unknown,
+): ReturnType<typeof importAuthoringBundle> {
+  let location = 'tables';
+  try {
+    const tables = inspectTables(input, (value) => {
+      location = value;
+    });
+    const sourceRows = tables.sheets.kusanya_source;
+    location = 'tables.sheets.kusanya_source';
+    if (
+      sourceRows.length < 2 ||
+      sourceRows[0]!.length !== sourceHeader.length ||
+      sourceRows[0]!.some((value, index) => value !== sourceHeader[index])
+    )
+      return failure('XLSFORM_PROJECTION_MISMATCH', location);
+    let sourceLength = 0;
+    for (let index = 1; index < sourceRows.length; index++) {
+      const row = sourceRows[index]!;
+      if (row.length !== 2 || row[0] !== String(index))
+        return failure('XLSFORM_PROJECTION_MISMATCH', location);
+      sourceLength += row[1]!.length;
+      if (sourceLength > 4_000_000)
+        return failure('XLSFORM_INPUT_LIMIT', location);
+    }
+    const source = importAuthoringBundle(
+      sourceRows
+        .slice(1)
+        .map((row) => row[1]!)
+        .join(''),
+    );
+    if (!source.ok) return source;
+    const baseline = exportXlsFormTables(
+      source.bundle.definition,
+      source.bundle.mappings,
+    );
+    if (!baseline.ok) return baseline;
+
+    const actualSurvey = tables.sheets.survey;
+    const expectedSurvey = baseline.tables.sheets.survey;
+    const actualChoices = tables.sheets.choices;
+    const expectedChoices = baseline.tables.sheets.choices;
+    const actualSettings = tables.sheets.settings;
+    const expectedSettings = baseline.tables.sheets.settings;
+    if (
+      actualSurvey.length !== expectedSurvey.length ||
+      actualChoices.length !== expectedChoices.length ||
+      actualSettings.length !== 2 ||
+      expectedSettings.length !== 2
+    )
+      return failure('XLSFORM_EDIT_STRUCTURE', location);
+
+    const prepared = prepareForm(source.bundle.definition);
+    if (!prepared.ok) return prepared;
+    const editable: QuestionDefinition[] = prepared.graph.nodes.map((node) => ({
+      ...node.definition,
+    }));
+    const byName = new Map(
+      editable.map((question) => [question.name, question]),
+    );
+    let questionIndex = 0;
+    for (let rowIndex = 0; rowIndex < actualSurvey.length; rowIndex++) {
+      location = `tables.sheets.survey[${rowIndex}]`;
+      const actual = actualSurvey[rowIndex]!;
+      const expected = expectedSurvey[rowIndex]!;
+      if (actual.length !== surveyHeader.length)
+        throw new CompileError('XLSFORM_EDIT_STRUCTURE');
+      if (rowIndex === 0) {
+        if (actual.some((cell, column) => cell !== expected[column]))
+          throw new CompileError('XLSFORM_EDIT_STRUCTURE');
+        continue;
+      }
+      if (expected[0] === 'end group' || expected[0] === 'end repeat') {
+        if (actual.some((cell, column) => cell !== expected[column]))
+          throw new CompileError('XLSFORM_EDIT_STRUCTURE');
+        continue;
+      }
+      if (
+        actual[0] !== expected[0] ||
+        actual[1] !== expected[1] ||
+        actual[13] !== expected[13]
+      )
+        throw new CompileError('XLSFORM_EDIT_STRUCTURE');
+      const question = editable[questionIndex++];
+      if (!question || question.name !== actual[1])
+        throw new CompileError('XLSFORM_EDIT_STRUCTURE');
+      if (actual[2] !== expected[2])
+        setQuestionText(question, 'label', optionalText(actual[2]!));
+      if (actual[3] !== expected[3])
+        setQuestionText(question, 'hint', optionalText(actual[3]!));
+      if (actual[4] !== expected[4]) question.required = yes(actual[4]!);
+      if (actual[5] !== expected[5]) question.readOnly = yes(actual[5]!);
+      if (actual[6] !== expected[6])
+        setQuestionText(question, 'defaultValue', optionalText(actual[6]!));
+      if (actual[7] !== expected[7])
+        setQuestionText(question, 'calculation', optionalText(actual[7]!));
+      if (actual[8] !== expected[8]) {
+        setQuestionText(question, 'constraint', optionalText(actual[8]!));
+        delete question.regex;
+        delete question.regexExample;
+        delete question.minimum;
+        delete question.maximum;
+      }
+      if (actual[9] !== expected[9])
+        setQuestionText(
+          question,
+          'constraintMessage',
+          optionalText(actual[9]!),
+        );
+      if (actual[10] !== expected[10]) {
+        setQuestionText(question, 'relevant', optionalText(actual[10]!));
+      }
+      if (actual[11] !== expected[11])
+        setQuestionText(question, 'appearance', optionalText(actual[11]!));
+      if (actual[12] !== expected[12]) {
+        if (question.type !== 'repeat')
+          throw new CompileError('XLSFORM_EDIT_VALUE');
+        const answer = /^\$\{([A-Za-z_][A-Za-z0-9_.-]*)\}$/.exec(actual[12]!);
+        if (actual[12] === '') {
+          question.repeatMode = 'open';
+          delete question.repeatCount;
+          delete question.repeatSourceQuestion;
+        } else if (answer) {
+          question.repeatMode = 'from_answer';
+          delete question.repeatCount;
+          setQuestionText(question, 'repeatSourceQuestion', answer[1]);
+        } else if (/^[1-9][0-9]*$/.test(actual[12]!)) {
+          question.repeatMode = 'fixed';
+          question.repeatCount = Number(actual[12]);
+          delete question.repeatSourceQuestion;
+        } else throw new CompileError('XLSFORM_EDIT_VALUE');
+      }
+    }
+    if (questionIndex !== editable.length)
+      throw new CompileError('XLSFORM_EDIT_STRUCTURE');
+
+    const choiceLists = source.bundle.definition.choiceLists.map((list) => ({
+      ...list,
+      choices: list.choices.map((choice) => ({ ...choice })),
+    }));
+    const choicesByIdentity = new Map(
+      choiceLists.flatMap((list) =>
+        list.choices.map(
+          (choice) => [`${list.name}\0${choice.value}`, choice] as const,
+        ),
+      ),
+    );
+    for (let rowIndex = 0; rowIndex < actualChoices.length; rowIndex++) {
+      location = `tables.sheets.choices[${rowIndex}]`;
+      const actual = actualChoices[rowIndex]!;
+      const expected = expectedChoices[rowIndex]!;
+      if (
+        actual.length !== choiceHeader.length ||
+        actual[0] !== expected[0] ||
+        actual[1] !== expected[1]
+      )
+        throw new CompileError('XLSFORM_EDIT_STRUCTURE');
+      if (rowIndex === 0 && actual[2] !== expected[2])
+        throw new CompileError('XLSFORM_EDIT_STRUCTURE');
+      if (rowIndex > 0) {
+        const choice = choicesByIdentity.get(`${actual[0]}\0${actual[1]}`);
+        if (!choice) throw new CompileError('XLSFORM_EDIT_STRUCTURE');
+        choice.label = actual[2]!;
+      }
+    }
+
+    location = 'tables.sheets.settings';
+    if (
+      actualSettings[0]!.some(
+        (cell, column) => cell !== expectedSettings[0]![column],
+      ) ||
+      actualSettings[1]!.length !== settingsHeader.length ||
+      actualSettings[1]![1] !== expectedSettings[1]![1] ||
+      actualSettings[1]![3] !== expectedSettings[1]![3] ||
+      actualSettings[1]![4] !== expectedSettings[1]![4] ||
+      !/^[1-9][0-9]*$/.test(actualSettings[1]![2]!)
+    )
+      throw new CompileError('XLSFORM_EDIT_STRUCTURE');
+    const definition: FormDefinition = {
+      ...source.bundle.definition,
+      form: {
+        ...source.bundle.definition.form,
+        title: actualSettings[1]![0]!,
+        version: Number(actualSettings[1]![2]),
+      },
+      questions: editable,
+      choiceLists,
+      skipRules: source.bundle.definition.skipRules.filter((rule) => {
+        const question = byName.get(rule.question)!;
+        const original = prepared.graph.byName.get(rule.question)!.definition;
+        return question.relevant === original.relevant;
+      }),
+    };
+    const edited = exportAuthoringBundle(definition, source.bundle.mappings);
+    if (!edited.ok) return edited;
+    const regenerated = exportXlsFormTables(
+      edited.bundle.definition,
+      edited.bundle.mappings,
+    );
+    if (!regenerated.ok) return regenerated;
+    for (const name of ['survey', 'choices', 'settings'] as const) {
+      location = `tables.sheets.${name}`;
+      const actual = tables.sheets[name];
+      const expected = regenerated.tables.sheets[name];
+      if (
+        actual.length !== expected.length ||
+        actual.some(
+          (row, rowIndex) =>
+            row.length !== expected[rowIndex]!.length ||
+            row.some((cell, column) => cell !== expected[rowIndex]![column]),
+        )
+      )
+        return failure('XLSFORM_EDIT_PROJECTION', location);
+    }
+    return edited;
   } catch (error) {
     if (error instanceof CompileError) return failure(error.code, location);
     throw error;

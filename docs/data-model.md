@@ -344,6 +344,15 @@ uses Salesforce IDs only while resolving relationships, emits no record IDs, and
 assigns deterministic snapshot-local keys where the stored model has no portable
 Choice List or Mapping key. It is not an external endpoint or publication write.
 
+ADR 0061 adds the inverse integration-only boundary for the supported portable
+graph. It creates a Draft Form and Draft Form Version, then inserts questions,
+choice lists, choices, skip rules, mappings and field mappings under one savepoint
+with user-mode DML. Portable relationship keys are resolved internally and no
+caller Salesforce ID is accepted. A late trigger, picklist or access failure rolls
+back every record. Imported portable Choice List names survive the snapshot; older
+human or duplicate names retain deterministic local fallbacks. The generated Form
+key remains the only normalized identity in the C10.10 comparison.
+
 The compiler checks question reference scope and excludes Author Notes from generated
 XML (notes 27/28). It does not yet validate Mapping/Field Mapping execution scope,
 target Describe/CRUD/FLS, record types, collector/submission stamp conflicts or lookup

@@ -11,6 +11,9 @@ public with sharing class DefinitionSnapshotReader {
     private static final Integer SKIP_RULE_LIMIT = 2000;
     private static final Integer MAPPING_LIMIT = 100;
     private static final Integer FIELD_MAPPING_LIMIT = 2000;
+    private static final Pattern PORTABLE_NAME = Pattern.compile(
+        '^[A-Za-z_][A-Za-z0-9_.-]*$'
+    );
 
     public class RefusedException extends Exception {
     }
@@ -208,10 +211,29 @@ public with sharing class DefinitionSnapshotReader {
         bounded(fields.size(), FIELD_MAPPING_LIMIT);
 
         Map<Id, String> listKeys = new Map<Id, String>();
+        Set<String> usedListKeys = new Set<String>();
+        for (Choice_List__c listDefinition : choiceLists) {
+            if (
+                listDefinition.Name != null &&
+                PORTABLE_NAME.matcher(listDefinition.Name).matches() &&
+                !usedListKeys.contains(listDefinition.Name)
+            ) {
+                listKeys.put(listDefinition.Id, listDefinition.Name);
+                usedListKeys.add(listDefinition.Name);
+            }
+        }
         Integer listIndex = 0;
         for (Choice_List__c listDefinition : choiceLists) {
+            if (listKeys.containsKey(listDefinition.Id))
+                continue;
             listIndex++;
-            listKeys.put(listDefinition.Id, 'choice_list_' + listIndex);
+            String candidate = 'choice_list_' + listIndex;
+            while (usedListKeys.contains(candidate)) {
+                listIndex++;
+                candidate = 'choice_list_' + listIndex;
+            }
+            listKeys.put(listDefinition.Id, candidate);
+            usedListKeys.add(candidate);
         }
         Map<Id, List<Map<String, Object>>> choicesByList = new Map<Id, List<Map<String, Object>>>();
         for (Choice_List__c listDefinition : choiceLists) {
@@ -308,10 +330,29 @@ public with sharing class DefinitionSnapshotReader {
         }
 
         Map<Id, String> mappingKeys = new Map<Id, String>();
+        Set<String> usedMappingKeys = new Set<String>();
+        for (Mapping__c mapping : mappings) {
+            if (
+                mapping.Name != null &&
+                PORTABLE_NAME.matcher(mapping.Name).matches() &&
+                !usedMappingKeys.contains(mapping.Name)
+            ) {
+                mappingKeys.put(mapping.Id, mapping.Name);
+                usedMappingKeys.add(mapping.Name);
+            }
+        }
         Integer mappingIndex = 0;
         for (Mapping__c mapping : mappings) {
+            if (mappingKeys.containsKey(mapping.Id))
+                continue;
             mappingIndex++;
-            mappingKeys.put(mapping.Id, 'mapping_' + mappingIndex);
+            String candidate = 'mapping_' + mappingIndex;
+            while (usedMappingKeys.contains(candidate)) {
+                mappingIndex++;
+                candidate = 'mapping_' + mappingIndex;
+            }
+            mappingKeys.put(mapping.Id, candidate);
+            usedMappingKeys.add(candidate);
         }
         Map<Id, List<Map<String, Object>>> fieldsByMapping = new Map<Id, List<Map<String, Object>>>();
         for (Mapping__c mapping : mappings) {
