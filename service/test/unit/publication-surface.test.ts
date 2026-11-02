@@ -177,6 +177,18 @@ void test('the real app mounts login, Salesforce authorization, publication and 
     'reconciledAt',
   ]);
   assert.equal(attempts.headers['cache-control'], 'no-store');
+  const reviewerPrint = await app.inject({
+    method: 'POST',
+    url: '/api/admin/salesforce/reviewer-print',
+    headers: {
+      origin,
+      cookie: `__Host-kusanya_admin_session=${opaqueSession}`,
+      'x-csrf-token': csrfToken,
+    },
+    payload: {},
+  });
+  assert.equal(reviewerPrint.statusCode, 400);
+  assert.deepEqual(reviewerPrint.json(), { error: 'Request rejected' });
   const retained = await app.inject({
     method: 'POST',
     url: '/api/admin/publication-attempts/retention',

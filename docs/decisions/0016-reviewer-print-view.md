@@ -1,6 +1,6 @@
 # ADR 0016: Reviewer-only print view
 
-- Status: Accepted; renderer verified in PR #16, delivery requirements remain open
+- Status: Accepted; renderer verified in PR #16, delivery implemented by ADR 0062
 - Date: 2026-09-16
 - Brief sections: C2, C3.14/.19, C4 mapping annotations, C5 print view, C11 Phase 1, C13 tooling isolation
 - Decision owner: Cobitech Solutions
@@ -114,13 +114,14 @@ workflow, harness, immutable pin or Salesforce metadata changes accompany it.
 
 ## Consequences and verification
 
-Claude note 39 is a requirement for the first delivery unit, not implemented by
-the renderer: `audience: 'reviewer-only'` must gate delivery. Require reviewer
-authorization, never a collector/public route; send `Cache-Control: no-store`
-with no shared cache, CSP as an actual response header, and
-`X-Content-Type-Options: nosniff`. Test that a collector-scoped principal cannot
-fetch the reviewer document. A label or meta CSP is not an authorization boundary.
-This follow-up does not close note 39 or add a route.
+ADR 0062 implements the first delivery unit. `audience: 'reviewer-only'` is
+checked again at the delivery boundary; a live tenant-scoped administrator,
+publisher or reviewer session plus same-origin CSRF is required, and there is no
+collector/public alternative. The response sends `Cache-Control: no-store`, the
+exact CSP as an HTTP header, and `X-Content-Type-Options: nosniff`. Tests prove a
+collector-style principal cannot fetch the document. The label and meta CSP remain
+defense in depth rather than authorization. Independent verification of ADR 0062
+closes note 39.
 
 The [print-view runbook](../print-view.md) defines API use, synthetic local export,
 test commands and the builder evidence record. Existing dependencies suffice.
@@ -136,7 +137,7 @@ those gates. Independent verification remains required.
 
 ## Revisit when
 
-Adding hosted reviewer delivery, changing collector serialization, accepting new
+Changing hosted reviewer delivery, changing collector serialization, accepting new
 compiler options or mapping semantics, changing print/browser support, changing
 normal package or container commands, or closing the outstanding runtime and
 publication/cardinality decisions.

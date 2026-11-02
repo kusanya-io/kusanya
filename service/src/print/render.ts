@@ -14,6 +14,21 @@ import {
 } from './mappings.js';
 import { printStyles } from './styles.js';
 
+const printStyleHash = createHash('sha256')
+  .update(printStyles)
+  .digest('base64');
+
+/** Exact response policy for any delivery of reviewer-only HTML. */
+export const printViewContentSecurityPolicy = [
+  "default-src 'none'",
+  "script-src 'none'",
+  `style-src 'sha256-${printStyleHash}'`,
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+].join('; ');
+
 export type PrintViewResult =
   | { readonly ok: false; readonly diagnostics: readonly Diagnostic[] }
   | {
@@ -108,11 +123,11 @@ export function renderPrintView(
     const mappingLink = (key: string): string =>
       `<a href="#${mappingIds.get(key)!}">${code(key)}</a>`;
     const hash = createHash('sha256').update(xml).digest('hex');
-    const styleHash = createHash('sha256').update(printStyles).digest('base64');
-    const csp = `default-src 'none'; script-src 'none'; style-src 'sha256-${styleHash}'; base-uri 'none'; form-action 'none'; object-src 'none'`;
     put('<!doctype html>');
     put('<html lang="en"><head><meta charset="utf-8">');
-    put(`<meta http-equiv="Content-Security-Policy" content="${escape(csp)}">`);
+    put(
+      `<meta http-equiv="Content-Security-Policy" content="${escape(printViewContentSecurityPolicy)}">`,
+    );
     put(
       '<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer">',
     );

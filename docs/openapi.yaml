@@ -398,6 +398,56 @@ paths:
         '422':
           description: Publication rejected with bounded diagnostics
         '503': { $ref: '#/components/responses/Unavailable' }
+  /api/admin/salesforce/reviewer-print:
+    post:
+      operationId: renderTenantSalesforceReviewerPrint
+      summary: Render one tenant-bound Form Version for authorized review
+      description: >-
+        Read-only delivery for administrator, publisher and reviewer roles. Uses
+        the live session tenant's encrypted Salesforce binding and never publishes,
+        uploads, commits or reconciles. The HTML contains author-only information
+        and must never be distributed as collector content.
+      security: [{ administratorSession: [], csrfToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [formVersionId]
+              properties:
+                formVersionId:
+                  type: string
+                  pattern: '^[A-Za-z0-9]{15}([A-Za-z0-9]{3})?$'
+      responses:
+        '200':
+          description: Static reviewer-only definition HTML
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+            Content-Security-Policy:
+              schema: { type: string }
+            Cross-Origin-Resource-Policy:
+              schema: { type: string, const: same-origin }
+            X-Content-Type-Options:
+              schema: { type: string, const: nosniff }
+            X-Frame-Options:
+              schema: { type: string, const: DENY }
+          content:
+            text/html:
+              schema: { type: string }
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Rejected' }
+        '422':
+          description: Stored definition or reviewer rendering was refused
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FixedError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /api/admin/salesforce/publication-attempts:
     get:
       operationId: listPublicationAttempts

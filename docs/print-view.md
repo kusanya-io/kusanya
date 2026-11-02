@@ -133,11 +133,29 @@ hash and denies scripts, default resource fetching, base URLs, forms and objects
 There is no `unsafe-inline` allowance or external stylesheet/font request.
 
 Meta CSP is a browser defense for this document, not server authentication,
-tenant authorization or an operating-system network sandbox. It does not supply
-frame protection: meta policies do not support `frame-ancestors`. A future hosted
-route needs a separate delivery design. The policy precedes styles and body
-content because meta policy cannot protect content processed earlier.
+tenant authorization or an operating-system network sandbox. Meta policies do not
+supply frame protection. ADR 0062's hosted route therefore sends the same policy
+as a real response header, including `frame-ancestors 'none'`, and adds no-store,
+nosniff and same-origin response protections. The policy still precedes styles and
+body content for saved or detached copies.
 [W3C CSP meta delivery](https://www.w3.org/TR/CSP3/#meta-element)
+
+## Hosted reviewer delivery
+
+The operator interface at `/admin` can request a live Salesforce definition using
+`POST /api/admin/salesforce/reviewer-print` with JSON
+`{"formVersionId":"<15-or-18-character-id>"}`. The route requires the live
+host-only administrator session, its same-origin CSRF token, and a current role of
+administrator, publisher or reviewer. It ignores caller tenant selectors and uses
+only the session tenant's encrypted Salesforce binding. A collector bearer token,
+public request, stale role, wrong origin or bad CSRF token cannot reach the reader.
+
+Success is reviewer-only `text/html`; it is not JSON and not collector form
+content. The route does not create a publication attempt, upload a File, commit a
+Form Version or reconcile anything. The shared session may persist a Salesforce-
+issued refresh-token rotation as credential maintenance. Use the operator shell
+rather than putting the Form Version ID in a URL. Printing or saving creates an
+operator-managed copy outside the service cache boundary.
 
 Static `@media print` rules adapt screen content for printing, and `@page` requests
 A4 with 15 mm margins. The CSS includes text wrapping, repeating table headers

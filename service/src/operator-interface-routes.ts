@@ -41,7 +41,8 @@ const script = `
     retention: '/api/admin/publication-attempts/retention',
     invitations: '/api/admin/administrator-invitations',
     provision: '/api/admin/administrators',
-    publish: '/api/admin/salesforce/publications'
+    publish: '/api/admin/salesforce/publications',
+    review: '/api/admin/salesforce/reviewer-print'
   });
   const elements = Object.freeze({
     login: document.getElementById('login-form'),
@@ -57,6 +58,8 @@ const script = `
     changeRole: document.getElementById('change-role'),
     publish: document.getElementById('publish-form'),
     formVersion: document.getElementById('form-version'),
+    review: document.getElementById('review-form'),
+    reviewFormVersion: document.getElementById('review-form-version'),
     logout: document.getElementById('logout'),
     more: document.getElementById('more'),
     retention: document.getElementById('apply-retention'),
@@ -220,6 +223,28 @@ const script = `
       await loadAttempts(true);
     } catch (error) { setStatus(error.message); }
   });
+  elements.review.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const response = await request(endpoints.review, {
+        method: 'POST',
+        headers: { ...protectedHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ formVersionId: elements.reviewFormVersion.value })
+      });
+      if (!response.ok) throw new Error(fixedFailure(response));
+      const reviewerHtml = await response.text();
+      const objectUrl = URL.createObjectURL(new Blob([reviewerHtml], { type: 'text/html' }));
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+      elements.reviewFormVersion.value = '';
+      setStatus('Reviewer-only print view opened in a new tab.');
+    } catch (error) { setStatus(error.message); }
+  });
   elements.more.addEventListener('click', async () => {
     try { await loadAttempts(false); }
     catch (error) { setStatus(error.message); }
@@ -308,6 +333,14 @@ const html = `<!doctype html>
           <form id="publish-form">
             <label>Salesforce Form Version ID<input id="form-version" name="form-version" required pattern="[A-Za-z0-9]{15}([A-Za-z0-9]{3})?" autocomplete="off"></label>
             <button type="submit">Publish</button>
+          </form>
+        </section>
+        <section class="card" aria-labelledby="review-title">
+          <h2 id="review-title">Review a form version</h2>
+          <p class="muted">Open a reviewer-only, read-only definition snapshot. It may contain author notes and must not be distributed to collectors.</p>
+          <form id="review-form">
+            <label>Salesforce Form Version ID<input id="review-form-version" name="review-form-version" required pattern="[A-Za-z0-9]{15}([A-Za-z0-9]{3})?" autocomplete="off"></label>
+            <button type="submit">Open print view</button>
           </form>
         </section>
       </div>

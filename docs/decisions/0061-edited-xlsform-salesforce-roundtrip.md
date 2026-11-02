@@ -1,6 +1,6 @@
 # ADR 0061: Bounded edited-XLSForm import and atomic Salesforce round trip
 
-- Status: Proposed; implementation and C10.10 evidence awaiting independent verification
+- Status: Accepted; C10.10 independently verified on the exact PR #121 head
 - Date: 2026-10-30
 - Brief sections: C1.1/.2/.8, C3.12, C4, C5, C10.10, C11 Phase 1
 - Decision owner: Cobitech Solutions
