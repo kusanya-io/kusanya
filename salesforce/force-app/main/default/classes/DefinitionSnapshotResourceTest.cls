@@ -193,6 +193,39 @@ private class DefinitionSnapshotResourceTest {
     }
 
     @IsTest
+    static void reviewerIntegrationCanReadWithoutPublishingAuthority() {
+        Id versionId = createDefinition();
+        User reviewer;
+        System.runAs(new User(Id = UserInfo.getUserId())) {
+            reviewer = createUser('snapreview');
+            assignPermission(reviewer.Id, 'Kusanya_Supervisor');
+            assignPermission(reviewer.Id, 'Kusanya_Reviewer_Integration');
+        }
+
+        System.runAs(reviewer) {
+            Assert.isTrue(
+                FeatureManagement.checkPermission('Review_Kusanya_Definition')
+            );
+            Assert.isFalse(
+                FeatureManagement.checkPermission('Publish_Kusanya')
+            );
+            Assert.isFalse(
+                FeatureManagement.checkPermission('Import_Kusanya_Definition')
+            );
+            RestResponse response = invoke(
+                'POST',
+                'application/json',
+                validBody(versionId)
+            );
+            Assert.areEqual(200, response.statusCode);
+            Assert.isFalse(
+                response.responseBody.toString()
+                    .contains(String.valueOf(versionId))
+            );
+        }
+    }
+
+    @IsTest
     static void refusesOversizedResponsesWithoutDisclosure() {
         Id versionId = createDefinition();
         User integration;

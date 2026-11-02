@@ -482,6 +482,28 @@ test('new Apex uses local references, responsibility headers and API 64 without 
 });
 
 test('permission sets grant scoped definitions and only integration can import or publish', () => {
+  const reviewerApi = read(
+    'permissionsets/Kusanya_Reviewer_Integration.permissionset-meta.xml',
+  );
+  assert.ok(tag(reviewerApi, 'description')?.trim());
+  assert.deepEqual(
+    [
+      ...reviewerApi.matchAll(/<classAccesses>([\s\S]*?)<\/classAccesses>/g),
+    ].map((match) => tag(match[1], 'apexClass')),
+    ['DefinitionSnapshotResource'],
+  );
+  assert.deepEqual(
+    [
+      ...reviewerApi.matchAll(
+        /<customPermissions>([\s\S]*?)<\/customPermissions>/g,
+      ),
+    ].map((match) => tag(match[1], 'name')),
+    ['Review_Kusanya_Definition'],
+  );
+  assert.doesNotMatch(
+    reviewerApi,
+    /<objectPermissions>|<fieldPermissions>|Publish_Kusanya|Import_Kusanya_Definition/,
+  );
   for (const [name, canWrite, canDelete] of [
     ['Kusanya_Admin', true, true],
     ['Kusanya_Integration', true, false],
@@ -510,7 +532,11 @@ test('permission sets grant scoped definitions and only integration can import o
       );
       assert.deepEqual(
         customPermissions.map((grant) => tag(grant, 'name')),
-        ['Import_Kusanya_Definition', 'Publish_Kusanya'],
+        [
+          'Import_Kusanya_Definition',
+          'Publish_Kusanya',
+          'Review_Kusanya_Definition',
+        ],
       );
       for (const grant of [...classAccesses, ...customPermissions]) {
         assert.equal(tag(grant, 'enabled'), 'true');

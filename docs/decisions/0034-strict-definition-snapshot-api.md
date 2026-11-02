@@ -1,6 +1,6 @@
 # ADR 0034: Strict Salesforce definition snapshot API
 
-- Status: Proposed; implementation awaiting independent verification
+- Status: Accepted; authorization separated further by ADR 0063
 - Date: 2026-10-07
 - Brief sections: C2, C3.16, C4 sharing and permissions, C8, C11 Phase 1
 - Decision owner: Cobitech Solutions
@@ -26,10 +26,13 @@ authorization modes can be reviewed independently.
 
 `DefinitionSnapshotResource` is a `global with sharing` Apex REST resource at
 `/services/apexrest/v1/publications/definition`. It exposes one `@HttpPost` method.
-The method requires the existing `Publish_Kusanya` custom permission before it
-reads the request body, and Apex class access is added only to
-`Kusanya_Integration`. Admin and Supervisor receive neither class access nor the
-custom permission.
+ADR 0063 replaces the original `Publish_Kusanya` gate with the dedicated
+`Review_Kusanya_Definition` custom permission before the method reads the request
+body. Apex class access and that permission belong to full `Kusanya_Integration`
+and capability-only `Kusanya_Reviewer_Integration`; the latter must be paired with
+the read-only `Kusanya_Supervisor` object/field grants. Admin and Supervisor alone
+receive neither class access nor the custom permission. Publication commit remains
+separately gated by `Publish_Kusanya`.
 
 The authenticated Salesforce principal remains the read principal. The request
 cannot select a tenant, user, owner or credential. The resource delegates exactly

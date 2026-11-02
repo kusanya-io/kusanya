@@ -78,6 +78,7 @@ test('only integration can invoke the definition import resource', () => {
   for (const [name, granted] of [
     ['Kusanya_Admin', false],
     ['Kusanya_Integration', true],
+    ['Kusanya_Reviewer_Integration', false],
     ['Kusanya_Supervisor', false],
   ]) {
     const xml = read(`permissionsets/${name}.permissionset-meta.xml`);

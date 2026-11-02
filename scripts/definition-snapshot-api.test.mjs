@@ -26,10 +26,10 @@ test('definition snapshot REST boundary is narrow, bounded and non-disclosing', 
   assert.match(resource, /body\.size\(\) > responseByteLimit/);
   assert.match(
     resource,
-    /FeatureManagement\.checkPermission\('Publish_Kusanya'\)/,
+    /FeatureManagement\.checkPermission\('Review_Kusanya_Definition'\)/,
   );
   assert.ok(
-    resource.indexOf("checkPermission('Publish_Kusanya')") <
+    resource.indexOf("checkPermission('Review_Kusanya_Definition')") <
       resource.indexOf('request.requestBody'),
   );
   assert.match(resource, /JSON\.createParser\(body\)/);
@@ -66,18 +66,33 @@ test('definition snapshot request and refusal contracts are exact', () => {
   }
 });
 
-test('only integration can invoke the definition snapshot resource', () => {
-  for (const [name, granted] of [
-    ['Kusanya_Admin', false],
-    ['Kusanya_Integration', true],
-    ['Kusanya_Supervisor', false],
+test('review capability is separate from publication and import', () => {
+  const permission = read(
+    'customPermissions/Review_Kusanya_Definition.customPermission-meta.xml',
+  );
+  assert.match(permission, /<isLicensed>false<\/isLicensed>/);
+  assert.match(permission, /<label>Review Kusanya Definition<\/label>/);
+
+  for (const [name, review, publish, importDefinition] of [
+    ['Kusanya_Admin', false, false, false],
+    ['Kusanya_Integration', true, true, true],
+    ['Kusanya_Reviewer_Integration', true, false, false],
+    ['Kusanya_Supervisor', false, false, false],
   ]) {
     const xml = read(`permissionsets/${name}.permissionset-meta.xml`);
     assert.equal(
       xml.includes('<apexClass>DefinitionSnapshotResource</apexClass>'),
-      granted,
+      review,
     );
-    assert.equal(xml.includes('<name>Publish_Kusanya</name>'), granted);
+    assert.equal(
+      xml.includes('<name>Review_Kusanya_Definition</name>'),
+      review,
+    );
+    assert.equal(xml.includes('<name>Publish_Kusanya</name>'), publish);
+    assert.equal(
+      xml.includes('<name>Import_Kusanya_Definition</name>'),
+      importDefinition,
+    );
   }
 });
 
@@ -88,6 +103,7 @@ test('hosted tests cover deterministic success, strict refusal and authorization
   assert.match(source, /returnsDeterministicPortableCrossOwnerSnapshot/);
   assert.match(source, /refusesMalformedOversizedAndWrongIdentityRequests/);
   assert.match(source, /refusesUngrantedPrincipalsBeforeReadingTheBody/);
+  assert.match(source, /reviewerIntegrationCanReadWithoutPublishingAuthority/);
   assert.match(source, /refusesOversizedResponsesWithoutDisclosure/);
   assert.match(source, /"schemaVersion":1,"schemaVersion":1/);
   assert.match(source, /Limits\.getDmlStatements\(\)/);

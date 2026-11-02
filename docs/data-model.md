@@ -42,6 +42,14 @@ Integration permission set receives both class access and the `Publish_Kusanya`
 custom permission. The endpoint reads no file body, so it does not change the byte-
 attestation limitation above.
 
+ADR 0063 separates the definition snapshot from that publish grant. The
+`Review_Kusanya_Definition` permission gates only the read-only snapshot resource.
+Full `Kusanya_Integration` carries review, import and publish; capability-only
+`Kusanya_Reviewer_Integration` carries only snapshot class access plus review and
+must be paired with `Kusanya_Supervisor` for read-only definition object/FLS. That
+pair can review without importing or publishing. These are service-integration
+grants and never collector accounts.
+
 ADR 0037 adds the administrator-owned Publisher lookup on Form. When the selected
 publisher is not the owner, one `Form__Share` row grants Edit using the packaged
 `Publisher_Access__c` reason; controlled-by-parent Form Versions inherit that
@@ -195,6 +203,10 @@ ownership; neither has Modify All Records or View All Data. All four derived key
 are read-only. Required/master-detail fields omit FLS entries. These permissions
 do not assign users, create collectors, grant customer-target access or allow a
 Supervisor to edit definitions.
+
+`Kusanya_Reviewer_Integration` is deliberately capability-only and has no model
+object or field entries of its own. Assigning it with Supervisor enables the
+snapshot API while leaving the import and publication APIs unavailable.
 
 The definition-wide read grant is deliberately distinct from ADR 0037's one-Form
 write grant. Only Admin can select Publisher. The package-maintained custom share

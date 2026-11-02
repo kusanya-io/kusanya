@@ -432,6 +432,10 @@ paths:
               schema: { type: string }
             Cross-Origin-Resource-Policy:
               schema: { type: string, const: same-origin }
+            Permissions-Policy:
+              schema: { type: string }
+            Referrer-Policy:
+              schema: { type: string, const: no-referrer }
             X-Content-Type-Options:
               schema: { type: string, const: nosniff }
             X-Frame-Options:

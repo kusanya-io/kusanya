@@ -61,6 +61,13 @@ for the reviewed snapshot reader, with Modify All Records still false. Only Admi
 can edit a Form's Publisher selection; the selected user receives one explicit
 record share but no permission assignment or setup privilege.
 
+Definition review is a separate Salesforce capability. Full Integration includes
+`Review_Kusanya_Definition` together with import and publish. For a review-only
+service identity, assign both `Kusanya_Supervisor` (read-only definition object/FLS)
+and capability-only `Kusanya_Reviewer_Integration` (snapshot class plus review
+permission). That pairing cannot invoke import or publication commit. It is one
+tenant integration identity, never a Salesforce user or licence per collector.
+
 ## Iterative development only
 
 From the repository root in PowerShell, after the maintainer reserves capacity and
