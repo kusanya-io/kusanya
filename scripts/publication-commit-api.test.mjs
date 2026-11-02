@@ -81,6 +81,7 @@ test('only the integration permission set can invoke publication', () => {
   for (const [name, granted] of [
     ['Kusanya_Admin', false],
     ['Kusanya_Integration', true],
+    ['Kusanya_Reviewer_Integration', false],
     ['Kusanya_Supervisor', false],
   ]) {
     const xml = read(`permissionsets/${name}.permissionset-meta.xml`);

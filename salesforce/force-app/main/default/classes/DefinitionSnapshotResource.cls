@@ -31,7 +31,7 @@ global with sharing class DefinitionSnapshotResource {
         response.addHeader('Cache-Control', 'no-store');
         response.addHeader('Content-Type', 'application/json; charset=UTF-8');
 
-        if (!FeatureManagement.checkPermission('Publish_Kusanya')) {
+        if (!FeatureManagement.checkPermission('Review_Kusanya_Definition')) {
             writeFailure(403, 'DEFINITION_SNAPSHOT_FORBIDDEN');
             return;
         }

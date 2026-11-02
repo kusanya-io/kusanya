@@ -203,6 +203,13 @@ read, fresh Describe, package validation, upload/readback and commit as the same
 Integration principal. A cross-owner definition remains readable but cannot reach
 the user-mode commit without record-level write access on its private Form parent.
 
+ADR 0063 gives the definition REST edge its own Salesforce permission. Full
+Integration retains review, import and publish. A review-only identity instead
+pairs Supervisor's exact definition-read grants with the capability-only Reviewer
+Integration set, which has no import/commit class or permission. The service still
+stores one Salesforce credential per tenant; simultaneous split identities remain
+a separate data-model decision.
+
 ADR 0037 supplies that prerequisite without Modify All Records. An Admin selects
 one Publisher on one Form, and a trigger maintains one custom-reason Edit share for
 that user; the controlled-by-parent versions inherit the access. Replacement,

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomPermission xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>Allows a trusted integration principal to invoke only the bounded read-only Kusanya definition snapshot REST boundary. Does not import, publish, upload, commit, grant setup access or authorize collectors.</description>
+    <isLicensed>false</isLicensed>
+    <label>Review Kusanya Definition</label>
+</CustomPermission>

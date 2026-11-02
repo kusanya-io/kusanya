@@ -21,6 +21,10 @@
         <enabled>true</enabled>
         <name>Publish_Kusanya</name>
     </customPermissions>
+    <customPermissions>
+        <enabled>true</enabled>
+        <name>Review_Kusanya_Definition</name>
+    </customPermissions>
     <fieldPermissions>
         <editable>true</editable>
         <field>Folder__c.Description__c</field>

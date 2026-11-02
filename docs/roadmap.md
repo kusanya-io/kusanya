@@ -473,3 +473,10 @@ under no-store, a real CSP response header and nosniff. Collector-style bearer a
 public requests are refused before review, and the route can reach neither
 publication nor reconciliation. C10.11, the remaining note 34 strands and the
 Phase 1 gate remain separate work.
+
+ADR 0063 answers note 135 by separating Salesforce definition review from import
+and publication. A review-only service identity pairs Supervisor's definition-read
+grants with the capability-only Reviewer Integration set and holds neither publish
+nor import permission; full Integration retains all three for the existing
+publication workflow. This creates no collector Salesforce users or licences.
+Notes 136 and 137 remain informational, and no C10 or phase-gate claim is made.
