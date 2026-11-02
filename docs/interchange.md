@@ -1,9 +1,10 @@
 # Authoring interchange
 
-This unit provides a lossless **supported-authoring snapshot**, a
-consistency-checked XLSForm-style table profile and a strict binary `.xlsx` adapter.
-It does not import arbitrary edited workbooks, read/write Salesforce or publish
-forms. No C10 acceptance test is claimed. See
+This boundary provides a lossless **supported-authoring snapshot**, a
+consistency-checked XLSForm-style table profile, a strict binary `.xlsx` adapter
+and a separately bounded visible-cell editing path. It does not import arbitrary
+third-party XLSForms or publish forms. Salesforce import and exact fresh-org
+round-trip evidence are defined by ADR 0061. See
 [ADR 0017](decisions/0017-authoring-interchange.md) and
 [ADR 0018](decisions/0018-strict-xlsx-adapter.md).
 
@@ -124,11 +125,11 @@ annotations that cannot be reconstructed from the visible projection. Chunks are
 at most 30,000 UTF-16 units and never split a surrogate pair. They are not executable
 spreadsheet formulas. No hidden-sheet property or confidentiality is implied.
 
-Import validates the source and regenerates **all** sheets, then compares every
-row/cell. Changing only a label, constraint, count, choice, header or source chunk
-is not silently ignored. Contradictions fail with structural diagnostics. To edit,
-change the authoring definition/mapping input and re-export the profile. Generic
-XLSForm editing/import is not implemented here.
+The strict importer validates the source and regenerates **all** sheets, then
+compares every row/cell. Changing only a label, constraint, count, choice, header or
+source chunk is not silently ignored. Contradictions fail with structural
+diagnostics. ADR 0061 adds a separate edited importer described below; the strict
+operation remains unchanged.
 
 This is consistency, not authenticity. An actor can modify the source and create
 a matching projection; there is no signature, trusted checksum or authorization
@@ -174,10 +175,42 @@ contract as the table importer. The workbook is deterministic and contains exact
 
 This is a deliberately narrow OOXML subset. Import rejects formulas, typed cells,
 comments, macros, external links, extra or missing ZIP parts, duplicate names,
-unsupported compression, changed package metadata, non-sequential cells and any
-projection that disagrees with the canonical source. A workbook re-saved by Excel,
-LibreOffice or another tool may add unsupported parts and fail closed. Generic
-workbook normalization and visible-cell editing remain outside this profile.
+unsupported compression, changed package metadata and non-sequential cells. A
+workbook re-saved by Excel, LibreOffice or another tool may add unsupported parts
+and fail closed. Generic workbook normalization remains outside this profile.
+
+## Bounded edited import and Salesforce round trip
+
+ADR 0061 adds `importEditedXlsFormTables` and
+`importEditedXlsFormWorkbook`. They accept only the same four-sheet Kusanya profile.
+Rows, headers, identities, hierarchy, question types, bindings, choice values and
+fixed settings must remain unchanged. The editable cells are form title/version,
+question labels and collector hints, required/read-only/default/calculation/
+constraint/relevance/appearance/repeat options, and choice labels. Mappings, Author
+Notes and validation-script source are retained from `kusanya_source` because the
+visible sheets cannot represent them. Canonical regeneration must explain every
+visible edit; there is no best-effort or partial import. Expression edits must use
+the compiler printer's canonical parentheses and spacing, and a refusal identifies
+the exact cell without reflecting its contents. Clearing generated relevance drops
+its skip rules. Dependent generated cells may remain at their original exported
+value when another accepted edit changes them; the returned definition recomputes
+their canonical value.
+
+`verifySalesforceXlsFormRoundTrip` from
+`service/dist/src/interchange/salesforce-roundtrip.js` combines that importer with
+the integration-only Salesforce boundaries. The caller injects one exact
+`*.salesforce.com` origin and a fresh token provider. The harness makes exactly two
+POST requests: `/v1/definitions/import`, then `/v1/publications/definition`. It
+normalises only the generated Form key and requires compiled XForm XML byte
+equality, returning a measured request count and both SHA-256 values on success or
+mismatch. Snapshot-local Choice List and Mapping keys resolve relationships but do
+not enter compiled XML. The harness performs no retry or publication.
+
+The Apex import is all-or-none under a savepoint and user-mode DML. It creates a
+Draft Form and Draft Form Version only; target Describe validation still occurs at
+publication. Only the Integration permission set has its class and custom
+permission. A successful unit test is not C10.10 evidence: the verifier must deploy
+the exact head to a fresh org and run the two-boundary round trip there.
 
 Compressed input is limited to 12 MB, each expanded part to 10 MB and all expanded
 parts to 20 MB before decompression. The table limits below apply after XML decoding.
@@ -248,10 +281,10 @@ git diff --check
 The optional ODK Validate command remains in the [compiler runbook](compiler.md);
 validation of recompiled XML does not test a spreadsheet converter. No extra
 scratch org, CI change, namespace change, runtime-probe install or device setup is
-authorized. C10.10 still needs actual XLSForm file exchange into a fresh Salesforce
-org, and C10.12 remains separate work.
+authorized. C10.10 still needs exact-head XLSForm file exchange into a fresh
+Salesforce org by the independent verifier. C10.12 passed separately under ADR 0060.
 
-Builder checks on this unit passed: 252 root tests and 151 service tests in both
+Builder checks on the original interchange unit passed: 252 root tests and 151 service tests in both
 PowerShell and Git Bash; service lint/typecheck, repository formatting, scaffold
 and whitespace checks also passed. All eight synthetic definitions preserved
 canonical JSON and exact compiled XML through both import paths, and all eight
@@ -264,6 +297,13 @@ and rejected both negative controls, using the pinned validator SHA-256 in the
 compiler runbook. Those results are XML checks, not spreadsheet-converter proof.
 Boundary regressions include an exact 100,000-node envelope round trip and
 rejection above that limit, and decimal rounding/underflow rejection.
+
+Builder checks for ADR 0061 passed 287 root tests and 419 service tests, service
+lint/typecheck, repository formatting, scaffold and whitespace checks. Offline
+Salesforce source conversion succeeded. A mutation that disabled the final XML
+byte comparison made the mismatch regression fail with unequal hashes, then passed
+again after restoration. The builder created no org; hosted Apex and the fresh-org
+C10.10 round trip remain verifier evidence.
 
 No builder scratch org, local container run or optional runtime-tool installation
 was used for this unit. Claude's review, the public CI container checks and the

@@ -481,7 +481,7 @@ test('new Apex uses local references, responsibility headers and API 64 without 
   );
 });
 
-test('permission sets grant scoped definitions and only integration can publish', () => {
+test('permission sets grant scoped definitions and only integration can import or publish', () => {
   for (const [name, canWrite, canDelete] of [
     ['Kusanya_Admin', true, true],
     ['Kusanya_Integration', true, false],
@@ -502,14 +502,19 @@ test('permission sets grant scoped definitions and only integration can publish'
     if (name === 'Kusanya_Integration') {
       assert.deepEqual(
         classAccesses.map((grant) => tag(grant, 'apexClass')),
-        ['DefinitionSnapshotResource', 'PublicationCommitResource'],
+        [
+          'DefinitionImportResource',
+          'DefinitionSnapshotResource',
+          'PublicationCommitResource',
+        ],
       );
       assert.deepEqual(
         customPermissions.map((grant) => tag(grant, 'name')),
-        ['Publish_Kusanya'],
+        ['Import_Kusanya_Definition', 'Publish_Kusanya'],
       );
-      assert.equal(tag(classAccesses[0], 'enabled'), 'true');
-      assert.equal(tag(customPermissions[0], 'enabled'), 'true');
+      for (const grant of [...classAccesses, ...customPermissions]) {
+        assert.equal(tag(grant, 'enabled'), 'true');
+      }
     } else {
       assert.deepEqual(classAccesses, []);
       assert.deepEqual(customPermissions, []);

@@ -87,10 +87,11 @@ automatic per-artifact JavaRosa validation remain required before corresponding
 runtime/publish claims. No CI or harness change is included; notes 29/31/35 remain
 separate reviewed tooling/workflow work.
 
-Next units must complete tenant connection and CLI publication, artifact delivery
-and retention, executable ingestion of the package-pinned repeat-count policy, and
-general edited-XLSForm import.
-No model unit claims C10 tests 10/12. Do not mark Phase 1 complete from model tests.
+Those model-era next-unit statements are now historical. ADR 0061 supplies the
+bounded edited Kusanya workbook import and atomic Salesforce round-trip path;
+structural or arbitrary third-party XLSForm conversion remains separate. C10.10
+still requires independent exact-head fresh-org evidence. Do not mark Phase 1
+complete from model or unit tests.
 
 ADR 0044 adds the administrator browser composition: a trusted injected
 login verifier issues the exact host-only cookie, a live same-origin bootstrap
@@ -129,8 +130,12 @@ source/projection consistency checks. It preserves supported definitions and
 mapping configurations, not all C4 records. The current strict binary adapter
 (ADR 0018) wraps that profile in deterministic XLSX bytes with literal text cells,
 bounded ZIP/XML input and fail-closed unsupported-feature checks, answering note 40.
-General edited-XLSForm import and Salesforce persistence remain before C10.10.
-This unit creates no org and changes no workflow, harness, namespace or dependency.
+ADR 0061 later adds bounded visible-cell import for Kusanya-exported workbooks,
+atomic integration-only Salesforce persistence and a two-boundary XML comparison
+harness. It does not accept arbitrary third-party XLSForms. C10.10 remains open
+until the verifier reproduces the exact-head comparison in a fresh org.
+The original interchange unit created no org and changed no workflow, harness,
+namespace or dependency.
 Note 39's reviewer authorization, no-store/header protections and collector-denial
 test are recorded in ADR 0016 and remain due at the first delivery unit.
 

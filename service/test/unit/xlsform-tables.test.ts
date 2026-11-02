@@ -6,6 +6,7 @@ import { exportAuthoringBundle } from '../../src/interchange/bundle.js';
 import { createSalesforceNames } from '../../src/salesforce-names.js';
 import {
   exportXlsFormTables,
+  importEditedXlsFormTables,
   importXlsFormTables,
   type XlsFormTables,
 } from '../../src/interchange/xlsform-tables.js';
@@ -74,6 +75,132 @@ void test('round-trips supported compiler and reviewer fixtures through source a
       compileForm(expected.bundle.definition),
     );
     assert.deepEqual(exported.warnings, imported.warnings);
+  }
+});
+
+void test('imports bounded visible edits while retaining unprojected authoring and mappings', () => {
+  const source = reviewerFixture();
+  const exported = exportXlsFormTables(source.form, source.mappings);
+  assert.ok(exported.ok);
+  const edited = structuredClone(exported.tables);
+  edited.sheets.settings[1]![0] = 'Edited title';
+  edited.sheets.settings[1]![2] = '2';
+  const target = edited.sheets.survey.find(
+    (entry) => entry[1] === 'student_count',
+  );
+  assert.ok(target);
+  target[2] = 'Edited student count';
+  target[3] = 'Edited collector hint';
+  target[6] = '3';
+  const choice = edited.sheets.choices.find(
+    (entry) => entry[0] === 'yes_no' && entry[1] === 'yes',
+  );
+  assert.ok(choice);
+  choice[2] = 'Affirmative';
+
+  assert.equal(importXlsFormTables(edited).ok, false);
+  const imported = importEditedXlsFormTables(edited);
+  assert.ok(imported.ok, JSON.stringify(imported));
+  assert.equal(imported.bundle.definition.form.title, 'Edited title');
+  assert.equal(imported.bundle.definition.form.version, 2);
+  const importedTarget = imported.bundle.definition.questions.find(
+    (question) => question.name === 'student_count',
+  );
+  assert.equal(importedTarget?.label, 'Edited student count');
+  assert.equal(importedTarget?.hint, 'Edited collector hint');
+  assert.equal(importedTarget?.defaultValue, '3');
+  assert.equal(imported.bundle.definition.skipRules.length, 1);
+  assert.equal(
+    imported.bundle.definition.choiceLists[0]!.choices[0]!.label,
+    'Affirmative',
+  );
+  assert.ok(
+    imported.bundle.definition.questions.some(
+      (question) => question.authorNotes !== undefined,
+    ),
+  );
+  const canonical = exportAuthoringBundle(source.form, source.mappings);
+  assert.ok(canonical.ok);
+  assert.deepEqual(imported.bundle.mappings, canonical.bundle.mappings);
+  const compiled = compileForm(imported.bundle.definition);
+  assert.ok(compiled.ok, JSON.stringify(compiled));
+  if (compiled.ok) assert.ok(compiled.xml.includes('Edited student count'));
+});
+
+void test('applies cleared skip relevance and repeat-mode edits with derived cells', () => {
+  const source = reviewerFixture();
+  const exported = exportXlsFormTables(source.form, source.mappings);
+  assert.ok(exported.ok);
+  const edited = structuredClone(exported.tables);
+  const reason = edited.sheets.survey.find((entry) => entry[1] === 'reason');
+  const samples = edited.sheets.survey.find((entry) => entry[1] === 'samples');
+  assert.ok(reason);
+  assert.ok(samples);
+  reason[10] = '';
+  samples[12] = '${student_count}';
+
+  const imported = importEditedXlsFormTables(edited);
+  assert.ok(imported.ok, JSON.stringify(imported));
+  assert.equal(
+    imported.bundle.definition.skipRules.some(
+      (rule) => rule.question === 'reason',
+    ),
+    false,
+  );
+  const repeat = imported.bundle.definition.questions.find(
+    (question) => question.name === 'samples',
+  );
+  assert.equal(repeat?.repeatMode, 'from_answer');
+  assert.equal(repeat?.repeatSourceQuestion, 'student_count');
+  assert.equal(repeat?.repeatCount, undefined);
+  assert.equal(compileForm(imported.bundle.definition).ok, true);
+});
+
+void test('reports the exact noncanonical edited expression cell', () => {
+  const exported = exportXlsFormTables(
+    simpleForm([
+      question('computed', {
+        type: 'calculate',
+        calculation: "concat('a', 'b')",
+      }),
+    ]),
+    emptyMappings,
+  );
+  assert.ok(exported.ok);
+  const edited = structuredClone(exported.tables);
+  edited.sheets.survey[1]![7] = "concat('a','b')";
+  const imported = importEditedXlsFormTables(edited);
+  assert.deepEqual(imported, {
+    ok: false,
+    diagnostics: [
+      {
+        code: 'XLSFORM_EDIT_PROJECTION',
+        location: 'tables.sheets.survey[1][7]',
+      },
+    ],
+  });
+});
+
+void test('edited import refuses structural identity, row and literal-value drift', () => {
+  const exported = exportXlsFormTables(mixedRepeatForm(), emptyMappings);
+  assert.ok(exported.ok);
+  for (const mutate of [
+    (tables: XlsFormTables) => {
+      tables.sheets.survey[1]![1] = 'renamed';
+    },
+    (tables: XlsFormTables) => {
+      tables.sheets.survey.splice(2, 1);
+    },
+    (tables: XlsFormTables) => {
+      tables.sheets.survey[1]![4] = 'true';
+    },
+    (tables: XlsFormTables) => {
+      tables.sheets.choices[1]![0] = 'other';
+    },
+  ]) {
+    const changed: XlsFormTables = structuredClone(exported.tables);
+    mutate(changed);
+    assert.equal(importEditedXlsFormTables(changed).ok, false);
   }
 });
 
