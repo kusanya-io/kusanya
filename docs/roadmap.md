@@ -462,3 +462,14 @@ one HH:MM pattern in its JavaScript source and portable regex, is byte-pinned, a
 passes ODK Validate. C10.12 still requires the exact reviewed bytes to refuse and
 accept the recorded boundary values in stock ODK Collect v2026.3.5. The seven-form
 CLI workload is C10.11 in Phase 5, not part of this Phase 1 claim.
+
+ADR 0061 adds the bounded edited-Kusanya-workbook import and atomic Salesforce
+round trip. Independent exact-head evidence reproduced C10.10 after normalising
+only the generated Salesforce Form key; this does not accept arbitrary third-party
+XLSForms. ADR 0062 closes note 39 with mounted tenant-bound reviewer print delivery.
+A live administrator, publisher or reviewer role plus exact origin and CSRF selects
+one encrypted Salesforce connection; one bounded read-only snapshot is returned
+under no-store, a real CSP response header and nosniff. Collector-style bearer and
+public requests are refused before review, and the route can reach neither
+publication nor reconciliation. C10.11, the remaining note 34 strands and the
+Phase 1 gate remain separate work.

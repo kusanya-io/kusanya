@@ -3,6 +3,7 @@ import { types } from 'node:util';
 import type { FastifyInstance } from 'fastify';
 import { requireHardenedRequestLogging } from './http-security.js';
 import { registerOperatorInterfaceRoutes } from './operator-interface-routes.js';
+import { registerReviewerPrintRoutes } from './print/reviewer-routes.js';
 import { registerPublicationAttemptPresentationRoutes } from './publication/publication-attempt-presentation-routes.js';
 import { registerPublicationAttemptRetentionRoutes } from './publication/publication-attempt-retention-routes.js';
 import type { PublicationAttemptStore } from './publication/publication-attempt-store.js';
@@ -248,6 +249,12 @@ export function registerPublicationSurface(
         dependencies.attemptStore,
       ),
     }),
+    externalOrigin: dependencies.externalOrigin,
+  });
+  registerReviewerPrintRoutes(app, {
+    authenticateAdministrator,
+    connectionStore: dependencies.connectionStore,
+    publisherConfiguration: dependencies.publisherConfiguration,
     externalOrigin: dependencies.externalOrigin,
   });
   registerOperatorInterfaceRoutes(app);

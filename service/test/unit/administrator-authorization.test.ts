@@ -23,14 +23,15 @@ function context(role: AdministratorRole): TrustedAdministratorContext {
 
 void test('one closed matrix authorizes every administrator route capability', () => {
   const expected = {
-    administrator: [true, true, true, true],
-    publisher: [false, false, true, true],
-    reviewer: [false, false, false, true],
+    administrator: [true, true, true, true, true],
+    publisher: [false, false, true, true, true],
+    reviewer: [false, false, false, true, true],
   } as const;
   const capabilities = [
     administratorRoutePolicy.administratorLifecycle,
     administratorRoutePolicy.salesforceAuthorization,
     administratorRoutePolicy.salesforcePublication,
+    administratorRoutePolicy.reviewerPrint,
     administratorRoutePolicy.publicationHistory,
   ] as const;
   for (const [role, decisions] of Object.entries(expected))

@@ -59,6 +59,7 @@ void test('uses only mounted same-origin APIs and keeps bearer and CSRF values i
     '/api/admin/administrator-invitations',
     '/api/admin/salesforce/publications',
     '/api/admin/salesforce/publication-attempts',
+    '/api/admin/salesforce/reviewer-print',
     '/api/admin/publication-attempts/retention',
   ])
     assert.ok(response.body.includes(path), path);
@@ -79,6 +80,13 @@ void test('uses only mounted same-origin APIs and keeps bearer and CSRF values i
   assert.match(response.body, /Operator access removed for this tenant\./);
   assert.match(response.body, /Operator role changed for this tenant\./);
   assert.match(response.body, /Delete expired safe attempts/);
+  assert.match(response.body, /Review a form version/);
+  assert.match(
+    response.body,
+    /author notes and must not be distributed to collectors/,
+  );
+  assert.match(response.body, /URL\.createObjectURL/);
+  assert.match(response.body, /new Blob/);
   assert.match(
     response.body,
     /Deleted ' \+ result\.deletedCount \+ ' retention-eligible publication attempts\./,

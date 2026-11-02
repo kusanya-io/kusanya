@@ -9,6 +9,7 @@ export type AdministratorCapability =
   | 'manage_publication_retention'
   | 'authorize_salesforce'
   | 'publish'
+  | 'review_definition'
   | 'view_publication_history';
 
 const roleCapabilities = Object.freeze({
@@ -17,10 +18,15 @@ const roleCapabilities = Object.freeze({
     'manage_publication_retention',
     'authorize_salesforce',
     'publish',
+    'review_definition',
     'view_publication_history',
   ]),
-  publisher: Object.freeze(['publish', 'view_publication_history']),
-  reviewer: Object.freeze(['view_publication_history']),
+  publisher: Object.freeze([
+    'publish',
+    'review_definition',
+    'view_publication_history',
+  ]),
+  reviewer: Object.freeze(['review_definition', 'view_publication_history']),
 } satisfies Record<AdministratorRole, readonly AdministratorCapability[]>);
 
 /** Authorize only the live role already decoded from PostgreSQL. */
@@ -38,5 +44,6 @@ export const administratorRoutePolicy = Object.freeze({
   publicationRetention: 'manage_publication_retention',
   salesforceAuthorization: 'authorize_salesforce',
   salesforcePublication: 'publish',
+  reviewerPrint: 'review_definition',
   publicationHistory: 'view_publication_history',
 } as const satisfies Record<string, AdministratorCapability>);

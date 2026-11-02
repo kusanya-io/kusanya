@@ -84,9 +84,12 @@ graph and expressions, and adds a strict supplied-mapping summary (ADR 0016).
 It emits static escaped HTML with fixed print CSS and no external resources.
 Author Notes and regex examples are intentionally visible to reviewers, unlike
 collector XML. The prepared graph and print document must never be used as
-collector responses. No endpoint, Salesforce access, authorization, mapping
-execution or publication approval is added. Future hosted reviewer delivery
-requires a separate access-control design; a document's CSP is not that boundary.
+collector responses. ADR 0062 mounts a read-only tenant-bound delivery endpoint:
+live administrator, publisher or reviewer authority plus exact origin and CSRF
+selects the encrypted tenant connection, reads one Salesforce snapshot and sends
+the static HTML under no-store and real response security headers. No collector
+or public route, mapping execution, publication write or approval is added. A
+document's CSP is defense in depth, not the authorization boundary.
 
 The [authoring interchange boundary](interchange.md) adds a versioned JSON envelope,
 an XLSForm-style projection and a strict XLSX wrapper (ADRs 0017/0018). ADR 0061
