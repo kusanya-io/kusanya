@@ -56,10 +56,11 @@ Hosted Apex must prove a `Minimum Access - Salesforce` user assigned
 definition snapshot while
 `FeatureManagement` reports review true and publish/import false. Existing tests
 continue proving ordinary and Supervisor-only users are refused before body
-access, while the full Integration principal succeeds. Static tests pin the exact
-top-level permission-set element whitelist and class/custom-permission inventories,
-and prove the reviewer capability set contains no object, field, user, publish or
-import grant. This answers notes 138 and 139 after independent verification.
+access, while the full Integration principal succeeds. Static tests reject every
+XML element name outside the reviewed reviewer-permission vocabulary regardless of
+formatting, pin the class/custom-permission inventories, and retain explicit
+refusals for object, field, user, publish and import grants. This answers notes 138
+and 139 after independent verification.
 
 This closes note 135 after independent verification. It does not narrow the
 service role matrix: administrator, publisher and reviewer roles all deliberately

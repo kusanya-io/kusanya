@@ -18,7 +18,7 @@ void test('publishes the reviewed ODK Validate 1.20.0 pin', () => {
   );
 });
 
-void test('startup proves the fixed synthetic XForm through the concrete validator', async () => {
+void test('startup sends the fixed synthetic XForm and normalizes failures', async () => {
   let observed = '';
   await assertOdkValidateRuntime(async (xml) => {
     observed = xml;

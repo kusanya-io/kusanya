@@ -51,6 +51,13 @@ records the tagged artifact, digest, embedded dependency versions and licences.
 Debian's OpenJDK package notices remain under `/usr/share/doc`. The npm manifests and
 lockfiles do not change because neither runtime asset is an npm dependency.
 
+The validator artifact is reproducible at the byte level; the platform beneath it
+is not fully pinned. `node:24.19.0-bookworm-slim` is a mutable tag and Debian's
+`openjdk-17-jre-headless` package is intentionally unversioned, so OS and Java minor
+updates can enter a later build without a repository change. CI and verification
+record the observed package version; runtime-version drift is investigated rather
+than described as validator drift.
+
 ## Consequences and verification
 
 The ordinary final-image build is now a genuine validator smoke test. Static tests
@@ -59,6 +66,8 @@ smoke, nonroot ordering, notice inventory and exclusion of local JARs. Unit test
 prove startup sends the fixed positive control to the supplied validator and turns
 both a refusal and an exception into the same non-disclosing startup failure. A
 source tripwire fails on any different checksum, URL or broadened Docker copy/add.
+The test suite canonicalizes and compares the tracked build-time XForm with the
+startup constant so the two positive controls cannot drift independently.
 
 Independent verification should build the final image without a local JAR, inspect
 its filesystem and package inventory, verify the release and in-image hashes, run
@@ -81,6 +90,7 @@ The class-access limitation in note 140 is not restated as execution evidence.
 
 ## Revisit when
 
-Changing the validator or Java major version, changing the service base image,
-adding an OS sandbox for validator children, publishing multi-architecture images,
-or a supported ODK Validate release changes embedded dependencies or licence terms.
+Changing the validator, observing Java or base-image version drift, changing the
+service base image, adding an OS sandbox for validator children, publishing
+multi-architecture images, or a supported ODK Validate release changes embedded
+dependencies or licence terms.

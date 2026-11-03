@@ -3,6 +3,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { odkValidateRuntimeSmokeXform } from '../../src/publication/odk-validate.js';
 
 const sha256 =
   '92756ea4aed195355a07e5572f025f0921a31282387a870ae63e1f5cdf37e0c3';
@@ -12,14 +13,23 @@ const serviceRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '../../..',
 );
+const canonicalSmokeXml = (xml: string): string =>
+  xml
+    .replaceAll('\r\n', '\n')
+    .replace(/>\s+</g, '><')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+\/>/g, '/>')
+    .replace(/\s+>/g, '>')
+    .trim();
 
 void test('runtime image pins and proves the only shipped validator artifact', async () => {
-  const [dockerfile, notice, runtimeFiles, main] = await Promise.all([
+  const [dockerfile, notice, smokeXml, runtimeFiles, main] = await Promise.all([
     readFile(resolve(serviceRoot, 'Dockerfile'), 'utf8'),
     readFile(
       resolve(serviceRoot, 'runtime/ODK-Validate-v1.20.0-NOTICES.md'),
       'utf8',
     ),
+    readFile(resolve(serviceRoot, 'runtime/odk-validate-smoke.xml'), 'utf8'),
     readdir(resolve(serviceRoot, 'runtime')),
     readFile(resolve(serviceRoot, 'src/main.ts'), 'utf8'),
   ]);
@@ -53,6 +63,10 @@ void test('runtime image pins and proves the only shipped validator artifact', a
     'ODK-Validate-v1.20.0-NOTICES.md',
     'odk-validate-smoke.xml',
   ]);
+  assert.equal(
+    canonicalSmokeXml(smokeXml),
+    canonicalSmokeXml(odkValidateRuntimeSmokeXform),
+  );
 
   assert.match(notice, new RegExp(sha256));
   for (const component of [

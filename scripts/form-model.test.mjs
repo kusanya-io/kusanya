@@ -486,18 +486,40 @@ test('permission sets grant scoped definitions and only integration can import o
     'permissionsets/Kusanya_Reviewer_Integration.permissionset-meta.xml',
   );
   assert.ok(tag(reviewerApi, 'description')?.trim());
-  assert.deepEqual(
-    [...reviewerApi.matchAll(/^    <([A-Za-z]+)(?:>|\s)/gm)].map(
-      (match) => match[1],
-    ),
+  const allowedReviewerApiElements = new Set([
+    'PermissionSet',
+    'description',
+    'classAccesses',
+    'apexClass',
+    'enabled',
+    'customPermissions',
+    'name',
+    'hasActivationRequired',
+    'label',
+  ]);
+  const unexpectedReviewerApiElements = (xml) =>
     [
-      'description',
-      'classAccesses',
-      'customPermissions',
-      'hasActivationRequired',
-      'label',
-    ],
-  );
+      ...new Set(
+        [...xml.matchAll(/<\/?([A-Za-z_][\w.-]*)/g)].map((match) => match[1]),
+      ),
+    ].filter((name) => !allowedReviewerApiElements.has(name));
+  assert.deepEqual(unexpectedReviewerApiElements(reviewerApi), []);
+  for (const forbiddenGrant of [
+    '    <userPermissions>\n        <enabled>true</enabled>\n        <name>ModifyAllData</name>\n    </userPermissions>',
+    '  <userPermissions><enabled>true</enabled><name>ModifyAllData</name></userPermissions>',
+    '  <userPermissions>\n      <enabled>true</enabled>\n      <name>ModifyAllData</name>\n  </userPermissions>',
+    '<userPermissions><enabled>true</enabled><name>ModifyAllData</name></userPermissions>',
+  ]) {
+    assert.deepEqual(
+      unexpectedReviewerApiElements(
+        reviewerApi.replace(
+          '</PermissionSet>',
+          `${forbiddenGrant}\n</PermissionSet>`,
+        ),
+      ),
+      ['userPermissions'],
+    );
+  }
   assert.deepEqual(
     [
       ...reviewerApi.matchAll(/<classAccesses>([\s\S]*?)<\/classAccesses>/g),
