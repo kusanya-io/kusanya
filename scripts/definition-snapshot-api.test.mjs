@@ -104,6 +104,7 @@ test('hosted tests cover deterministic success, strict refusal and authorization
   assert.match(source, /refusesMalformedOversizedAndWrongIdentityRequests/);
   assert.match(source, /refusesUngrantedPrincipalsBeforeReadingTheBody/);
   assert.match(source, /reviewerIntegrationCanReadWithoutPublishingAuthority/);
+  assert.match(source, /Name = 'Minimum Access - Salesforce'/);
   assert.match(source, /refusesOversizedResponsesWithoutDisclosure/);
   assert.match(source, /"schemaVersion":1,"schemaVersion":1/);
   assert.match(source, /Limits\.getDmlStatements\(\)/);

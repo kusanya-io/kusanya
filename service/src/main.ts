@@ -1,7 +1,10 @@
 import { createApp } from './app.js';
 import { ConfigurationError, readConfig } from './config.js';
 import { createPostgresPool, createQueryExecutor } from './database.js';
-import { createOdkValidateValidator } from './publication/odk-validate.js';
+import {
+  assertOdkValidateRuntime,
+  createOdkValidateValidator,
+} from './publication/odk-validate.js';
 import { PublicationAttemptStore } from './publication/publication-attempt-store.js';
 import { readPublicationSurfaceRuntimeConfig } from './runtime-config.js';
 import { AdministratorSessionStore } from './tenant/administrator-session.js';
@@ -13,6 +16,8 @@ import { createAdministratorOidcIdentity } from './tenant/oidc-login.js';
 async function main(): Promise<void> {
   const config = readConfig();
   const runtime = readPublicationSurfaceRuntimeConfig();
+  const validateXForm = createOdkValidateValidator(runtime.validator);
+  await assertOdkValidateRuntime(validateXForm);
   const administratorIdentity = createAdministratorOidcIdentity(runtime.oidc);
   const pool = createPostgresPool(config, () => {
     process.stderr.write('Database connection became unavailable\n');
@@ -44,7 +49,7 @@ async function main(): Promise<void> {
     oauthConfiguration: runtime.oauth,
     attemptStore,
     publisherConfiguration: runtime.publisher,
-    validateXForm: createOdkValidateValidator(runtime.validator),
+    validateXForm,
     externalOrigin: runtime.externalOrigin,
   });
   let closing = false;

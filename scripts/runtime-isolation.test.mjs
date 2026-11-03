@@ -146,16 +146,28 @@ function isolationProblems(input) {
   const copySources = new Set([
     'package.json package-lock.json ./',
     'tsconfig.json eslint.config.js ./',
+    'Dockerfile ./Dockerfile',
+    'runtime ./runtime',
     'src ./src',
     'test ./test',
+    'runtime/odk-validate-smoke.xml /tmp/odk-validate-smoke.xml',
+    'runtime/ODK-Validate-v1.20.0-NOTICES.md /usr/share/doc/kusanya/ODK-Validate-v1.20.0-NOTICES.md',
     '--from=build --chown=node:node /app/package.json ./',
     '--from=build --chown=node:node /app/node_modules ./node_modules',
     '--from=build --chown=node:node /app/dist/src ./dist/src',
   ]);
+  const addSources = new Set([
+    '--checksum=sha256:92756ea4aed195355a07e5572f025f0921a31282387a870ae63e1f5cdf37e0c3 https://github.com/getodk/validate/releases/download/v1.20.0/ODK-Validate-v1.20.0.jar /opt/kusanya/ODK-Validate-v1.20.0.jar',
+  ]);
   for (const line of activeLines(input.dockerfile)) {
     if (runtimeReference(line)) problems.push('Dockerfile: runtime tooling');
     const copy = line.trim().match(/^(COPY|ADD)\s+(.+)$/i);
-    if (copy && (copy[1] !== 'COPY' || !copySources.has(copy[2]))) {
+    if (
+      copy &&
+      (copy[1] === 'COPY'
+        ? !copySources.has(copy[2])
+        : !addSources.has(copy[2]))
+    ) {
       problems.push('Dockerfile: review broadened container copy sources');
     }
   }
@@ -359,6 +371,8 @@ for (const instruction of [
   'COPY . .',
   'COPY ../scripts/runtime ./runtime',
   'ADD https://example.invalid/probes.tar.gz /app/',
+  'ADD --checksum=sha256:02756ea4aed195355a07e5572f025f0921a31282387a870ae63e1f5cdf37e0c3 https://github.com/getodk/validate/releases/download/v1.20.0/ODK-Validate-v1.20.0.jar /opt/kusanya/ODK-Validate-v1.20.0.jar',
+  'ADD --checksum=sha256:92756ea4aed195355a07e5572f025f0921a31282387a870ae63e1f5cdf37e0c3 https://example.invalid/ODK-Validate-v1.20.0.jar /opt/kusanya/ODK-Validate-v1.20.0.jar',
 ]) {
   rejectsMutation(
     `container rejects ${instruction}`,

@@ -20,6 +20,8 @@ published package metadata; upstream licences/notices remain authoritative.
 | Service tooling    | @types/node                    | 24.13.4                       | MIT                                          |
 | Service tooling    | @types/pg                      | 8.23.1                        | MIT                                          |
 | Container runtime  | Node.js / Debian bookworm-slim | 24.19.0                       | Node MIT plus bundled third-party/OS notices |
+| Container runtime  | OpenJDK headless (Debian)      | 17                            | GPL-2.0 with Classpath Exception             |
+| Service runtime    | ODK Validate                   | 1.20.0                        | Apache-2.0                                   |
 | Test image tooling | OpenSSL (Debian package)       | Test-stage package repository | Apache-2.0                                   |
 | Database           | PostgreSQL                     | 17 (local verification 17.11) | PostgreSQL License                           |
 
@@ -42,14 +44,18 @@ test keys are not copied into the shipped service image.
 The container retains upstream licences/notices. Recheck the full image inventory
 before a release, including operating-system packages and copied npm notices.
 
-ADR 0014 introduces **ODK Validate 1.20.0** as an optional local development tool,
-not a bundled service dependency. Its release includes JavaRosa 5.1.0. The pinned
+ADR 0014 introduces **ODK Validate 1.20.0** as the reviewed validation tool, and ADR
+0064 redistributes its unmodified release JAR in the service image. The pinned
 [Validate licence](https://github.com/getodk/validate/blob/v1.20.0/LICENSE.md) is
-Apache-2.0; [the tagged build](https://github.com/getodk/validate/blob/v1.20.0/build.gradle)
-records JavaRosa and the other bundled libraries. The upstream jar stays in ignored
-`work/`, retains upstream notices and is not committed or copied into any image.
-`scripts/check-compiler-odk.mjs` checks the release SHA-256 before running synthetic
-fixtures offline. Reinventory all transitive licences before any redistribution.
+Apache-2.0. Docker fetches the immutable release URL only at image build under the
+publisher's exact SHA-256; the binary is not committed and is never downloaded at
+service startup. The JAR retains its embedded licence/notice entries, and the image
+ships `service/runtime/ODK-Validate-v1.20.0-NOTICES.md` with the observed embedded
+inventory: JavaRosa 5.1.0, kXML2 2.3.0, Joda-Time 2.10.13, Jackson 2.13.2/2.13.2.1,
+Commons CSV 1.4, Commons IO 2.5, Kotlin 1.6.10, selected Bouncy Castle 1.77 classes,
+SLF4J 1.7.25/1.7.33, JetBrains annotations 13.0, QDox 1.12 and Hamcrest 1.3. Preserve
+that notice, the JAR entries and Debian OpenJDK package notices in redistributed
+images. `scripts/check-compiler-odk.mjs` remains the offline fixture probe.
 
 ODK Collect and Enketo remain planned runtime integrations, not shipped dependencies
 or deployed services. ADR 0014 identifies intended compatibility targets, not proven

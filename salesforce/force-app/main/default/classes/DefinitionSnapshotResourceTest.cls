@@ -326,7 +326,7 @@ private class DefinitionSnapshotResourceTest {
         Profile profile = [
             SELECT Id
             FROM Profile
-            WHERE Name = 'Standard User'
+            WHERE Name = 'Minimum Access - Salesforce'
             LIMIT 1
         ];
         String unique = marker + '.' + String.valueOf(DateTime.now().getTime());

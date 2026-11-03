@@ -67,9 +67,10 @@ Unit tests assert the exact validated/package XML identity, validation-before-
 package behavior, invalid and throwing validator refusal without partial content,
 configuration refusal, the reviewed digest constant, pin mismatch, missing tool,
 bounded exit handling, timeout, output overflow, immutability and non-disclosure.
-The existing offline ODK Validate integration probe
-continues to exercise the genuine reviewed JAR with valid and negative fixtures.
-No JAR is committed and normal CI does not acquire one.
+The existing offline ODK Validate integration probe continues to exercise the
+genuine reviewed JAR with valid and negative fixtures. ADR 0064 later makes the
+same pinned artifact part of the final service image while keeping it out of Git and
+retaining this adapter's per-call digest and private-copy checks.
 
 This closes the automatic ODK Validate gate for the in-memory publication package.
 It does not prove Collect or Enketo rendering, interactive behavior, offline use, or

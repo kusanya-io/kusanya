@@ -9,6 +9,20 @@ import type { Diagnostic } from '../compiler/types.js';
 export const odkValidate120Sha256 =
   '92756ea4aed195355a07e5572f025f0921a31282387a870ae63e1f5cdf37e0c3';
 
+export const odkValidateRuntimeSmokeXform =
+  '<?xml version="1.0" encoding="UTF-8"?>' +
+  '<h:html xmlns="http://www.w3.org/2002/xforms" ' +
+  'xmlns:h="http://www.w3.org/1999/xhtml" ' +
+  'xmlns:jr="http://openrosa.org/javarosa">' +
+  '<h:head><h:title>Kusanya validator smoke</h:title><model><instance>' +
+  '<data id="kusanya-validator-smoke" version="1"><answer/><meta>' +
+  '<instanceID/></meta></data></instance>' +
+  '<bind nodeset="/data/answer" type="string"/>' +
+  '<bind calculate="concat(\'uuid:\', uuid())" ' +
+  'nodeset="/data/meta/instanceID" readonly="true()" type="string"/>' +
+  '</model></h:head><h:body><input ref="/data/answer">' +
+  '<label>Smoke</label></input></h:body></h:html>';
+
 const maxJarBytes = 64 * 1024 * 1024;
 const maxOutputBytes = 1024 * 1024;
 const timeoutMs = 60_000;
@@ -18,6 +32,19 @@ export type XFormValidationResult =
   | { readonly ok: false; readonly diagnostic: Diagnostic };
 
 export type ValidateXForm = (xml: string) => Promise<XFormValidationResult>;
+
+/** Fail startup without exposing validator configuration or process output. */
+export async function assertOdkValidateRuntime(
+  validateXForm: ValidateXForm,
+): Promise<void> {
+  let result: XFormValidationResult;
+  try {
+    result = await validateXForm(odkValidateRuntimeSmokeXform);
+  } catch {
+    throw new Error('ODK_VALIDATE_RUNTIME');
+  }
+  if (!result.ok) throw new Error('ODK_VALIDATE_RUNTIME');
+}
 
 export interface OdkValidateConfiguration {
   readonly javaExecutable: string;

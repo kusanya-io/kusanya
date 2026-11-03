@@ -487,6 +487,18 @@ test('permission sets grant scoped definitions and only integration can import o
   );
   assert.ok(tag(reviewerApi, 'description')?.trim());
   assert.deepEqual(
+    [...reviewerApi.matchAll(/^    <([A-Za-z]+)(?:>|\s)/gm)].map(
+      (match) => match[1],
+    ),
+    [
+      'description',
+      'classAccesses',
+      'customPermissions',
+      'hasActivationRequired',
+      'label',
+    ],
+  );
+  assert.deepEqual(
     [
       ...reviewerApi.matchAll(/<classAccesses>([\s\S]*?)<\/classAccesses>/g),
     ].map((match) => tag(match[1], 'apexClass')),

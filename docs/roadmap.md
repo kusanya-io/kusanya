@@ -480,3 +480,11 @@ grants with the capability-only Reviewer Integration set and holds neither publi
 nor import permission; full Integration retains all three for the existing
 publication workflow. This creates no collector Salesforce users or licences.
 Notes 136 and 137 remain informational, and no C10 or phase-gate claim is made.
+
+ADR 0064 closes the ODK Validate runtime-assets strand of note 34 by shipping the
+exact checksum-bound 1.20.0 release and headless OpenJDK 17 in the service image.
+Image build and service startup each run a positive synthetic validation, while the
+existing per-publication digest/private-copy/process bounds remain authoritative.
+The same hardening unit answers notes 138 and 139 with a minimum-access review
+profile and an exact permission-set element whitelist; note 140 remains an honest
+genuine-HTTP evidence gap. No C10 or Phase 1 gate claim is made.

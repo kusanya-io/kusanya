@@ -155,9 +155,13 @@ dependency-injected validator. Its concrete ODK Validate 1.20.0 adapter requires
 explicit absolute Java/JAR paths, verifies the reviewed JAR digest, copies the
 verified bytes into a private temporary workspace, runs without a shell under
 heap/time/output/environment bounds, discards tool output and cleans up before it
-can report success. Package results are now labelled `odk-validate-1.20.0`; no JAR
-is committed or downloaded. This definition-validation gate is not Collect or
-Enketo runtime evidence, durable publication, delivery, lifecycle or CLI/API work.
+can report success. ADR 0064 adds the exact checksum-bound release JAR and headless
+OpenJDK 17 to the final service image, proves them during image build, and repeats a
+positive control through the real adapter before PostgreSQL or socket startup. No
+JAR is committed or downloaded at service startup, and every publication still
+rehashes and privately copies it. Package results are labelled
+`odk-validate-1.20.0`. This definition-validation gate is not Collect or Enketo
+runtime evidence, durable publication, delivery, lifecycle or CLI/API work.
 
 The bounded Salesforce Describe transport (ADR 0025) supplies the first concrete
 HTTP implementation of the Describe callback used by publication preflight. It

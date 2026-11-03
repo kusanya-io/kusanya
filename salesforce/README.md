@@ -66,7 +66,10 @@ Definition review is a separate Salesforce capability. Full Integration includes
 service identity, assign both `Kusanya_Supervisor` (read-only definition object/FLS)
 and capability-only `Kusanya_Reviewer_Integration` (snapshot class plus review
 permission). That pairing cannot invoke import or publication commit. It is one
-tenant integration identity, never a Salesforce user or licence per collector.
+tenant integration identity on the `Minimum Access - Salesforce` profile, never
+`Standard User` and never a Salesforce user or licence per collector. Effective
+authority includes the profile: using a broader profile invalidates the review-only
+customer-record claim even when these permission sets remain narrow.
 
 ## Iterative development only
 
