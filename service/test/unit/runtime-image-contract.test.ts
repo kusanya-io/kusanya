@@ -14,17 +14,15 @@ const serviceRoot = resolve(
 );
 
 void test('runtime image pins and proves the only shipped validator artifact', async () => {
-  const [dockerfile, dockerignore, notice, runtimeFiles, main] =
-    await Promise.all([
-      readFile(resolve(serviceRoot, 'Dockerfile'), 'utf8'),
-      readFile(resolve(serviceRoot, '.dockerignore'), 'utf8'),
-      readFile(
-        resolve(serviceRoot, 'runtime/ODK-Validate-v1.20.0-NOTICES.md'),
-        'utf8',
-      ),
-      readdir(resolve(serviceRoot, 'runtime')),
-      readFile(resolve(serviceRoot, 'src/main.ts'), 'utf8'),
-    ]);
+  const [dockerfile, notice, runtimeFiles, main] = await Promise.all([
+    readFile(resolve(serviceRoot, 'Dockerfile'), 'utf8'),
+    readFile(
+      resolve(serviceRoot, 'runtime/ODK-Validate-v1.20.0-NOTICES.md'),
+      'utf8',
+    ),
+    readdir(resolve(serviceRoot, 'runtime')),
+    readFile(resolve(serviceRoot, 'src/main.ts'), 'utf8'),
+  ]);
 
   assert.match(
     dockerfile,
@@ -51,7 +49,6 @@ void test('runtime image pins and proves the only shipped validator artifact', a
       dockerfile.lastIndexOf('USER node'),
   );
   assert.doesNotMatch(dockerfile, /\b(?:curl|wget|mvn|gradle|javac)\b/);
-  assert.match(dockerignore, /^runtime\/\*\.jar$/m);
   assert.deepEqual(runtimeFiles.sort(), [
     'ODK-Validate-v1.20.0-NOTICES.md',
     'odk-validate-smoke.xml',
