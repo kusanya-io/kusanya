@@ -42,6 +42,19 @@ export interface PublicationRouteDependencies {
   readonly publisher?: typeof publishTenantSalesforceDefinition;
 }
 
+export type PublicationExecutionDependencies = Omit<
+  PublicationRouteDependencies,
+  'attemptStore' | 'authenticateAdministrator' | 'externalOrigin'
+> &
+  Readonly<{
+    attemptStore: Pick<PublicationAttemptStore, 'complete'>;
+  }>;
+
+export interface PublicationExecutionResponse {
+  readonly statusCode: number;
+  readonly body: unknown;
+}
+
 class PublicationHttpInputError extends Error {}
 
 function origin(value: string): string {
@@ -119,6 +132,119 @@ function failureCode(result: {
     : 'PUBLICATION_REJECTED';
 }
 
+/** Execute one already-recorded attempt; callers decide how it was admitted. */
+export async function executePublicationAttempt(
+  dependencies: PublicationExecutionDependencies,
+  context: TrustedAdministratorContext,
+  selectedFormVersion: string,
+  attemptId: string,
+): Promise<PublicationExecutionResponse> {
+  let partialRecorded = false;
+  let result;
+  try {
+    result = await (
+      dependencies.publisher ?? publishTenantSalesforceDefinition
+    )(
+      dependencies.connectionStore,
+      context,
+      dependencies.publisherConfiguration,
+      { formVersionId: selectedFormVersion },
+      dependencies.validateXForm,
+      dependencies.fetchImplementation,
+      async (partial) => {
+        await dependencies.attemptStore.complete(attemptId, context.tenantId, {
+          outcome: 'partial',
+          failureCode: 'PUBLICATION_PUBLISHER_PARTIAL',
+          publicationDigest: partial.publicationDigest,
+          xformVersionId: partial.xformVersionId,
+          xlsformVersionId: partial.xlsformVersionId,
+          salesforceRequestCount: partial.requestCount,
+        });
+        partialRecorded = true;
+      },
+    );
+  } catch {
+    return Object.freeze({
+      statusCode: 503,
+      body: Object.freeze({
+        status: 'unresolved',
+        attemptId,
+        error: 'Publication outcome requires reconciliation',
+      }),
+    });
+  }
+
+  if (result.ok) {
+    try {
+      await dependencies.attemptStore.complete(attemptId, context.tenantId, {
+        outcome: 'succeeded',
+        publicationDigest: result.publicationDigest,
+        salesforceRequestCount: result.requestCount,
+      });
+    } catch {
+      return Object.freeze({
+        statusCode: 503,
+        body: Object.freeze({
+          status: 'unresolved',
+          attemptId,
+          error: 'Publication outcome requires reconciliation',
+        }),
+      });
+    }
+    return Object.freeze({
+      statusCode: 200,
+      body: Object.freeze({
+        status: 'published',
+        attemptId,
+        publicationDigest: result.publicationDigest,
+        alreadyCommitted: result.alreadyCommitted,
+        salesforceRequestCount: result.requestCount,
+      }),
+    });
+  }
+
+  const code = failureCode(result);
+  if (
+    code === 'PUBLICATION_PUBLISHER_PARTIAL' ||
+    code === 'PUBLICATION_PUBLISHER_PARTIAL_RECORDING'
+  ) {
+    return Object.freeze({
+      statusCode: 409,
+      body: Object.freeze({
+        status: partialRecorded ? 'partial' : 'unresolved',
+        attemptId,
+        error: 'Publication outcome requires reconciliation',
+        salesforceRequestCount: result.requestCount,
+      }),
+    });
+  }
+  try {
+    await dependencies.attemptStore.complete(attemptId, context.tenantId, {
+      outcome: 'failed',
+      failureCode: code,
+      salesforceRequestCount: result.requestCount,
+    });
+  } catch {
+    return Object.freeze({
+      statusCode: 503,
+      body: Object.freeze({
+        status: 'unresolved',
+        attemptId,
+        error: 'Publication outcome requires reconciliation',
+      }),
+    });
+  }
+  return Object.freeze({
+    statusCode: 422,
+    body: Object.freeze({
+      status: 'rejected',
+      attemptId,
+      diagnostics: result.diagnostics,
+      salesforceRequestCount: result.requestCount,
+    }),
+  });
+}
+
 /** Register only on the hardened host; production composition remains explicit. */
 export function registerPublicationRoutes(
   app: FastifyInstance,
@@ -177,96 +303,13 @@ export function registerPublicationRoutes(
       return reply.code(503).send({ error: 'Publication unavailable' });
     }
 
-    let partialRecorded = false;
-    let result;
-    try {
-      result = await (
-        dependencies.publisher ?? publishTenantSalesforceDefinition
-      )(
-        dependencies.connectionStore,
-        context,
-        dependencies.publisherConfiguration,
-        { formVersionId: selectedFormVersion },
-        dependencies.validateXForm,
-        dependencies.fetchImplementation,
-        async (partial) => {
-          await dependencies.attemptStore.complete(
-            attemptId,
-            context.tenantId,
-            {
-              outcome: 'partial',
-              failureCode: 'PUBLICATION_PUBLISHER_PARTIAL',
-              publicationDigest: partial.publicationDigest,
-              xformVersionId: partial.xformVersionId,
-              xlsformVersionId: partial.xlsformVersionId,
-              salesforceRequestCount: partial.requestCount,
-            },
-          );
-          partialRecorded = true;
-        },
-      );
-    } catch {
-      return reply.code(503).send({
-        status: 'unresolved',
-        attemptId,
-        error: 'Publication outcome requires reconciliation',
-      });
-    }
-
-    if (result.ok) {
-      try {
-        await dependencies.attemptStore.complete(attemptId, context.tenantId, {
-          outcome: 'succeeded',
-          publicationDigest: result.publicationDigest,
-          salesforceRequestCount: result.requestCount,
-        });
-      } catch {
-        return reply.code(503).send({
-          status: 'unresolved',
-          attemptId,
-          error: 'Publication outcome requires reconciliation',
-        });
-      }
-      return reply.code(200).send({
-        status: 'published',
-        attemptId,
-        publicationDigest: result.publicationDigest,
-        alreadyCommitted: result.alreadyCommitted,
-        salesforceRequestCount: result.requestCount,
-      });
-    }
-
-    const code = failureCode(result);
-    if (
-      code === 'PUBLICATION_PUBLISHER_PARTIAL' ||
-      code === 'PUBLICATION_PUBLISHER_PARTIAL_RECORDING'
-    ) {
-      return reply.code(409).send({
-        status: partialRecorded ? 'partial' : 'unresolved',
-        attemptId,
-        error: 'Publication outcome requires reconciliation',
-        salesforceRequestCount: result.requestCount,
-      });
-    }
-    try {
-      await dependencies.attemptStore.complete(attemptId, context.tenantId, {
-        outcome: 'failed',
-        failureCode: code,
-        salesforceRequestCount: result.requestCount,
-      });
-    } catch {
-      return reply.code(503).send({
-        status: 'unresolved',
-        attemptId,
-        error: 'Publication outcome requires reconciliation',
-      });
-    }
-    return reply.code(422).send({
-      status: 'rejected',
+    const response = await executePublicationAttempt(
+      dependencies,
+      context,
+      selectedFormVersion,
       attemptId,
-      diagnostics: result.diagnostics,
-      salesforceRequestCount: result.requestCount,
-    });
+    );
+    return reply.code(response.statusCode).send(response.body);
   });
 }
 

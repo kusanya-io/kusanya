@@ -13,6 +13,7 @@ import {
 import { applyMigrations } from '../../src/migrations.js';
 import {
   PublicationAttemptError,
+  PublicationAttemptRetryError,
   PublicationAttemptStore,
 } from '../../src/publication/publication-attempt-store.js';
 import { PublicationMaintenanceStore } from '../../src/publication/publication-maintenance.js';
@@ -335,6 +336,314 @@ void test(
           has_reconciled_at: true,
         },
       ],
+    );
+  },
+);
+void test(
+  'privileged publication retry is tenant-bound, single-use and database-enforced',
+  {
+    timeout: 15000,
+    skip:
+      !databaseUrl && !databaseRequired
+        ? 'Set DATABASE_URL to a disposable PostgreSQL 17 database'
+        : false,
+  },
+  async (context) => {
+    assert.ok(databaseUrl);
+    const config = readConfig({
+      ...process.env,
+      NODE_ENV: 'test',
+      DATABASE_URL: databaseUrl,
+    });
+    const pool = createPostgresPool(config, () => {});
+    const tenantId = randomUUID();
+    const otherTenantId = randomUUID();
+    const actorId = `administrator:${randomUUID()}`;
+    const publisherId = `publisher:${randomUUID()}`;
+    const otherActorId = `administrator:${randomUUID()}`;
+    const orgId = normalizeSalesforceOrgId(
+      `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+    );
+    const otherOrgId = normalizeSalesforceOrgId(
+      `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+    );
+    context.after(async () => {
+      try {
+        const cleanup = await pool.connect();
+        try {
+          await cleanup.query('BEGIN');
+          await cleanup.query(
+            `SELECT set_config(
+               'kusanya.publication_retention_actor', $1, true
+             )`,
+            [actorId],
+          );
+          await cleanup.query(
+            `SELECT set_config(
+               'kusanya.publication_retention_mode', 'administrator', true
+             )`,
+          );
+          await cleanup.query(
+            `UPDATE tenant_publication_attempts
+             SET reconciliation_status = NULL,
+                 reconciliation_request_count = NULL,
+                 reconciled_at = NULL
+             WHERE tenant_id = $1 AND outcome = 'started'
+               AND reconciliation_status = 'indeterminate'`,
+            [tenantId],
+          );
+          await cleanup.query(
+            `UPDATE tenant_publication_attempts
+             SET outcome = 'failed', failure_code = 'TEST_CLEANUP',
+                 salesforce_request_count = 0,
+                 completed_at = clock_timestamp() - interval '4000 days'
+             WHERE tenant_id = $1 AND outcome = 'started'
+               AND reconciliation_status IS NULL`,
+            [tenantId],
+          );
+          await cleanup.query(
+            `UPDATE tenant_publication_attempts
+             SET reconciliation_status = 'artifacts_missing',
+                 reconciliation_request_count = COALESCE(
+                   reconciliation_request_count, 1
+                 ),
+                 reconciled_at = clock_timestamp() - interval '4000 days'
+             WHERE tenant_id = $1 AND outcome = 'partial'
+               AND (
+                 reconciliation_status IS NULL
+                 OR reconciliation_status IN (
+                   'committed', 'unlinked', 'artifacts_missing'
+                 )
+               )`,
+            [tenantId],
+          );
+          await cleanup.query(
+            `UPDATE tenant_publication_attempts
+             SET completed_at = clock_timestamp() - interval '4000 days'
+             WHERE tenant_id = $1 AND outcome IN ('succeeded', 'failed')`,
+            [tenantId],
+          );
+          await cleanup.query(
+            `DELETE FROM tenant_publication_attempts WHERE tenant_id = $1`,
+            [tenantId],
+          );
+          await cleanup.query('COMMIT');
+        } catch (error) {
+          await cleanup.query('ROLLBACK');
+          throw error;
+        } finally {
+          cleanup.release();
+        }
+        await pool.query(
+          `DELETE FROM tenant_publication_attempt_retention_audits
+           WHERE tenant_id = $1`,
+          [tenantId],
+        );
+        await pool.query(
+          `DELETE FROM tenant_administrator_bindings
+           WHERE actor_id = ANY($1::varchar[])`,
+          [[actorId, publisherId, otherActorId]],
+        );
+        await pool.query(
+          `DELETE FROM tenant_administrator_tenants
+           WHERE tenant_id = ANY($1::uuid[])`,
+          [[tenantId, otherTenantId]],
+        );
+      } finally {
+        await pool.end();
+      }
+    });
+    await applyMigrations(pool);
+    await pool.query(
+      `INSERT INTO tenant_administrator_tenants
+         (tenant_id, expected_salesforce_org_id, authorization_origin,
+          namespace_prefix)
+       VALUES ($1, $2, 'https://login.salesforce.com', 'ksny__'),
+              ($3, $4, 'https://login.salesforce.com', '')`,
+      [tenantId, orgId, otherTenantId, otherOrgId],
+    );
+    await pool.query(
+      `INSERT INTO tenant_administrator_bindings
+         (actor_id, tenant_id, role)
+       VALUES ($1, $2, 'administrator'), ($3, $2, 'publisher'),
+              ($4, $5, 'administrator')`,
+      [actorId, tenantId, publisherId, otherActorId, otherTenantId],
+    );
+    const store = new PublicationAttemptStore(createQueryExecutor(pool));
+    const trusted = {
+      actorId,
+      tenantId,
+      expectedSalesforceOrgId: orgId,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: 'ksny__',
+      role: 'administrator' as const,
+      csrfToken: 'c'.repeat(43),
+    };
+    const make = async (
+      outcome: 'started' | 'succeeded' | 'failed' | 'partial',
+      reconciliation?:
+        'indeterminate' | 'committed' | 'unlinked' | 'artifacts_missing',
+    ) => {
+      const id = await store.start(trusted, 'a0B000000000001AAA');
+      if (outcome === 'succeeded')
+        await store.complete(id, tenantId, {
+          outcome,
+          publicationDigest: 'd'.repeat(64),
+          salesforceRequestCount: 2,
+        });
+      else if (outcome === 'failed')
+        await store.complete(id, tenantId, {
+          outcome,
+          failureCode: 'PUBLICATION_REJECTED',
+          salesforceRequestCount: 0,
+        });
+      else if (outcome === 'partial')
+        await store.complete(id, tenantId, {
+          outcome,
+          failureCode: 'PUBLICATION_PUBLISHER_PARTIAL',
+          publicationDigest: 'd'.repeat(64),
+          xformVersionId: '068000000000001AAA',
+          xlsformVersionId: '068000000000002AAA',
+          salesforceRequestCount: 2,
+        });
+      if (reconciliation !== undefined)
+        await store.resolve(
+          trusted,
+          id,
+          outcome === 'started' ? 'started' : 'partial',
+          reconciliation,
+          reconciliation === 'indeterminate' ? 0 : 1,
+        );
+      return id;
+    };
+
+    const failed = await make('failed');
+    const failedRetry = await store.startRetry(trusted, failed);
+    assert.equal(failedRetry.formVersionId, 'a0B000000000001AAA');
+    await assert.rejects(
+      store.startRetry(trusted, failed),
+      PublicationAttemptRetryError,
+    );
+    const missing = await make('partial', 'artifacts_missing');
+    const missingRetry = await store.startRetry(trusted, missing);
+    assert.equal(missingRetry.formVersionId, 'a0B000000000001AAA');
+
+    const ineligible = [
+      await make('started'),
+      await make('started', 'indeterminate'),
+      await make('succeeded'),
+      await make('partial'),
+      await make('partial', 'committed'),
+      await make('partial', 'unlinked'),
+    ];
+    for (const id of ineligible)
+      await assert.rejects(
+        store.startRetry(trusted, id),
+        PublicationAttemptRetryError,
+      );
+
+    const racingSource = await make('failed');
+    const race = await Promise.allSettled([
+      store.startRetry(trusted, racingSource),
+      store.startRetry(trusted, racingSource),
+    ]);
+    assert.equal(
+      race.filter((result) => result.status === 'fulfilled').length,
+      1,
+    );
+    assert.equal(
+      race.filter(
+        (result) =>
+          result.status === 'rejected' &&
+          result.reason instanceof PublicationAttemptRetryError,
+      ).length,
+      1,
+    );
+
+    const succeeded = ineligible[2]!;
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO tenant_publication_attempts (
+           publication_attempt_id, tenant_id, actor_id, salesforce_org_id,
+           form_version_id, retry_of_publication_attempt_id
+         ) VALUES ($1, $2, $3, $4, 'a0B000000000001AAA', $5)`,
+        [randomUUID(), tenantId, actorId, orgId, succeeded],
+      ),
+      { code: '23514' },
+    );
+    const directSource = await make('failed');
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO tenant_publication_attempts (
+           publication_attempt_id, tenant_id, actor_id, salesforce_org_id,
+           form_version_id, retry_of_publication_attempt_id
+         ) VALUES ($1, $2, $3, $4, 'a0B000000000001AAA', $5)`,
+        [randomUUID(), tenantId, publisherId, orgId, directSource],
+      ),
+      { code: '23514' },
+    );
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO tenant_publication_attempts (
+           publication_attempt_id, tenant_id, actor_id, salesforce_org_id,
+           form_version_id, retry_of_publication_attempt_id
+         ) VALUES ($1, $2, $3, $4, 'a0B000000000001AAA', $5)`,
+        [randomUUID(), tenantId, actorId, otherOrgId, directSource],
+      ),
+      { code: '23514' },
+    );
+    await assert.rejects(
+      pool.query(
+        `UPDATE tenant_publication_attempts
+         SET retry_of_publication_attempt_id = $1
+         WHERE publication_attempt_id = $2`,
+        [directSource, failedRetry.attemptId],
+      ),
+      { code: '23514' },
+    );
+
+    await store.complete(failedRetry.attemptId, tenantId, {
+      outcome: 'failed',
+      failureCode: 'PUBLICATION_REJECTED',
+      salesforceRequestCount: 0,
+    });
+    await pool.query(
+      `UPDATE tenant_publication_attempts
+       SET completed_at = clock_timestamp() - interval '120 days'
+       WHERE publication_attempt_id = ANY($1::uuid[])`,
+      [[failed, failedRetry.attemptId]],
+    );
+    await store.applyRetention(trusted);
+    assert.equal(
+      (
+        await pool.query(
+          `SELECT 1 FROM tenant_publication_attempts
+           WHERE publication_attempt_id = $1`,
+          [failed],
+        )
+      ).rowCount,
+      1,
+    );
+    assert.equal(
+      (
+        await pool.query(
+          `SELECT 1 FROM tenant_publication_attempts
+           WHERE publication_attempt_id = $1`,
+          [failedRetry.attemptId],
+        )
+      ).rowCount,
+      0,
+    );
+    await store.applyRetention(trusted);
+    assert.equal(
+      (
+        await pool.query(
+          `SELECT 1 FROM tenant_publication_attempts
+           WHERE publication_attempt_id = $1`,
+          [failed],
+        )
+      ).rowCount,
+      0,
     );
   },
 );
@@ -1689,6 +1998,7 @@ void test(
         '0011_publication_attempt_retention',
         '0012_bootstrap_uniqueness',
         '0013_scheduled_publication_maintenance',
+        '0014_privileged_publication_retry',
       ],
     );
   },

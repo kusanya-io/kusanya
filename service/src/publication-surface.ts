@@ -8,6 +8,7 @@ import { registerPublicationAttemptPresentationRoutes } from './publication/publ
 import { registerPublicationAttemptRetentionRoutes } from './publication/publication-attempt-retention-routes.js';
 import type { PublicationAttemptStore } from './publication/publication-attempt-store.js';
 import { registerPublicationRoutes } from './publication/publication-routes.js';
+import { registerPublicationRetryRoutes } from './publication/publication-retry-routes.js';
 import type { TenantSalesforcePublisherConfiguration } from './publication/tenant-salesforce-publisher.js';
 import type { ValidateXForm } from './publication/odk-validate.js';
 import { registerAdministratorSessionRoutes } from './tenant/administrator-routes.js';
@@ -52,7 +53,7 @@ export interface PublicationSurfaceDependencies {
   readonly oauthConfiguration: TenantOAuthConfiguration;
   readonly attemptStore: Pick<
     PublicationAttemptStore,
-    'start' | 'complete' | 'listForOperator' | 'applyRetention'
+    'start' | 'startRetry' | 'complete' | 'listForOperator' | 'applyRetention'
   >;
   readonly publisherConfiguration: TenantSalesforcePublisherConfiguration;
   readonly validateXForm: ValidateXForm;
@@ -126,7 +127,7 @@ function checkedDependencies(
     [decoded.oauthTransactionStore, ['begin', 'consume']],
     [
       decoded.attemptStore,
-      ['start', 'complete', 'listForOperator', 'applyRetention'],
+      ['start', 'startRetry', 'complete', 'listForOperator', 'applyRetention'],
     ],
   ] as const) {
     if (store === null || typeof store !== 'object' || types.isProxy(store))
@@ -233,6 +234,21 @@ export function registerPublicationSurface(
     authenticateAdministrator,
     connectionStore: dependencies.connectionStore,
     attemptStore: dependencies.attemptStore,
+    publisherConfiguration: dependencies.publisherConfiguration,
+    validateXForm: dependencies.validateXForm,
+    externalOrigin: dependencies.externalOrigin,
+  });
+  registerPublicationRetryRoutes(app, {
+    authenticateAdministrator,
+    connectionStore: dependencies.connectionStore,
+    attemptStore: Object.freeze({
+      startRetry: dependencies.attemptStore.startRetry.bind(
+        dependencies.attemptStore,
+      ),
+      complete: dependencies.attemptStore.complete.bind(
+        dependencies.attemptStore,
+      ),
+    }),
     publisherConfiguration: dependencies.publisherConfiguration,
     validateXForm: dependencies.validateXForm,
     externalOrigin: dependencies.externalOrigin,

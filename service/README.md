@@ -218,6 +218,15 @@ The fixed `Publication maintenance failed` message requires operator investigati
 it never authorizes a publication retry. Keep the four settings identical across all
 replicas. Unlinked attempts and Salesforce Files remain protected.
 
+ADR 0066 adds an explicit administrator-only retry action to the operator history.
+Only terminal `failed` attempts without reconciliation and `partial` attempts
+reconciled as `artifacts_missing` display Retry. The command creates a new linked
+attempt and re-evaluates the same Form Version through the ordinary bounded
+publisher. It never mutates the source, retries automatically, or treats unresolved,
+indeterminate, committed or unlinked evidence as permission. A source can create
+only one direct child, and a stale page cannot bypass the database eligibility and
+live-role checks.
+
 Before applying migration `0004_administrator_tenants` to a database created by PR
 #77, check the legacy bindings for namespace values that the current canonical rule
 will refuse:

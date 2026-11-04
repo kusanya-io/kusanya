@@ -610,6 +610,87 @@ const migrations = Object.freeze([
     END;
     $$`,
   }),
+  Object.freeze({
+    id: '0014_privileged_publication_retry',
+    sql: `ALTER TABLE tenant_publication_attempts
+      ADD COLUMN retry_of_publication_attempt_id uuid,
+      ADD CONSTRAINT tenant_publication_attempts_id_tenant
+        UNIQUE (publication_attempt_id, tenant_id),
+      ADD CONSTRAINT tenant_publication_attempts_retry_once
+        UNIQUE (retry_of_publication_attempt_id),
+      ADD CONSTRAINT tenant_publication_attempts_retry_not_self
+        CHECK (
+          retry_of_publication_attempt_id IS NULL
+          OR retry_of_publication_attempt_id <> publication_attempt_id
+        ),
+      ADD CONSTRAINT tenant_publication_attempts_retry_source
+        FOREIGN KEY (retry_of_publication_attempt_id, tenant_id)
+        REFERENCES tenant_publication_attempts(
+          publication_attempt_id, tenant_id
+        );
+    CREATE OR REPLACE FUNCTION kusanya_guard_publication_attempt_retry()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+    DECLARE
+      source_form_version varchar(18);
+    BEGIN
+      IF TG_OP = 'UPDATE' THEN
+        IF NEW.retry_of_publication_attempt_id IS DISTINCT FROM
+          OLD.retry_of_publication_attempt_id
+        THEN
+          RAISE EXCEPTION 'publication retry linkage is immutable'
+            USING ERRCODE = '23514';
+        END IF;
+        RETURN NEW;
+      END IF;
+      IF NEW.retry_of_publication_attempt_id IS NULL THEN
+        RETURN NEW;
+      END IF;
+      IF NEW.outcome <> 'started'
+        OR NEW.completed_at IS NOT NULL
+        OR NEW.reconciliation_status IS NOT NULL
+      THEN
+        RAISE EXCEPTION 'publication retry must begin as a new attempt'
+          USING ERRCODE = '23514';
+      END IF;
+      SELECT source.form_version_id
+        INTO source_form_version
+      FROM tenant_publication_attempts AS source
+      JOIN tenant_administrator_tenants AS tenant
+        ON tenant.tenant_id = NEW.tenant_id
+       AND tenant.expected_salesforce_org_id = NEW.salesforce_org_id
+      JOIN tenant_administrator_bindings AS binding
+        ON binding.actor_id = NEW.actor_id
+       AND binding.tenant_id = NEW.tenant_id
+       AND binding.active
+       AND binding.role = 'administrator'
+      WHERE source.publication_attempt_id =
+              NEW.retry_of_publication_attempt_id
+        AND source.tenant_id = NEW.tenant_id
+        AND source.salesforce_org_id = NEW.salesforce_org_id
+        AND (
+          (source.outcome = 'failed'
+            AND source.reconciliation_status IS NULL)
+          OR
+          (source.outcome = 'partial'
+            AND source.reconciliation_status = 'artifacts_missing')
+        );
+      IF source_form_version IS NULL
+        OR source_form_version <> NEW.form_version_id
+      THEN
+        RAISE EXCEPTION 'publication retry source is not eligible'
+          USING ERRCODE = '23514';
+      END IF;
+      RETURN NEW;
+    END;
+    $$;
+    CREATE TRIGGER tenant_publication_attempts_retry_guard
+      BEFORE INSERT OR UPDATE OF retry_of_publication_attempt_id
+      ON tenant_publication_attempts
+      FOR EACH ROW
+      EXECUTE FUNCTION kusanya_guard_publication_attempt_retry()`,
+  }),
 ]);
 
 export class MigrationError extends Error {
@@ -635,7 +716,8 @@ export type MigrationTarget =
   | '0010_administrator_invitations'
   | '0011_publication_attempt_retention'
   | '0012_bootstrap_uniqueness'
-  | '0013_scheduled_publication_maintenance';
+  | '0013_scheduled_publication_maintenance'
+  | '0014_privileged_publication_retry';
 
 /** Apply the checked plan through an optional exact target for upgrade verification. */
 export async function applyMigrations(

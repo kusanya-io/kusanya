@@ -58,6 +58,7 @@ void test('uses only mounted same-origin APIs and keeps bearer and CSRF values i
     '/api/admin/administrators',
     '/api/admin/administrator-invitations',
     '/api/admin/salesforce/publications',
+    '/api/admin/salesforce/publication-retries',
     '/api/admin/salesforce/publication-attempts',
     '/api/admin/salesforce/reviewer-print',
     '/api/admin/publication-attempts/retention',
@@ -80,6 +81,16 @@ void test('uses only mounted same-origin APIs and keeps bearer and CSRF values i
   assert.match(response.body, /Operator access removed for this tenant\./);
   assert.match(response.body, /Operator role changed for this tenant\./);
   assert.match(response.body, /Delete expired safe attempts/);
+  assert.match(response.body, /attempt\.retryEligible === true/);
+  assert.match(
+    response.body,
+    /button\.dataset\.attemptId = attempt\.attemptId/,
+  );
+  assert.match(response.body, /JSON\.stringify\(\{ attemptId \}\)/);
+  assert.match(
+    response.body,
+    /Publication retry completed as a new audited attempt\./,
+  );
   assert.match(response.body, /Review a form version/);
   assert.match(
     response.body,

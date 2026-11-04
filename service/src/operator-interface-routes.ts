@@ -42,6 +42,7 @@ const script = `
     invitations: '/api/admin/administrator-invitations',
     provision: '/api/admin/administrators',
     publish: '/api/admin/salesforce/publications',
+    retry: '/api/admin/salesforce/publication-retries',
     review: '/api/admin/salesforce/reviewer-print'
   });
   const elements = Object.freeze({
@@ -102,6 +103,17 @@ const script = `
       cell(row, attempt.startedAt);
       cell(row, attempt.completedAt);
       cell(row, attempt.attemptId);
+      cell(row, attempt.retryOfAttemptId);
+      const action = document.createElement('td');
+      if (attempt.retryEligible === true) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'secondary';
+        button.textContent = 'Retry';
+        button.dataset.attemptId = attempt.attemptId;
+        action.append(button);
+      }
+      row.append(action);
       elements.rows.append(row);
     }
   };
@@ -249,6 +261,26 @@ const script = `
     try { await loadAttempts(false); }
     catch (error) { setStatus(error.message); }
   });
+  elements.rows.addEventListener('click', async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const attemptId = target.dataset.attemptId;
+    if (!attemptId) return;
+    target.disabled = true;
+    try {
+      const response = await request(endpoints.retry, {
+        method: 'POST',
+        headers: { ...protectedHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attemptId })
+      });
+      if (!response.ok) throw new Error(fixedFailure(response));
+      setStatus('Publication retry completed as a new audited attempt.');
+      await loadAttempts(true);
+    } catch (error) {
+      target.disabled = false;
+      setStatus(error.message);
+    }
+  });
   elements.retention.addEventListener('click', async () => {
     try {
       const response = await request(endpoints.retention, {
@@ -346,7 +378,7 @@ const html = `<!doctype html>
       </div>
       <section class="card" aria-labelledby="attempts-title">
         <h2 id="attempts-title">Publication attempts</h2>
-        <div class="scroll"><table><thead><tr><th>Form version</th><th>Status</th><th>Started</th><th>Completed</th><th>Attempt</th></tr></thead><tbody id="attempt-rows"></tbody></table></div>
+        <div class="scroll"><table><thead><tr><th>Form version</th><th>Status</th><th>Started</th><th>Completed</th><th>Attempt</th><th>Retry of</th><th>Action</th></tr></thead><tbody id="attempt-rows"></tbody></table></div>
         <p class="actions"><button id="more" class="secondary" type="button" disabled>Load older attempts</button><button id="apply-retention" class="secondary" type="button">Delete expired safe attempts</button></p>
       </section>
     </div>
