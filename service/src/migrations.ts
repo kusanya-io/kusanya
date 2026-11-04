@@ -521,6 +521,95 @@ const migrations = Object.freeze([
       ON tenant_administrator_lifecycle_audits (tenant_id)
       WHERE action = 'bootstrap'`,
   }),
+  Object.freeze({
+    id: '0013_scheduled_publication_maintenance',
+    sql: `ALTER TABLE tenant_publication_attempt_retention_audits
+      ALTER COLUMN performed_by_actor_id DROP NOT NULL,
+      ADD COLUMN execution_source varchar(16)
+        NOT NULL DEFAULT 'administrator',
+      ADD CONSTRAINT tenant_publication_attempt_retention_audits_source
+        CHECK (
+          (execution_source = 'administrator'
+            AND performed_by_actor_id IS NOT NULL)
+          OR
+          (execution_source = 'scheduled'
+            AND performed_by_actor_id IS NULL)
+        );
+    CREATE OR REPLACE FUNCTION kusanya_guard_publication_attempt_retention()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+    DECLARE
+      retention_actor varchar(128);
+      retention_mode varchar(16);
+      retained_days smallint;
+      terminal_time timestamptz;
+    BEGIN
+      retention_actor := NULLIF(current_setting(
+        'kusanya.publication_retention_actor', true
+      ), '');
+      retention_mode := COALESCE(
+        NULLIF(current_setting(
+          'kusanya.publication_retention_mode', true
+        ), ''),
+        CASE
+          WHEN retention_actor IS NOT NULL THEN 'administrator'
+          ELSE NULL
+        END
+      );
+      IF retention_mode = 'administrator' THEN
+        SELECT tenant.publication_attempt_retention_days
+          INTO retained_days
+        FROM tenant_administrator_tenants AS tenant
+        JOIN tenant_administrator_bindings AS binding
+          ON binding.tenant_id = tenant.tenant_id
+         AND binding.actor_id = retention_actor
+         AND binding.active
+         AND binding.role = 'administrator'
+        WHERE tenant.tenant_id = OLD.tenant_id;
+      ELSIF retention_mode = 'scheduled' AND retention_actor IS NULL THEN
+        SELECT tenant.publication_attempt_retention_days
+          INTO retained_days
+        FROM tenant_administrator_tenants AS tenant
+        WHERE tenant.tenant_id = OLD.tenant_id;
+      ELSE
+        RAISE EXCEPTION 'publication retention authority is invalid'
+          USING ERRCODE = '23514';
+      END IF;
+      terminal_time := COALESCE(OLD.reconciled_at, OLD.completed_at);
+      IF retained_days IS NULL
+        OR terminal_time IS NULL
+        OR terminal_time > clock_timestamp()
+          - (retained_days * interval '1 day')
+        OR NOT (
+          (
+            (OLD.outcome IN ('succeeded', 'failed')
+              AND OLD.reconciliation_status IS NULL)
+            OR
+            (OLD.outcome = 'partial'
+              AND OLD.reconciliation_status IS NOT NULL
+              AND OLD.reconciliation_status IN (
+                'committed', 'artifacts_missing'
+              ))
+          ) IS TRUE
+        )
+      THEN
+        RAISE EXCEPTION 'publication attempt is not retention eligible'
+          USING ERRCODE = '23514';
+      END IF;
+      INSERT INTO tenant_publication_attempt_retention_audits (
+        tenant_id, publication_attempt_id, performed_by_actor_id,
+        execution_source, outcome, reconciliation_status,
+        terminal_at, retention_days
+      ) VALUES (
+        OLD.tenant_id, OLD.publication_attempt_id, retention_actor,
+        retention_mode, OLD.outcome, OLD.reconciliation_status,
+        terminal_time, retained_days
+      );
+      RETURN OLD;
+    END;
+    $$`,
+  }),
 ]);
 
 export class MigrationError extends Error {
@@ -545,7 +634,8 @@ export type MigrationTarget =
   | '0009_administrator_roles'
   | '0010_administrator_invitations'
   | '0011_publication_attempt_retention'
-  | '0012_bootstrap_uniqueness';
+  | '0012_bootstrap_uniqueness'
+  | '0013_scheduled_publication_maintenance';
 
 /** Apply the checked plan through an optional exact target for upgrade verification. */
 export async function applyMigrations(

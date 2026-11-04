@@ -503,21 +503,22 @@ void test('retention is transactional, tenant-bound and exposes no caller cutoff
     calls.map((call) =>
       call.text === 'BEGIN' || call.text === 'COMMIT' ? call.text : 'SQL',
     ),
-    ['BEGIN', 'SQL', 'SQL', 'COMMIT'],
+    ['BEGIN', 'SQL', 'SQL', 'SQL', 'COMMIT'],
   );
   assert.deepEqual(calls[1]!.values, [context.actorId]);
-  assert.deepEqual(calls[2]!.values, [
+  assert.match(calls[2]!.text, /publication_retention_mode/);
+  assert.deepEqual(calls[3]!.values, [
     context.actorId,
     context.tenantId,
     context.expectedSalesforceOrgId,
     context.authorizationOrigin,
     context.namespacePrefix,
   ]);
-  assert.match(calls[2]!.text, /LIMIT 100/);
-  assert.match(calls[2]!.text, /binding\.role = 'administrator'/);
-  assert.match(calls[2]!.text, /publication_attempt_retention_days/);
-  assert.match(calls[2]!.text, /'committed', 'artifacts_missing'/);
-  assert.doesNotMatch(calls[2]!.text, /'unlinked'/);
+  assert.match(calls[3]!.text, /LIMIT 100/);
+  assert.match(calls[3]!.text, /binding\.role = 'administrator'/);
+  assert.match(calls[3]!.text, /publication_attempt_retention_days/);
+  assert.match(calls[3]!.text, /'committed', 'artifacts_missing'/);
+  assert.doesNotMatch(calls[3]!.text, /'unlinked'/);
 });
 
 void test('retention refuses non-administrators and rolls back malformed storage results', async () => {

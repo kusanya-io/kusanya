@@ -316,6 +316,13 @@ time but deliberately has no foreign key to the deleted attempt, so it survives.
 The unique tenant/attempt key and single PostgreSQL transaction make a partial
 delete-and-audit outcome impossible.
 
+ADR 0065 adds `execution_source` to each retention audit. Existing and interactive
+rows are `administrator` and require `performed_by_actor_id`; scheduled rows are
+`scheduled` and require that actor to be null. Migration 0013 replaces the retention
+trigger without weakening its age/state policy. The scheduler may resolve only stale
+unresolved attempts through the existing one-way reconciliation columns. It creates
+no queue, retry, credential or Salesforce-object state.
+
 ADR 0045 adds append-only `tenant_salesforce_authorization_audits`. Each successful
 grant records the tenant, its bound trusted administrator actor, normalized `00D`
 org, signed authorizing `005` user and resulting credential version. The audited

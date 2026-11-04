@@ -842,8 +842,8 @@ test('successful auth discards every stdout and stderr field and never persists 
     /classify\(result\.stdout\) \?\? classify\(result\.stderr\)/,
   );
   assert.match(body, /delete childEnv\.SF_DEV_HUB_AUTH_URL/);
-  assert.match(body, /maxBuffer: 1048576/);
-  assert.match(body, /timeout: 55000/);
+  assert.match(body, /maxBuffer: 1048576,/);
+  assert.match(body, /timeout: 55000,/);
   assert.doesNotMatch(body, /2>&1|shell:\s*true/);
   assert.doesNotMatch(body, /export|GITHUB_OUTPUT|GITHUB_ENV|tee\s|writeFile/);
   assert.equal((body.match(/unset auth_name/g) ?? []).length, 2);
