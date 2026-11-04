@@ -1,6 +1,6 @@
 # ADR 0006: Quota-aware development and independent verification
 
-- Status: Approved by Bill; Phase 0 passed; issue #5 amendments await Claude verification
+- Status: Approved by Bill; Phase 0 passed; notes 143â€“145 amendment awaits Claude verification
 - Date: 2026-09-10
 - Brief sections: C8, C10, C11 Phase 0, C12, C13; verification protocol
 - Decision owner: Cobitech Solutions
@@ -186,6 +186,28 @@ or parser diagnostics. Success remains silent. Clear the variable before reporti
 do not persist, export, upload or cache the captured output. The secret remains
 scoped to the single authentication step. The diagnostic class is evidence to
 investigate, not proof a retry will work or authority to rotate a credential.
+
+Notes 143â€“145 amendment (4 November): read the four live pull-request identity
+fields from one API response rather than four independent responses. Retry that
+one read at most three times when the API fails or the returned tuple is malformed;
+never print the response. This reduces transient exposure and ensures the fields
+describe one repository state. The later immediate head recheck remains mandatory.
+
+Capture the pinned CLI's combined JSON output streams only in the same unexported
+memory variable. This preserves structured errors that the CLI emits on its error
+stream without persisting or printing raw output. Extend `RefreshTokenAuthError`
+classification with fixed labels: `authentication failure` is `token-rejected`;
+`server_error`, `temporarily_unavailable` and `service unavailable` are
+`provider-temporary`; and `invalid_client`, `invalid_request` and
+`unsupported_grant_type` are `request-rejected`. Retain the existing precedence,
+so network evidence wins over provider evidence. Only literal labels leave the
+parser. Mixed, malformed, nested or unknown output remains `unrecognized`.
+
+Run the final Dev Hub logout only when the authentication step succeeded. This
+prevents a missing CLI or absent authentication from adding a misleading cleanup
+failure, while preserving a genuine post-authentication logout failure as a red
+job. These changes improve diagnosis only: they grant no retry, authentication,
+scratch-org or cleanup authority and do not weaken the exact-head gate.
 
 `BLOCKED` fails the required gate. It never becomes a successful skip and never
 falls back to an existing org. A recognized creation-time quota error follows the

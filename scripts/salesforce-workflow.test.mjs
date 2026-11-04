@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync, statSync } from 'node:fs';
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { resolveGitBash } from './git-bash.mjs';
 import {
   collectAttempts,
@@ -89,6 +97,9 @@ const fixtures = {
   FAKE_BASE: 'main',
   FAKE_STATE: 'open',
   FAKE_GH_RESULT: '0',
+  FAKE_GH_FAIL_UNTIL: '0',
+  FAKE_GH_CALLS_FILE: '',
+  FAKE_PR_SNAPSHOT: '__AUTO__',
   SF_DEV_HUB_AUTH_URL: 'synthetic-auth-input-not-a-credential',
   FAKE_AUTH_RESULT: '0',
   FAKE_AUTH_STDOUT: 'synthetic-auth-input-not-a-credential',
@@ -102,6 +113,21 @@ const fixtures = {
 };
 const doubles = `
 gh() {
+  if [[ "$2" == repos/*/pulls/* && "$4" == *'@tsv'* ]]; then
+    local call=1
+    if [[ -n "$FAKE_GH_CALLS_FILE" ]]; then
+      call="$(( $(cat "$FAKE_GH_CALLS_FILE" 2>/dev/null || printf 0) + 1 ))"
+      printf '%s' "$call" > "$FAKE_GH_CALLS_FILE"
+    fi
+    [[ "$call" -gt "$FAKE_GH_FAIL_UNTIL" ]] || return 42
+    [[ "$FAKE_GH_RESULT" == 0 ]] || return "$FAKE_GH_RESULT"
+    if [[ "$FAKE_PR_SNAPSHOT" == __AUTO__ ]]; then
+      printf '%s\\t%s\\t%s\\t%s\\n' "$FAKE_HEAD" "$FAKE_SOURCE" "$FAKE_BASE" "$FAKE_STATE"
+    else
+      printf '%s\\n' "$FAKE_PR_SNAPSHOT"
+    fi
+    return 0
+  fi
   [[ "$FAKE_GH_RESULT" == 0 ]] || return "$FAKE_GH_RESULT"
   if [[ "$2" == repos/*/git/ref/heads/* ]]; then
     printf '%s\t%s\t%s\n' "$FAKE_ACCEPTED_BASE_REF" "$FAKE_ACCEPTED_BASE_TYPE" "$FAKE_ACCEPTED_BASE_SHA"
@@ -116,6 +142,7 @@ gh() {
     *) return 1 ;;
   esac
 }
+sleep() { :; }
 git() { printf '%s\\n' "$FAKE_CHECKOUT"; return "$FAKE_GIT_RESULT"; }
 node() {
   [[ "$#" -eq 1 && "$1" == trusted/scripts/apex-run-budget.mjs ]] || {
@@ -134,9 +161,8 @@ sf() {
   local payload
   payload="$(cat)"
   [[ "$payload" == synthetic-auth-input-not-a-credential ]] || return 3
-  # Simulate a CLI that includes its input in diagnostics; neither stream may leak.
   printf '%s\\n' "$FAKE_AUTH_STDOUT"
-  printf '%s\\n' "$payload" "$FAKE_AUTH_STDERR" >&2
+  printf '%s\\n' "$FAKE_AUTH_STDERR" >&2
   return "$FAKE_AUTH_RESULT"
 }
 `;
@@ -190,6 +216,51 @@ test('Salesforce workflow rejects forks, stale heads, closed PRs and invalid eve
       JSON.stringify(invalid),
     );
   }
+});
+
+test('reviewed PR identity comes from one atomic response with bounded malformed-response retries', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'kusanya-pr-snapshot-'));
+  const calls = join(directory, 'calls');
+  try {
+    writeFileSync(calls, '0');
+    const recovered = runStep('Confirm reviewed commit and trusted workflow', {
+      FAKE_GH_CALLS_FILE: calls,
+      FAKE_GH_FAIL_UNTIL: '2',
+    });
+    assert.equal(recovered.status, 0, recovered.stdout + recovered.stderr);
+    assert.equal(readFileSync(calls, 'utf8'), '3');
+
+    for (const malformed of [
+      '',
+      sha,
+      `${sha}\tkusanya-io/kusanya\tmain`,
+      `${sha}\tkusanya-io/kusanya\tmain\topen\textra`,
+      `${sha}\tinvalid repository\tmain\topen`,
+      `${sha}\tkusanya-io/kusanya\tmain\tunknown`,
+    ]) {
+      writeFileSync(calls, '0');
+      const refused = runStep('Confirm reviewed commit and trusted workflow', {
+        FAKE_GH_CALLS_FILE: calls,
+        FAKE_PR_SNAPSHOT: malformed,
+      });
+      assert.equal(refused.status, 1, JSON.stringify(malformed));
+      assert.equal(readFileSync(calls, 'utf8'), '3');
+      assert.match(refused.stdout, /Unable to read one complete PR state/);
+      assert.doesNotMatch(
+        refused.stdout + refused.stderr,
+        /invalid repository/,
+      );
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+  const body = shellStep('Confirm reviewed commit and trusted workflow');
+  assert.equal((body.match(/gh api /g) ?? []).length, 1);
+  assert.match(body, /for attempt in 1 2 3/);
+  assert.match(
+    body,
+    /\[\.head\.sha, \.head\.repo\.full_name, \.base\.ref, \.state\] \| @tsv/,
+  );
 });
 
 test('valid failed guards emit one early subject that attributes dispatched attempts without poisoning other heads', () => {
@@ -538,7 +609,7 @@ test('auth failure prints only an exact allowlisted top-level class using the re
     const result = runStep(step, {
       FAKE_AUTH_RESULT: '1',
       FAKE_AUTH_STDOUT: raw,
-      FAKE_AUTH_STDERR: `${secret}\n${raw}`,
+      FAKE_AUTH_STDERR: '',
     });
     assert.equal(result.status, 1);
     assert.equal(result.stdout, `Dev Hub authentication failed: ${name}\n`);
@@ -575,9 +646,16 @@ test('RefreshTokenAuthError inspects only top-level message and cause strings an
     [{ cause: `Socket Hang Up ${url}` }, 'connection'],
     [{ message: `expired access/refresh token ${secret}` }, 'token-rejected'],
     [{ cause: `Expired Access/Refresh Token ${secret}` }, 'token-rejected'],
+    [{ cause: `authentication failure ${secret}` }, 'token-rejected'],
     [{ cause: `expired access token ${secret}` }, 'other'],
     [{ cause: `expired refresh token ${secret}` }, 'other'],
     [{ message: `INVALID_GRANT ${secret}` }, 'token-rejected'],
+    [{ message: `server_error ${secret}` }, 'provider-temporary'],
+    [{ cause: `Temporarily_Unavailable ${secret}` }, 'provider-temporary'],
+    [{ cause: `service unavailable ${secret}` }, 'provider-temporary'],
+    [{ message: `invalid_client ${secret}` }, 'request-rejected'],
+    [{ cause: `invalid_request ${secret}` }, 'request-rejected'],
+    [{ cause: `unsupported_grant_type ${secret}` }, 'request-rejected'],
     [{ message: `ETIMEDOUT ${secret}`, cause: `ENOTFOUND ${url}` }, 'dns'],
     [{ message: `ECONNRESET ${secret}`, cause: `timed out ${url}` }, 'timeout'],
     [
@@ -600,7 +678,7 @@ test('RefreshTokenAuthError inspects only top-level message and cause strings an
     const result = runStep(step, {
       FAKE_AUTH_RESULT: '1',
       FAKE_AUTH_STDOUT: raw,
-      FAKE_AUTH_STDERR: `${secret}\n${raw}`,
+      FAKE_AUTH_STDERR: '',
     });
     assert.equal(result.status, 1);
     assert.equal(
@@ -621,6 +699,7 @@ test('RefreshTokenAuthError inspects only top-level message and cause strings an
     const result = runStep(step, {
       FAKE_AUTH_RESULT: '1',
       FAKE_AUTH_STDOUT: JSON.stringify(record),
+      FAKE_AUTH_STDERR: '',
     });
     assert.equal(result.status, 1);
     assert.equal(result.stdout, `Dev Hub authentication failed: ${expected}\n`);
@@ -655,16 +734,31 @@ test('auth parser refuses malicious, nested, malformed and non-object classifica
     const result = runStep(step, {
       FAKE_AUTH_RESULT: '1',
       FAKE_AUTH_STDOUT: raw,
-      // A plausible stderr classification must never become the output class.
-      FAKE_AUTH_STDERR: JSON.stringify({
-        name: 'RequestError',
-        message: secret,
-      }),
+      // Mixed or non-JSON streams fail closed without exposing either stream.
+      FAKE_AUTH_STDERR: `${secret}\nnot-json`,
     });
     assert.equal(result.status, 1);
     assert.equal(
       result.stdout,
       'Dev Hub authentication failed: unrecognized\n',
+    );
+    assert.equal(result.stderr, '');
+    assert.ok(!(result.stdout + result.stderr).includes(secret));
+  }
+  for (const stream of ['stdout', 'stderr']) {
+    const raw = JSON.stringify({
+      name: 'RefreshTokenAuthError',
+      cause: `authentication failure ${secret}`,
+    });
+    const result = runStep(step, {
+      FAKE_AUTH_RESULT: '1',
+      FAKE_AUTH_STDOUT: stream === 'stdout' ? raw : '',
+      FAKE_AUTH_STDERR: stream === 'stderr' ? raw : '',
+    });
+    assert.equal(result.status, 1);
+    assert.equal(
+      result.stdout,
+      'Dev Hub authentication failed: RefreshTokenAuthError/token-rejected\n',
     );
     assert.equal(result.stderr, '');
     assert.ok(!(result.stdout + result.stderr).includes(secret));
@@ -696,11 +790,23 @@ test('successful auth discards every stdout and stderr field and never persists 
     body,
     /auth_json="\$\(printf '%s' "\$SF_DEV_HUB_AUTH_URL" \| sf /,
   );
+  assert.match(body, /--json 2>&1/);
   assert.doesNotMatch(body, /export|GITHUB_OUTPUT|GITHUB_ENV|tee\s|writeFile/);
   assert.equal((body.match(/unset auth_json/g) ?? []).length, 2);
   assert.equal(
     (workflow.match(/secrets\.SF_DEV_HUB_AUTH_URL/g) ?? []).length,
     1,
+  );
+});
+test('logout runs only after successful authentication and preserves a real logout failure', () => {
+  const logout = stepConfig(
+    'Remove Dev Hub authentication from the ephemeral runner',
+  );
+  assert.match(logout, /if: always\(\) && steps\.auth\.outcome == 'success'/);
+  assert.doesNotMatch(logout, /continue-on-error/);
+  assert.match(
+    logout,
+    /sf org logout --target-org Kusanya-CI-DevHub --no-prompt/,
   );
 });
 test('Salesforce result guard rejects a head changed during tests', () => {
