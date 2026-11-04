@@ -356,6 +356,25 @@ void test('store selection is globally bounded and rejects malformed rows', asyn
   await assert.rejects(store.listCandidates(900_000, 25));
 });
 
+void test('store resolution refuses incoherent outcome evidence before querying', async () => {
+  const queries: { text: string; values: unknown[] }[] = [];
+  const store = new PublicationMaintenanceStore({
+    async query<Row>(text: string, values: unknown[] = []) {
+      queries.push({ text, values });
+      return { rows: [] as Row[], rowCount: 1 };
+    },
+  });
+
+  await assert.rejects(store.resolve(selected('started'), 'indeterminate', 1));
+  await assert.rejects(store.resolve(selected('partial'), 'indeterminate', 1));
+  await assert.rejects(store.resolve(selected('partial'), 'committed', 0));
+  assert.equal(queries.length, 0);
+
+  await store.resolve(selected('started'), 'indeterminate', 0);
+  await store.resolve(selected('partial'), 'committed', 1);
+  assert.equal(queries.length, 2);
+});
+
 void test('scheduled retention uses its own audit source in one transaction', async () => {
   const statements: string[] = [];
   const connection: QueryConnection = {
@@ -384,6 +403,8 @@ void test('scheduled retention uses its own audit source in one transaction', as
   assert.match(statements[1]!, /publication_retention_actor/);
   assert.match(statements[2]!, /publication_retention_mode.*scheduled/s);
   assert.match(statements[3]!, /LIMIT \$1/);
+  assert.match(statements[3]!, /'committed',\s*'artifacts_missing'/);
+  assert.doesNotMatch(statements[3]!, /'unlinked'/);
   assert.equal(statements[4], 'COMMIT');
   assert.equal(statements[5], 'RELEASE');
 });
@@ -395,31 +416,53 @@ void test('scheduler prevents local overlap and reports failed or deferred work'
   });
   let calls = 0;
   let failures = 0;
-  const scheduler = startPublicationMaintenanceScheduler(
-    60_000,
-    async () => {
-      calls += 1;
-      await blocked;
-      return {
-        acquired: true,
-        selected: 1,
-        reconciled: 0,
-        indeterminate: 0,
-        failed: 1,
-        deferred: 0,
-        retained: 0,
-      };
-    },
-    () => {
-      failures += 1;
-    },
-  );
-  const first = scheduler.runNow();
-  assert.equal(await scheduler.runNow(), undefined);
-  release();
-  await first;
-  assert.equal(calls, 1);
-  assert.equal(failures, 1);
-  await scheduler.stop();
+  const originalSetInterval = globalThis.setInterval;
+  let unrefs = 0;
+  globalThis.setInterval = ((callback: () => void, delay: number) => {
+    const timer = originalSetInterval(callback, delay);
+    const originalUnref = timer.unref.bind(timer);
+    timer.unref = () => {
+      unrefs += 1;
+      return originalUnref();
+    };
+    return timer;
+  }) as typeof setInterval;
+  const scheduler = (() => {
+    try {
+      return startPublicationMaintenanceScheduler(
+        60_000,
+        async () => {
+          calls += 1;
+          await blocked;
+          return {
+            acquired: true,
+            selected: 1,
+            reconciled: 0,
+            indeterminate: 0,
+            failed: 1,
+            deferred: 0,
+            retained: 0,
+          };
+        },
+        () => {
+          failures += 1;
+        },
+      );
+    } finally {
+      globalThis.setInterval = originalSetInterval;
+    }
+  })();
+  try {
+    assert.equal(unrefs, 1);
+    const first = scheduler.runNow();
+    assert.equal(await scheduler.runNow(), undefined);
+    release();
+    await first;
+    assert.equal(calls, 1);
+    assert.equal(failures, 1);
+  } finally {
+    release();
+    await scheduler.stop();
+  }
   assert.equal(await scheduler.runNow(), undefined);
 });

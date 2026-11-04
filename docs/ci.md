@@ -127,6 +127,17 @@ is not a reason to rotate the secret. Logout runs only after this step succeeds;
 an attempted logout that then fails remains a real job failure. See finding 20 and
 the notes 143-145 amendment in ADR 0006.
 
+Outside the three public harness error classes, verification and owned-org cleanup
+emit only a fixed bounded category: `timeout`, `network`, `filesystem`, `process`,
+`assertion`, `type`, `range`, `syntax`, `unexpected-error`, `non-error` or
+`unrecognized`. Classification reads bounded native-error data properties and
+causes without invoking accessors, proxies or coercion. It never prints the source
+message, code, URL, org identifier, stack or cause. These labels are diagnostic
+only and never grant a retry. A `failed-cleanup` marker remains permanently
+nonretryable for that head until the maintainer privately reconciles ownership and
+a new reviewed commit enters through the ordinary initial-run policy. See note 148
+in ADR 0006.
+
 The Apex job serializes across all PRs using the CI hub, without cancelling an
 active scratch lifecycle. ADR 0030 adds a separate default-branch-owned
 `pull_request_target` workflow for same-repository `synchronize` events. It may
