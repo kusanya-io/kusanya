@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import {
   mkdtempSync,
   readFileSync,
@@ -111,6 +111,19 @@ const fixtures = {
   KUSANYA_POLICY_REPOSITORY: 'kusanya-io/kusanya',
   KUSANYA_POLICY_HEAD_SHA: sha,
 };
+const authFixtureDirectory = mkdtempSync(join(tmpdir(), 'kusanya-auth-cli-'));
+const fakeSfScript = join(authFixtureDirectory, 'fake-sf.mjs');
+writeFileSync(
+  fakeSfScript,
+  `import { readFileSync } from 'node:fs';
+const input = readFileSync(0, 'utf8');
+if (input !== process.env.FAKE_EXPECTED_AUTH_INPUT || process.env.SF_DEV_HUB_AUTH_URL !== undefined) process.exit(3);
+process.stdout.write(process.env.FAKE_AUTH_STDOUT ?? '');
+process.stderr.write(process.env.FAKE_AUTH_STDERR ?? '');
+process.exit(Number(process.env.FAKE_AUTH_RESULT ?? 0));
+`,
+);
+after(() => rmSync(authFixtureDirectory, { recursive: true, force: true }));
 const doubles = `
 gh() {
   if [[ "$2" == repos/*/pulls/* && "$4" == *'@tsv'* ]]; then
@@ -154,20 +167,30 @@ node() {
   printf 'Budget checked for attempt %s\\n' "$GITHUB_RUN_ATTEMPT"
   return "$FAKE_BUDGET_RESULT"
 }
-sf() {
-  [[ "$#" -eq 9 && "$1" == org && "$2" == login && "$3" == sfdx-url &&
-     "$4" == --sfdx-url-stdin && "$5" == - && "$6" == --alias &&
-     "$7" == Kusanya-CI-DevHub && "$8" == --set-default-dev-hub && "$9" == --json ]] || return 2
-  local payload
-  payload="$(cat)"
-  [[ "$payload" == synthetic-auth-input-not-a-credential ]] || return 3
-  printf '%s\\n' "$FAKE_AUTH_STDOUT"
-  printf '%s\\n' "$FAKE_AUTH_STDERR" >&2
-  return "$FAKE_AUTH_RESULT"
-}
 `;
 function runStep(name, overrides = {}) {
   return runShell(shellStep(name), overrides);
+}
+function authShellBody() {
+  const body = shellStep(
+    'Authenticate dedicated Dev Hub without printing its auth URL',
+  );
+  const transformed = body.replace(
+    'spawnSync("sf", [',
+    'spawnSync(process.execPath, [process.env.FAKE_SF_SCRIPT,',
+  );
+  assert.notEqual(transformed, body, 'Auth wrapper spawn seam changed.');
+  return transformed;
+}
+const authFixtureEnv = {
+  FAKE_SF_SCRIPT: fakeSfScript,
+  FAKE_EXPECTED_AUTH_INPUT: fixtures.SF_DEV_HUB_AUTH_URL,
+};
+function runAuthStep(overrides = {}) {
+  return runShell(authShellBody(), {
+    ...authFixtureEnv,
+    ...overrides,
+  });
 }
 function runShell(body, overrides = {}) {
   const env = { ...process.env, ...fixtures, ...overrides };
@@ -405,9 +428,20 @@ test('each Apex attempt rechecks trusted budget before auth even if the early po
     'Authenticate dedicated Dev Hub without printing its auth URL',
   ];
   const body =
-    names.map(shellStep).join('\n') + "\nprintf 'Authentication completed\\n'";
+    names
+      .map((name) =>
+        name === 'Authenticate dedicated Dev Hub without printing its auth URL'
+          ? authShellBody()
+          : shellStep(name),
+      )
+      .join('\n') + "\nprintf 'Authentication completed\\n'";
   for (const attempt of ['1', '2', '3']) {
-    const allowed = runShell(body, { GITHUB_RUN_ATTEMPT: attempt });
+    const allowed = runShell(body, {
+      ...authFixtureEnv,
+      GITHUB_RUN_ATTEMPT: attempt,
+      FAKE_AUTH_STDOUT: '',
+      FAKE_AUTH_STDERR: '',
+    });
     assert.equal(allowed.status, 0, allowed.stdout + allowed.stderr);
     assert.equal(
       allowed.stdout,
@@ -556,9 +590,10 @@ test('fallback only runs for failed or cancelled verification, never after a pas
   }
 });
 test('Salesforce authentication passes the explicit stdin marker and suppresses CLI output', () => {
-  const result = runStep(
-    'Authenticate dedicated Dev Hub without printing its auth URL',
-  );
+  const result = runAuthStep({
+    FAKE_AUTH_STDOUT: '',
+    FAKE_AUTH_STDERR: '',
+  });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(result.stdout, '');
   assert.equal(result.stderr, '');
@@ -568,7 +603,7 @@ test('Salesforce authentication fails closed without a secret or after a CLI fai
   const missing = runStep(step, { SF_DEV_HUB_AUTH_URL: '' });
   assert.equal(missing.status, 1);
   assert.match(missing.stdout, /Missing environment secret/);
-  const failed = runStep(step, { FAKE_AUTH_RESULT: '1' });
+  const failed = runAuthStep({ FAKE_AUTH_RESULT: '1' });
   assert.equal(failed.status, 1);
   assert.equal(failed.stdout, 'Dev Hub authentication failed: unrecognized\n');
   for (const result of [missing, failed]) {
@@ -606,10 +641,10 @@ test('auth failure prints only an exact allowlisted top-level class using the re
       data: { authUrl: secret, instanceUrl: secret, name: secret },
       result: { accessToken: secret, username: secret },
     });
-    const result = runStep(step, {
+    const result = runAuthStep({
       FAKE_AUTH_RESULT: '1',
       FAKE_AUTH_STDOUT: raw,
-      FAKE_AUTH_STDERR: '',
+      FAKE_AUTH_STDERR: `usage notice ${secret}`,
     });
     assert.equal(result.status, 1);
     assert.equal(result.stdout, `Dev Hub authentication failed: ${name}\n`);
@@ -675,10 +710,10 @@ test('RefreshTokenAuthError inspects only top-level message and cause strings an
     [{ message: `${secret}NOTENOTFOUND`, cause: '' }, 'other'],
   ]) {
     const raw = JSON.stringify({ ...base, ...details });
-    const result = runStep(step, {
+    const result = runAuthStep({
       FAKE_AUTH_RESULT: '1',
       FAKE_AUTH_STDOUT: raw,
-      FAKE_AUTH_STDERR: '',
+      FAKE_AUTH_STDERR: `usage notice ${secret}`,
     });
     assert.equal(result.status, 1);
     assert.equal(
@@ -696,10 +731,10 @@ test('RefreshTokenAuthError inspects only top-level message and cause strings an
     [{ ...base, name: undefined, cause: 'ENOTFOUND' }, 'unrecognized'],
     [{ ...base, name: { name: 'RefreshTokenAuthError' } }, 'unrecognized'],
   ]) {
-    const result = runStep(step, {
+    const result = runAuthStep({
       FAKE_AUTH_RESULT: '1',
       FAKE_AUTH_STDOUT: JSON.stringify(record),
-      FAKE_AUTH_STDERR: '',
+      FAKE_AUTH_STDERR: `usage notice ${fixtures.SF_DEV_HUB_AUTH_URL}`,
     });
     assert.equal(result.status, 1);
     assert.equal(result.stdout, `Dev Hub authentication failed: ${expected}\n`);
@@ -731,7 +766,7 @@ test('auth parser refuses malicious, nested, malformed and non-object classifica
     'true',
     '123',
   ]) {
-    const result = runStep(step, {
+    const result = runAuthStep({
       FAKE_AUTH_RESULT: '1',
       FAKE_AUTH_STDOUT: raw,
       // Mixed or non-JSON streams fail closed without exposing either stream.
@@ -750,7 +785,7 @@ test('auth parser refuses malicious, nested, malformed and non-object classifica
       name: 'RefreshTokenAuthError',
       cause: `authentication failure ${secret}`,
     });
-    const result = runStep(step, {
+    const result = runAuthStep({
       FAKE_AUTH_RESULT: '1',
       FAKE_AUTH_STDOUT: stream === 'stdout' ? raw : '',
       FAKE_AUTH_STDERR: stream === 'stderr' ? raw : '',
@@ -763,6 +798,17 @@ test('auth parser refuses malicious, nested, malformed and non-object classifica
     assert.equal(result.stderr, '');
     assert.ok(!(result.stdout + result.stderr).includes(secret));
   }
+  const stdoutWins = runAuthStep({
+    FAKE_AUTH_RESULT: '1',
+    FAKE_AUTH_STDOUT: JSON.stringify({ name: 'RequestError' }),
+    FAKE_AUTH_STDERR: JSON.stringify({ name: 'ENOTFOUND' }),
+  });
+  assert.equal(stdoutWins.status, 1);
+  assert.equal(
+    stdoutWins.stdout,
+    'Dev Hub authentication failed: RequestError\n',
+  );
+  assert.equal(stdoutWins.stderr, '');
 });
 
 test('successful auth discards every stdout and stderr field and never persists raw JSON', () => {
@@ -776,7 +822,7 @@ test('successful auth discards every stdout and stderr field and never persists 
     }),
     JSON.stringify({ status: 0, name: 'ENOTFOUND', message: secret }),
   ]) {
-    const result = runStep(step, {
+    const result = runAuthStep({
       FAKE_AUTH_RESULT: '0',
       FAKE_AUTH_STDOUT: raw,
       FAKE_AUTH_STDERR: raw,
@@ -788,11 +834,19 @@ test('successful auth discards every stdout and stderr field and never persists 
   const body = shellStep(step);
   assert.match(
     body,
-    /auth_json="\$\(printf '%s' "\$SF_DEV_HUB_AUTH_URL" \| sf /,
+    /auth_name="\$\(printf '%s' "\$SF_DEV_HUB_AUTH_URL" \| command node -e '/,
   );
-  assert.match(body, /--json 2>&1/);
+  assert.match(body, /spawnSync\("sf", \[/);
+  assert.match(
+    body,
+    /classify\(result\.stdout\) \?\? classify\(result\.stderr\)/,
+  );
+  assert.match(body, /delete childEnv\.SF_DEV_HUB_AUTH_URL/);
+  assert.match(body, /maxBuffer: 1048576/);
+  assert.match(body, /timeout: 55000/);
+  assert.doesNotMatch(body, /2>&1|shell:\s*true/);
   assert.doesNotMatch(body, /export|GITHUB_OUTPUT|GITHUB_ENV|tee\s|writeFile/);
-  assert.equal((body.match(/unset auth_json/g) ?? []).length, 2);
+  assert.equal((body.match(/unset auth_name/g) ?? []).length, 2);
   assert.equal(
     (workflow.match(/secrets\.SF_DEV_HUB_AUTH_URL/g) ?? []).length,
     1,
