@@ -13,6 +13,7 @@ import {
   QuotaBlockedError,
   validateIdentity,
 } from './scratch-lifecycle.mjs';
+import { classifyVerificationException } from './verification-error-classifier.mjs';
 
 const defaultDirectory = fileURLToPath(
   new URL('../salesforce/', import.meta.url),
@@ -165,7 +166,9 @@ export function runVerification({
     )
       errorLog(error.message);
     else
-      errorLog('Verification failed; unrecognized exception details withheld.');
+      errorLog(
+        `Verification failed (${classifyVerificationException(error)}); exception details withheld.`,
+      );
   } finally {
     if (orgs.length !== 0) {
       try {
@@ -173,12 +176,12 @@ export function runVerification({
         log(
           `Cleanup for ${result.headSha}: ${cleanup.deleted} owned scratch org(s) deleted; ${cleanup.alreadyDeleted} already deleted.`,
         );
-      } catch {
+      } catch (cleanupError) {
         result.outcome = 'failed-cleanup';
         result.retryable = false;
         exitCode = 1;
         errorLog(
-          'Owned scratch cleanup failed; maintainer reconciliation is required before any retry.',
+          `Owned scratch cleanup failed (${classifyVerificationException(cleanupError)}); maintainer reconciliation is required before any retry.`,
         );
       }
     }

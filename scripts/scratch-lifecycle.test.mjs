@@ -121,6 +121,7 @@ function fixture(options = {}) {
       return envelope({ orgId: row.ScratchOrg, username: row.SignupUsername });
     }
     if (stage === 'scratch-cleanup') {
+      if (options.cleanupError) throw options.cleanupError;
       if (options.deleteFails)
         throw new Error('fixture-only-private-cleanup-details');
       const target = value('--record-id');
@@ -650,6 +651,51 @@ test('wrapper distinguishes known transient infrastructure from unknown private 
     fixture({ deployError: new Error('fixture-only-private-auth-token') }),
   );
   assert.equal(unknown.result.retryable, false);
+  assert.ok(
+    unknown.output.includes(
+      'Verification failed (unexpected-error); exception details withheld.',
+    ),
+  );
+  const network = verify(
+    fixture({
+      deployError: new TypeError('fetch failed', {
+        cause: Object.assign(new Error('fixture-only-private-network'), {
+          code: 'ENOTFOUND',
+        }),
+      }),
+    }),
+  );
+  assert.ok(
+    network.output.includes(
+      'Verification failed (network); exception details withheld.',
+    ),
+  );
+  assert.equal(network.output.join('\n').includes('ENOTFOUND'), false);
+  const cleanup = verify(fixture({ deleteFails: true }));
+  assert.ok(
+    cleanup.output.includes(
+      'Owned scratch cleanup failed (unexpected-error); maintainer reconciliation is required before any retry.',
+    ),
+  );
+  const cleanupNetwork = verify(
+    fixture({
+      cleanupError: Object.assign(
+        new Error('fixture-only-private-cleanup-endpoint'),
+        { code: 'ECONNRESET' },
+      ),
+    }),
+  );
+  assert.ok(
+    cleanupNetwork.output.includes(
+      'Owned scratch cleanup failed (network); maintainer reconciliation is required before any retry.',
+    ),
+  );
+  assert.equal(
+    cleanupNetwork.output
+      .join('\n')
+      .includes('fixture-only-private-cleanup-endpoint'),
+    false,
+  );
 });
 test('wrapper rejects missing identity, command arguments and preexisting target inputs before org calls', () => {
   for (const extra of [

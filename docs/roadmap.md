@@ -494,7 +494,11 @@ service replica owns a bounded timer, while one PostgreSQL advisory lock seriali
 the deployment. Stale started attempts become indeterminate locally; stale partial
 attempts use only the bounded read-only Salesforce inspector; and one database-owned
 retention batch records an explicit scheduled audit source. Unresolved, indeterminate,
-unlinked and young evidence remains protected. Note 147's two source assertions now
-pin the exact buffer and timeout literals. Privileged retry, unlinked Salesforce File
+unlinked and young evidence remains protected. Note 147's two source assertions pin
+the exact buffer and timeout literals; note 149 adds biting unit tripwires for the
+four maintenance guards previously protected only by PostgreSQL or process behavior.
+ADR 0006's note 148 amendment adds bounded, non-disclosing harness categories for
+unexpected verification and cleanup exceptions without granting retry authority.
+Privileged retry, unlinked Salesforce File
 cleanup and privileged disconnect/rebind remain separate note 34 strands. No C10 or
 Phase 1 gate claim is made.

@@ -19,7 +19,7 @@ const rejectedWithoutOrg = (row) =>
   (row.ScratchOrg === null || row.ScratchOrg === '');
 
 export class LifecycleError extends Error {
-  constructor(code = 'INVALID_INPUT') {
+  constructor(code = 'INVALID_INPUT', options = undefined) {
     const allowed = [
       'INVALID_INPUT',
       'INVALID_QUOTA',
@@ -33,6 +33,7 @@ export class LifecycleError extends Error {
     ];
     super(
       `Scratch lifecycle failed (${allowed.includes(code) ? code : 'INVALID_INPUT'}); raw Salesforce details withheld.`,
+      options,
     );
     this.name = 'LifecycleError';
     this.code = allowed.includes(code) ? code : 'INVALID_INPUT';
@@ -178,7 +179,7 @@ function assertReceipt(receipt) {
 export function cleanupOwnedOrgs(sf, receipts) {
   let deleted = 0;
   let alreadyDeleted = 0;
-  let failed = false;
+  let firstFailure;
   for (const receipt of receipts) {
     try {
       assertReceipt(receipt);
@@ -214,11 +215,12 @@ export function cleanupOwnedOrgs(sf, receipts) {
       ]).result;
       if (result?.success !== true) throw new LifecycleError('CLEANUP_FAILED');
       deleted += 1;
-    } catch {
-      failed = true;
+    } catch (error) {
+      firstFailure ??= error;
     }
   }
-  if (failed) throw new LifecycleError('CLEANUP_FAILED');
+  if (firstFailure !== undefined)
+    throw new LifecycleError('CLEANUP_FAILED', { cause: firstFailure });
   return { deleted, alreadyDeleted };
 }
 

@@ -1,6 +1,6 @@
 # ADR 0006: Quota-aware development and independent verification
 
-- Status: Approved by Bill; Phase 0 passed; notes 143-145 amendment awaits Claude verification
+- Status: Approved by Bill; Phase 0 passed; note 148 amendment awaits Claude verification
 - Date: 2026-09-10
 - Brief sections: C8, C10, C11 Phase 0, C12, C13; verification protocol
 - Decision owner: Cobitech Solutions
@@ -215,6 +215,23 @@ prevents a missing CLI or absent authentication from adding a misleading cleanup
 failure, while preserving a genuine post-authentication logout failure as a red
 job. These changes improve diagnosis only: they grant no retry, authentication,
 scratch-org or cleanup authority and do not weaken the exact-head gate.
+
+Note 148 amendment (5 November): an exception outside the harness's three public
+error classes no longer produces a diagnostic blackout. A shared classifier emits
+one literal category from `timeout`, `network`, `filesystem`, `process`,
+`assertion`, `type`, `range`, `syntax`, `unexpected-error`, `non-error` or
+`unrecognized`. It inspects only bounded string data properties on native errors
+and at most two native-error causes. It never invokes an accessor, proxy trap,
+coercion or serializer, and never emits the inspected code, message, cause, URL,
+org identifier or stack. Cleanup preserves the first internal exception only as an
+`Error.cause`, so the same classifier can report a useful category after the outer
+`CLEANUP_FAILED` lifecycle normalization without exposing that cause.
+
+These labels are heuristic incident-routing evidence only. They do not alter the
+marker outcome, retryability, budget admission, cleanup ownership, authentication
+or exact-head rules. In particular, `failed-cleanup` remains nonretryable and still
+requires private maintainer reconciliation; the category explains where to begin
+that investigation but cannot authorize another run.
 
 `BLOCKED` fails the required gate. It never becomes a successful skip and never
 falls back to an existing org. A recognized creation-time quota error follows the

@@ -99,6 +99,15 @@ cleanup, disconnect/rebind, a new credential path or a C10 acceptance claim. Not
 is answered by making the two workflow-test patterns include their trailing commas,
 so multiplying either bound no longer satisfies the asserted source text.
 
+Note 149 amendment (5 November): unit tripwires now pin all four previously
+database-only or runtime-only guards. The scheduled retention statement must omit
+`unlinked`; `started` may resolve only to `indeterminate` with zero requests;
+`partial` may not resolve to `indeterminate` and requires a positive request count;
+and the scheduler's interval must be unreferenced. Positive controls exercise both
+valid resolution shapes, so the refusal assertions cannot pass merely because the
+store never queries. PostgreSQL constraints and the retention trigger remain the
+authoritative second line of defence.
+
 ## Revisit when
 
 Maintenance must be sharded across workers, audit retention is defined, a metrics
