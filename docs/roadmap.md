@@ -488,3 +488,13 @@ existing per-publication digest/private-copy/process bounds remain authoritative
 The same hardening unit answers notes 138 and 139 with a minimum-access review
 profile and an exact permission-set element whitelist; note 140 remains an honest
 genuine-HTTP evidence gap. No C10 or Phase 1 gate claim is made.
+
+ADR 0065 closes note 34's scheduled reconciliation and retention strand. Every
+service replica owns a bounded timer, while one PostgreSQL advisory lock serializes
+the deployment. Stale started attempts become indeterminate locally; stale partial
+attempts use only the bounded read-only Salesforce inspector; and one database-owned
+retention batch records an explicit scheduled audit source. Unresolved, indeterminate,
+unlinked and young evidence remains protected. Note 147's two source assertions now
+pin the exact buffer and timeout literals. Privileged retry, unlinked Salesforce File
+cleanup and privileged disconnect/rebind remain separate note 34 strands. No C10 or
+Phase 1 gate claim is made.

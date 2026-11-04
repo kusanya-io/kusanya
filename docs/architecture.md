@@ -321,8 +321,14 @@ token for the hardened host session, obtains CSRF, calls the durable publication
 route and logs out. It accepts no tenant, org, namespace or Salesforce credential,
 and it has no database, vault or direct publisher capability. Partial, unresolved
 and uncertain transport results direct the operator to durable history rather than
-authorizing a retry. Privileged connection lifecycle, invitation delivery and
-scheduled reconciliation remain outside this boundary.
+authorizing a retry. Privileged connection lifecycle and invitation delivery remain
+outside this boundary. ADR 0065 closes the maintenance gap with one bounded
+in-process timer per replica and one PostgreSQL
+advisory lock across the deployment. Stale started attempts become indeterminate
+without Salesforce access; partial attempts use only the existing read-only inspector;
+and scheduled retention preserves the ADR 0056 state/age trigger while recording a
+machine source rather than impersonating an administrator. No retry, upload, commit,
+remote delete or new credential path is reachable from the scheduler.
 ADR 0058 hardens that executable boundary: it begins with exit code 2 and clears it
 only after producing a safe result, reserves exit 1 for structured non-success, and
 shares one hardened cookie contract between browser routes and HTTP clients. A

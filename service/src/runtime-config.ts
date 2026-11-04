@@ -2,6 +2,7 @@
 import { isAbsolute } from 'node:path';
 import { ConfigurationError } from './config.js';
 import type { TenantSalesforcePublisherConfiguration } from './publication/tenant-salesforce-publisher.js';
+import type { PublicationMaintenanceConfiguration } from './publication/publication-maintenance.js';
 import type { OdkValidateConfiguration } from './publication/odk-validate.js';
 import type { AdministratorSessionConfiguration } from './tenant/administrator-session.js';
 import type { AdministratorInvitationConfiguration } from './tenant/administrator-invitation.js';
@@ -20,6 +21,7 @@ export interface PublicationSurfaceRuntimeConfig {
   readonly invitation: AdministratorInvitationConfiguration;
   readonly oauth: TenantOAuthConfiguration;
   readonly publisher: TenantSalesforcePublisherConfiguration;
+  readonly maintenance: PublicationMaintenanceConfiguration;
   readonly validator: OdkValidateConfiguration;
   readonly credentialVault: TenantCredentialVault;
 }
@@ -119,6 +121,21 @@ export function readPublicationSurfaceRuntimeConfig(
   } catch {
     throw new ConfigurationError('TENANT_CREDENTIAL_KEYS');
   }
+  const publisher = Object.freeze({
+    clientId: oauthClientId,
+    clientSecret: oauthClientSecret,
+    refreshTimeoutMs: integer(env, 'SALESFORCE_REFRESH_TIMEOUT_MS', 1, 30_000),
+    perRequestTimeoutMs,
+    overallTimeoutMs,
+  });
+  const maintenanceRunTimeoutMs = integer(
+    env,
+    'PUBLICATION_MAINTENANCE_RUN_TIMEOUT_MS',
+    1_000,
+    900_000,
+  );
+  if (maintenanceRunTimeoutMs < overallTimeoutMs)
+    throw new ConfigurationError('PUBLICATION_MAINTENANCE_RUN_TIMEOUT_MS');
   return Object.freeze({
     externalOrigin,
     oidc: Object.freeze({
@@ -146,17 +163,17 @@ export function readPublicationSurfaceRuntimeConfig(
         900,
       ),
     }),
-    publisher: Object.freeze({
-      clientId: oauthClientId,
-      clientSecret: oauthClientSecret,
-      refreshTimeoutMs: integer(
-        env,
-        'SALESFORCE_REFRESH_TIMEOUT_MS',
-        1,
-        30_000,
-      ),
-      perRequestTimeoutMs,
-      overallTimeoutMs,
+    publisher,
+    maintenance: Object.freeze({
+      intervalMs:
+        integer(env, 'PUBLICATION_MAINTENANCE_INTERVAL_SECONDS', 60, 86_400) *
+        1_000,
+      staleAfterMs:
+        integer(env, 'PUBLICATION_MAINTENANCE_STALE_SECONDS', 300, 604_800) *
+        1_000,
+      runTimeoutMs: maintenanceRunTimeoutMs,
+      maxAttempts: integer(env, 'PUBLICATION_MAINTENANCE_MAX_ATTEMPTS', 1, 100),
+      publisher,
     }),
     validator: Object.freeze({
       javaExecutable: absolutePath(env, 'ODK_VALIDATE_JAVA_EXECUTABLE'),

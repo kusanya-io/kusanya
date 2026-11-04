@@ -6,6 +6,11 @@ import {
   createOdkValidateValidator,
 } from './publication/odk-validate.js';
 import { PublicationAttemptStore } from './publication/publication-attempt-store.js';
+import {
+  PublicationMaintenanceStore,
+  runPublicationMaintenance,
+  startPublicationMaintenanceScheduler,
+} from './publication/publication-maintenance.js';
 import { readPublicationSurfaceRuntimeConfig } from './runtime-config.js';
 import { AdministratorSessionStore } from './tenant/administrator-session.js';
 import { AdministratorInvitationStore } from './tenant/administrator-invitation.js';
@@ -38,6 +43,17 @@ async function main(): Promise<void> {
     executor,
     runtime.credentialVault,
   );
+  const maintenanceStore = new PublicationMaintenanceStore(executor);
+  const maintenanceScheduler = startPublicationMaintenanceScheduler(
+    runtime.maintenance.intervalMs,
+    async () =>
+      await runPublicationMaintenance(
+        maintenanceStore,
+        connectionStore,
+        runtime.maintenance,
+      ),
+    () => process.stderr.write('Publication maintenance failed\n'),
+  );
   const app = createApp(config, database, true, {
     administratorIdentity,
     sessionStore,
@@ -59,6 +75,7 @@ async function main(): Promise<void> {
     const deadline = setTimeout(() => process.exit(1), 10000);
     deadline.unref();
     try {
+      await maintenanceScheduler.stop();
       await app.close();
     } catch {
       process.stderr.write('Service shutdown failed\n');
@@ -71,6 +88,7 @@ async function main(): Promise<void> {
   process.once('SIGTERM', () => void shutdown());
   try {
     await app.listen({ host: config.host, port: config.port });
+    void maintenanceScheduler.runNow();
   } catch {
     await shutdown();
     throw new Error('Service startup failed');

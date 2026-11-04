@@ -207,6 +207,17 @@ audit for each deletion. Repeat the operation to process another bounded batch.
 Started, unresolved, indeterminate and unlinked-artifact attempts cannot be removed
 by this operation. Do not edit those states or the retention audit table manually.
 
+ADR 0065 also runs publication maintenance at startup and on the configured interval.
+`PUBLICATION_MAINTENANCE_STALE_SECONDS` prevents an active bounded publication from
+being classified as abandoned; `PUBLICATION_MAINTENANCE_MAX_ATTEMPTS` and
+`PUBLICATION_MAINTENANCE_RUN_TIMEOUT_MS` bound each pass. A PostgreSQL advisory lock
+allows only one service replica to work. Started rows are marked indeterminate with
+no Salesforce call. Partial rows use only the read-only reconciliation GETs. Safe
+retention remains capped at 100 rows and scheduled audit rows have no human actor.
+The fixed `Publication maintenance failed` message requires operator investigation;
+it never authorizes a publication retry. Keep the four settings identical across all
+replicas. Unlinked attempts and Salesforce Files remain protected.
+
 Before applying migration `0004_administrator_tenants` to a database created by PR
 #77, check the legacy bindings for namespace values that the current canonical rule
 will refuse:

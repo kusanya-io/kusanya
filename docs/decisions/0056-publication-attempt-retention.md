@@ -1,6 +1,6 @@
 # ADR 0056: Audited publication-attempt retention
 
-- Status: Proposed; implementation awaiting independent verification
+- Status: Accepted; scheduled extension supplied by ADR 0065
 - Date: 2026-10-28
 - Brief sections: C1.3a, C2, C5 publish, C8, C11 Phase 1
 - Decision owner: Bill Owiti / Cobitech Solutions
@@ -81,9 +81,9 @@ must have an empty query and no body; its only response data is a count from zer
   live-role recheck, fixed policy, bounded batch and atomic audit provide the narrow
   authority for Phase 1. A future compliance deployment may add four-eyes approval
   without widening this request contract.
-- Run retention on a schedule now. Rejected because scheduled execution requires a
-  separate service identity and operational policy. This unit keeps a reviewed,
-  administrator-initiated boundary; scheduling remains a note 34 strand.
+- Run retention on a schedule in this unit. Deferred because scheduled execution
+  required a distinct machine audit source and operational policy. ADR 0065 later
+  supplies both without changing this administrator-initiated boundary.
 
 ## Consequences and verification
 
@@ -100,11 +100,11 @@ terminal row, a second tenant, trigger refusal, surviving audits and a forced au
 collision that rolls back the complete batch. They also verify the 90-day policy is
 the value recorded by the database.
 
-This closes note 34's publication-attempt retention/deletion strand. It does not
-delete Salesforce Files, schedule reconciliation or retention, grant privileged
-retry, disconnect/rebind a tenant, add the publish CLI, or install ODK Validate in
-the service runtime image. Note 39 remains open. No C10 acceptance test,
-publish-ready state or Phase 1 completion is claimed.
+This closes note 34's publication-attempt retention/deletion strand. ADR 0065 later
+schedules reconciliation and retention. This unit does not delete Salesforce Files,
+grant privileged retry, disconnect/rebind a tenant, add the publish CLI, or install
+ODK Validate in the service runtime image. Note 39 remains open. No C10 acceptance
+test, publish-ready state or Phase 1 completion is claimed.
 
 ## Revisit when
 

@@ -691,6 +691,12 @@ export class PublicationAttemptStore {
         [context.actorId],
       );
       if (actor.rowCount !== 1 || actor.rows.length !== 1) throw new Error();
+      const mode = await client.query(
+        `SELECT set_config(
+           'kusanya.publication_retention_mode', 'administrator', true
+         )`,
+      );
+      if (mode.rowCount !== 1 || mode.rows.length !== 1) throw new Error();
       const result = await client.query<{ deleted_count: unknown }>(
         `WITH candidates AS (
            SELECT attempt.publication_attempt_id

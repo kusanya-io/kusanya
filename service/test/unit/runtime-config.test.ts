@@ -22,6 +22,10 @@ const valid = {
   SALESFORCE_REFRESH_TIMEOUT_MS: '10000',
   SALESFORCE_REQUEST_TIMEOUT_MS: '10000',
   SALESFORCE_PUBLICATION_TIMEOUT_MS: '120000',
+  PUBLICATION_MAINTENANCE_INTERVAL_SECONDS: '3600',
+  PUBLICATION_MAINTENANCE_STALE_SECONDS: '900',
+  PUBLICATION_MAINTENANCE_RUN_TIMEOUT_MS: '600000',
+  PUBLICATION_MAINTENANCE_MAX_ATTEMPTS: '25',
   ODK_VALIDATE_JAVA_EXECUTABLE: '/usr/bin/java',
   ODK_VALIDATE_JAR_PATH: '/opt/kusanya/ODK-Validate-v1.20.0.jar',
 };
@@ -37,6 +41,13 @@ void test('mounted surface configuration is complete, bounded and immutable', ()
   assert.equal(config.session.ttlSeconds, 28800);
   assert.equal(config.invitation.ttlSeconds, 86400);
   assert.equal(config.publisher.overallTimeoutMs, 120000);
+  assert.deepEqual(config.maintenance, {
+    intervalMs: 3600000,
+    staleAfterMs: 900000,
+    runTimeoutMs: 600000,
+    maxAttempts: 25,
+    publisher: config.publisher,
+  });
   assert.deepEqual(config.oauth, {
     clientId: valid.SALESFORCE_OAUTH_CLIENT_ID,
     clientSecret: valid.SALESFORCE_OAUTH_CLIENT_SECRET,
@@ -51,6 +62,7 @@ void test('mounted surface configuration is complete, bounded and immutable', ()
   assert.ok(Object.isFrozen(config.session));
   assert.ok(Object.isFrozen(config.invitation));
   assert.ok(Object.isFrozen(config.oauth));
+  assert.ok(Object.isFrozen(config.maintenance));
 });
 
 void test('main runtime refuses every absent guard setting without leaking values', () => {
@@ -86,6 +98,10 @@ void test('mounted runtime refuses malformed secrets, origins, paths and bounds'
     ['SALESFORCE_OAUTH_TRANSACTION_TTL_SECONDS', '59'],
     ['SALESFORCE_OAUTH_TRANSACTION_TTL_SECONDS', '901'],
     ['SALESFORCE_PUBLICATION_TIMEOUT_MS', '9999'],
+    ['PUBLICATION_MAINTENANCE_INTERVAL_SECONDS', '59'],
+    ['PUBLICATION_MAINTENANCE_STALE_SECONDS', '299'],
+    ['PUBLICATION_MAINTENANCE_RUN_TIMEOUT_MS', '119999'],
+    ['PUBLICATION_MAINTENANCE_MAX_ATTEMPTS', '101'],
     ['ODK_VALIDATE_JAVA_EXECUTABLE', 'java'],
     ['ODK_VALIDATE_JAR_PATH', 'secret.jar'],
   ] as const)

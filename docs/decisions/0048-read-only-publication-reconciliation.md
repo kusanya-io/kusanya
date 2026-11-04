@@ -1,6 +1,6 @@
 # ADR 0048: Read-only publication reconciliation
 
-- Status: Proposed; implementation awaiting independent verification
+- Status: Accepted; scheduled composition supplied by ADR 0065
 - Date: 2026-10-22
 - Brief sections: C1.3a, C2, C3.5/.11/.16/.20, C5 publish, C8, C11 Phase 1
 - Decision owner: Cobitech Solutions

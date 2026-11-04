@@ -15,6 +15,7 @@ import {
   PublicationAttemptError,
   PublicationAttemptStore,
 } from '../../src/publication/publication-attempt-store.js';
+import { PublicationMaintenanceStore } from '../../src/publication/publication-maintenance.js';
 import { createTenantCredentialVault } from '../../src/tenant/credential-vault.js';
 import {
   normalizeSalesforceOrgId,
@@ -582,9 +583,10 @@ void test(
       publication_attempt_id: string;
       performed_by_actor_id: string;
       retention_days: number;
+      execution_source: string;
     }>(
       `SELECT publication_attempt_id::text, performed_by_actor_id,
-              retention_days::integer
+              retention_days::integer, execution_source
        FROM tenant_publication_attempt_retention_audits
        WHERE tenant_id = $1 ORDER BY publication_attempt_id`,
       [tenantId],
@@ -596,7 +598,9 @@ void test(
     assert.equal(
       audits.rows.every(
         (row) =>
-          row.performed_by_actor_id === actorId && row.retention_days === 90,
+          row.performed_by_actor_id === actorId &&
+          row.retention_days === 90 &&
+          row.execution_source === 'administrator',
       ),
       true,
     );
@@ -613,6 +617,74 @@ void test(
       ),
       { code: '23514' },
     );
+    for (const [source, performedBy] of [
+      ['scheduled', actorId],
+      ['administrator', null],
+    ] as const) {
+      await assert.rejects(
+        pool.query(
+          `INSERT INTO tenant_publication_attempt_retention_audits (
+             tenant_id, publication_attempt_id, performed_by_actor_id,
+             execution_source, outcome, reconciliation_status,
+             terminal_at, retention_days
+           ) VALUES (
+             $1, $2, $3, $4, 'failed', NULL,
+             clock_timestamp() - interval '120 days', 90
+           )`,
+          [tenantId, randomUUID(), performedBy, source],
+        ),
+        { code: '23514' },
+      );
+    }
+    const legacyAttempt = await insert(
+      tenantId,
+      actorId,
+      orgId,
+      'failed',
+      null,
+    );
+    const legacy = await pool.connect();
+    try {
+      await legacy.query('BEGIN');
+      await legacy.query(
+        `SELECT set_config(
+           'kusanya.publication_retention_actor', $1, true
+         )`,
+        [actorId],
+      );
+      assert.equal(
+        (
+          await legacy.query(
+            `DELETE FROM tenant_publication_attempts
+             WHERE publication_attempt_id = $1`,
+            [legacyAttempt],
+          )
+        ).rowCount,
+        1,
+      );
+      await legacy.query('COMMIT');
+    } catch (error) {
+      await legacy.query('ROLLBACK');
+      throw error;
+    } finally {
+      legacy.release();
+    }
+    assert.deepEqual(
+      (
+        await pool.query(
+          `SELECT performed_by_actor_id, execution_source
+           FROM tenant_publication_attempt_retention_audits
+           WHERE tenant_id = $1 AND publication_attempt_id = $2`,
+          [tenantId, legacyAttempt],
+        )
+      ).rows,
+      [
+        {
+          performed_by_actor_id: actorId,
+          execution_source: 'administrator',
+        },
+      ],
+    );
     const direct = await pool.connect();
     try {
       for (const protectedAttempt of protectedAttempts) {
@@ -622,6 +694,11 @@ void test(
              'kusanya.publication_retention_actor', $1, true
            )`,
           [actorId],
+        );
+        await direct.query(
+          `SELECT set_config(
+             'kusanya.publication_retention_mode', 'administrator', true
+           )`,
         );
         await assert.rejects(
           direct.query(
@@ -636,6 +713,43 @@ void test(
     } finally {
       direct.release();
     }
+
+    const maintenance = new PublicationMaintenanceStore(
+      createQueryExecutor(pool),
+    );
+    assert.equal(await maintenance.applyScheduledRetention(), 1);
+    assert.equal(
+      (
+        await pool.query(
+          `SELECT 1 FROM tenant_publication_attempts
+           WHERE publication_attempt_id = $1`,
+          [otherAttempt],
+        )
+      ).rowCount,
+      0,
+    );
+    assert.deepEqual(
+      (
+        await pool.query(
+          `SELECT performed_by_actor_id, execution_source
+           FROM tenant_publication_attempt_retention_audits
+           WHERE tenant_id = $1 AND publication_attempt_id = $2`,
+          [otherTenantId, otherAttempt],
+        )
+      ).rows,
+      [{ performed_by_actor_id: null, execution_source: 'scheduled' }],
+    );
+    assert.deepEqual(
+      (
+        await pool.query<{ publication_attempt_id: string }>(
+          `SELECT publication_attempt_id::text
+           FROM tenant_publication_attempts
+           WHERE tenant_id = $1 ORDER BY publication_attempt_id`,
+          [tenantId],
+        )
+      ).rows.map((row) => row.publication_attempt_id),
+      protectedAttempts.toSorted(),
+    );
 
     const batchIds = Array.from({ length: 101 }, () => randomUUID());
     await pool.query(
@@ -1574,6 +1688,7 @@ void test(
         '0010_administrator_invitations',
         '0011_publication_attempt_retention',
         '0012_bootstrap_uniqueness',
+        '0013_scheduled_publication_maintenance',
       ],
     );
   },
