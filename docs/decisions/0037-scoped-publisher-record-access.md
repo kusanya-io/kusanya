@@ -29,7 +29,8 @@ Add optional `Form__c.Publisher__c`, a lookup to one Salesforce User. Only
 selection but cannot appoint or replace the publisher. Selecting a user does not
 create or assign a user, permission set, collector, group, queue or credential. The
 selected user must separately hold `Kusanya_Integration`, including the object,
-field, class and `Publish_Kusanya` grants already required by ADRs 0026, 0032 and 0034.
+field, class and `Publish_Kusanya` grants required by ADRs 0026 and 0032. ADR 0034's
+definition snapshot now has the separate review grant recorded by ADR 0063.
 If the selected User is inactive, Salesforce refuses the share and the initiating
 Form write rolls back. If the User lacks `Kusanya_Integration`, the share alone
 cannot pass the existing object, field, class and custom-permission checks.

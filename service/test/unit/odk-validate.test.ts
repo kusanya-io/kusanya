@@ -4,8 +4,10 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import {
+  assertOdkValidateRuntime,
   createOdkValidateValidator,
   odkValidate120Sha256,
+  odkValidateRuntimeSmokeXform,
   runBoundedProcess,
 } from '../../src/publication/odk-validate.js';
 
@@ -14,6 +16,34 @@ void test('publishes the reviewed ODK Validate 1.20.0 pin', () => {
     odkValidate120Sha256,
     '92756ea4aed195355a07e5572f025f0921a31282387a870ae63e1f5cdf37e0c3',
   );
+});
+
+void test('startup sends the fixed synthetic XForm and normalizes failures', async () => {
+  let observed = '';
+  await assertOdkValidateRuntime(async (xml) => {
+    observed = xml;
+    return { ok: true };
+  });
+  assert.equal(observed, odkValidateRuntimeSmokeXform);
+  assert.match(observed, /id="kusanya-validator-smoke"/);
+  assert.match(observed, /nodeset="\/data\/meta\/instanceID"/);
+
+  for (const failure of [
+    async () =>
+      ({
+        ok: false,
+        diagnostic: { code: 'SECRET_CODE', location: 'SECRET_LOCATION' },
+      }) as const,
+    async () => {
+      throw new Error('SECRET_PROCESS_OUTPUT');
+    },
+  ]) {
+    await assert.rejects(
+      assertOdkValidateRuntime(failure),
+      (error: unknown) =>
+        error instanceof Error && error.message === 'ODK_VALIDATE_RUNTIME',
+    );
+  }
 });
 
 void test('refuses relative validator configuration without process execution', async () => {

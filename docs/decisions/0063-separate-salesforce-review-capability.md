@@ -1,6 +1,6 @@
 # ADR 0063: Separate Salesforce definition-review capability
 
-- Status: Proposed; implementation awaiting independent verification
+- Status: Accepted; independently verified and merged in PR #125
 - Date: 2026-11-02
 - Brief sections: C2, C4 sharing and permissions, C5 print view, C8 least privilege, C11 Phase 1
 - Decision owner: Cobitech Solutions
@@ -38,6 +38,11 @@ when a tenant wants a review-only service identity. The latter supplies user-mod
 read access across the exact nine definition objects while the new permission set
 supplies only the API capability.
 
+Provision that identity on the Salesforce `Minimum Access - Salesforce` profile,
+not `Standard User`, before assigning the two permission sets. Effective authority
+is profile plus permission sets; a broader profile could independently grant access
+to customer standard or target objects and would invalidate the review-only claim.
+
 Kusanya still stores one Salesforce connection per tenant. A tenant choosing the
 review-only pairing can render definitions but cannot publish through that same
 credential. A tenant using full `Kusanya_Integration` can do both. Supporting
@@ -46,13 +51,16 @@ require a separately reviewed multi-connection model and is not implied here.
 
 ## Consequences and verification
 
-Hosted Apex must prove a Standard User assigned `Kusanya_Supervisor` plus
-`Kusanya_Reviewer_Integration` can read a cross-owner definition snapshot while
+Hosted Apex must prove a `Minimum Access - Salesforce` user assigned
+`Kusanya_Supervisor` plus `Kusanya_Reviewer_Integration` can read a cross-owner
+definition snapshot while
 `FeatureManagement` reports review true and publish/import false. Existing tests
 continue proving ordinary and Supervisor-only users are refused before body
-access, while the full Integration principal succeeds. Static tests pin the exact
-class/custom-permission inventories and prove the reviewer capability set contains
-no object, field, publish or import grant.
+access, while the full Integration principal succeeds. Static tests reject every
+XML element name outside the reviewed reviewer-permission vocabulary regardless of
+formatting, pin the class/custom-permission inventories, and retain explicit
+refusals for object, field, user, publish and import grants. This answers notes 138
+and 139 after independent verification.
 
 This closes note 135 after independent verification. It does not narrow the
 service role matrix: administrator, publisher and reviewer roles all deliberately

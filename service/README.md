@@ -289,6 +289,13 @@ There are no development fallbacks. Missing or malformed values stop `main.ts`
 before it opens PostgreSQL. The committed `.env.example` names every setting but
 contains placeholders only.
 
+The production service image supplies those two validator settings as fixed defaults
+for its bundled headless OpenJDK 17 and checksum-bound ODK Validate 1.20.0 release
+asset. It proves the JAR during the image build and again through the real bounded
+adapter before opening PostgreSQL or a socket. Bare-process development still sets
+explicit absolute paths. The adapter verifies the JAR digest and uses a fresh private
+copy for every publication even after the startup smoke succeeds.
+
 The internal ADR 0040 authorization boundary creates a short-lived Salesforce
 authorization URL and completes its callback. ADR 0041 adds an HTTP route adapter
 that can be registered only with a concrete trusted administrator-session verifier;
