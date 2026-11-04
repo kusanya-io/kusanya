@@ -149,10 +149,22 @@ jobs:
               ;;
             *) echo 'Unsupported workflow event.'; exit 1 ;;
           esac
-          current_sha="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)"
-          source_repo="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.repo.full_name)"
-          base_branch="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .base.ref)"
-          pr_state="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .state)"
+          pr_snapshot=''
+          for attempt in 1 2 3; do
+            if candidate="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '[.head.sha, .head.repo.full_name, .base.ref, .state] | @tsv')" &&
+               IFS=$'\t' read -r current_sha source_repo base_branch pr_state extra <<< "$candidate" &&
+               [[ "$current_sha" =~ ^[0-9a-f]{40}$ &&
+                  "$source_repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ &&
+                  "$base_branch" =~ ^[A-Za-z0-9._/-]+$ &&
+                  "$pr_state" =~ ^(open|closed)$ && -z "$extra" ]]; then
+              pr_snapshot="$candidate"
+              break
+            fi
+            unset candidate current_sha source_repo base_branch pr_state extra
+            [[ "$attempt" == 3 ]] || sleep 2
+          done
+          [[ -n "$pr_snapshot" ]] || { echo 'Unable to read one complete PR state after three attempts.'; exit 1; }
+          unset candidate pr_snapshot extra
           [[ "$current_sha" == "$REVIEWED_SHA" && "$source_repo" == "$GITHUB_REPOSITORY" && "$base_branch" == "$DEFAULT_BRANCH" && "$pr_state" == open ]] || { echo 'PR changed, closed or fork source refused. Stage reviewed fork contributions in a same-repository PR.'; exit 1; }
       - name: Checkout trusted verification harness
         timeout-minutes: 1
@@ -204,16 +216,18 @@ jobs:
         run: |
           set -euo pipefail
           [[ -n "$SF_DEV_HUB_AUTH_URL" ]] || { echo 'Missing environment secret SF_DEV_HUB_AUTH_URL. Apex verification is blocked.'; exit 1; }
-          if ! auth_json="$(printf '%s' "$SF_DEV_HUB_AUTH_URL" | sf org login sfdx-url --sfdx-url-stdin - --alias Kusanya-CI-DevHub --set-default-dev-hub --json 2>/dev/null)"; then
-            auth_name="$(printf '%s' "$auth_json" | command node -e '
+          if ! auth_name="$(printf '%s' "$SF_DEV_HUB_AUTH_URL" | command node -e '
+              const { readFileSync } = require("node:fs");
+              const { spawnSync } = require("node:child_process");
               const allowed = new Set([
                 "ENOTFOUND", "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED",
                 "EAI_AGAIN", "invalid_grant", "INVALID_SFDX_AUTH_URL",
                 "AuthDecryptError", "RequestError", "RefreshTokenAuthError"
               ]);
-              let name = "unrecognized";
-              try {
-                const value = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+              const classify = raw => {
+                try {
+                  const value = JSON.parse(raw);
+                  let name;
                 if (value && typeof value === "object" && !Array.isArray(value) &&
                     allowed.has(value.name)) {
                   name = value.name;
@@ -223,18 +237,46 @@ jobs:
                     if (details.some(item => /\b(?:ENOTFOUND|EAI_AGAIN|getaddrinfo)\b/i.test(item))) category = "dns";
                     else if (details.some(item => /\bETIMEDOUT\b|timed out/i.test(item))) category = "timeout";
                     else if (details.some(item => /\b(?:ECONNRESET|ECONNREFUSED)\b|socket hang up/i.test(item))) category = "connection";
-                    else if (details.some(item => /expired access\/refresh token|\binvalid_grant\b/i.test(item))) category = "token-rejected";
+                    else if (details.some(item => /expired access\/refresh token|\binvalid_grant\b|\bauthentication failure\b/i.test(item))) category = "token-rejected";
+                    else if (details.some(item => /\b(?:server_error|temporarily_unavailable)\b|\bservice unavailable\b/i.test(item))) category = "provider-temporary";
+                    else if (details.some(item => /\b(?:invalid_client|invalid_request|unsupported_grant_type)\b/i.test(item))) category = "request-rejected";
                     name = "RefreshTokenAuthError/" + category;
                   }
                 }
-              } catch {}
+                  return name;
+                } catch {
+                  return undefined;
+                }
+              };
+              const input = readFileSync(0);
+              const childEnv = { ...process.env };
+              delete childEnv.SF_DEV_HUB_AUTH_URL;
+              const result = spawnSync("sf", [
+                "org", "login", "sfdx-url", "--sfdx-url-stdin", "-",
+                "--alias", "Kusanya-CI-DevHub", "--set-default-dev-hub", "--json"
+              ], {
+                input,
+                encoding: "utf8",
+                env: childEnv,
+                maxBuffer: 1048576,
+                timeout: 55000,
+                windowsHide: true
+              });
+              input.fill(0);
+              if (!result.error && result.status === 0) process.exit(0);
+              const name = classify(result.stdout) ?? classify(result.stderr) ?? "unrecognized";
               process.stdout.write(name);
-            ' 2>/dev/null)" || auth_name=unrecognized
-            unset auth_json
+              process.exit(1);
+            ' 2>/dev/null)"; then
+            case "$auth_name" in
+              ENOTFOUND|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|invalid_grant|INVALID_SFDX_AUTH_URL|AuthDecryptError|RequestError|RefreshTokenAuthError/dns|RefreshTokenAuthError/timeout|RefreshTokenAuthError/connection|RefreshTokenAuthError/token-rejected|RefreshTokenAuthError/provider-temporary|RefreshTokenAuthError/request-rejected|RefreshTokenAuthError/other) ;;
+              *) auth_name=unrecognized ;;
+            esac
             printf 'Dev Hub authentication failed: %s\n' "$auth_name"
+            unset auth_name
             exit 1
           fi
-          unset auth_json
+          unset auth_name
       - name: Verify reviewed metadata using only trusted harness code
         id: verify
         timeout-minutes: 20
@@ -260,7 +302,7 @@ jobs:
           KUSANYA_CLEANUP_JOURNAL: ${{ runner.temp }}/kusanya-scratch-intents.json
         run: node trusted/scripts/cleanup-salesforce.mjs
       - name: Remove Dev Hub authentication from the ephemeral runner
-        if: always()
+        if: always() && steps.auth.outcome == 'success'
         timeout-minutes: 1
         run: sf org logout --target-org Kusanya-CI-DevHub --no-prompt >/dev/null 2>&1
   gate:

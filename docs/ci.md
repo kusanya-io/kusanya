@@ -83,9 +83,11 @@ the policy check. Draft status alone does not suppress these events. There are n
 workflow path filters that leave the required check absent. The protected Apex job
 waits for Bill's approval only when the complete PR is not documentation-exempt.
 Bill approves only the latest head marked READY; batch fixes before approval.
-The job checks the live PR
-repository, target, open state and exact head; it rechecks the actual checkout and
-live head immediately before auth and rejects a head changed during testing.
+The job reads the live PR repository, target, open state and exact head from one
+atomic API response. It retries that single read at most three times when GitHub
+fails or returns an incomplete shape, without printing the response. It rechecks
+the actual checkout and live head immediately before auth and rejects a head
+changed during testing.
 
 The workflow pins policy and harness code to an immutable source commit, separate
 from the PR metadata checkout. Inspect the exact pin in the workflow and the source
@@ -94,27 +96,36 @@ review it before Bill approves its first credentialed execution. This bootstrap
 does not require merging the PR. No PR-head JavaScript/npm script executes in the
 credentialed job. Approval still requires inspection of YAML and its dependencies.
 
-Authentication pipes the environment secret directly to the pinned CLI with
-`--sfdx-url-stdin -`. The explicit `-` is required: without it the CLI can consume
+Authentication passes the environment secret through the in-memory wrapper to the
+pinned CLI on stdin with `--sfdx-url-stdin -`; the child process does not inherit
+the secret variable. The explicit `-` is required: without it the CLI can consume
 the following `--alias` flag as the stdin option's value and reject the command.
-Raw CLI output stays suppressed on both success and failure. Authentication JSON
-stdout is captured only in an unexported shell variable, never an artifact, cache
-or file; stderr remains discarded. On failure, a real JSON parser permits only an
+Raw CLI output stays suppressed on both success and failure. An inline Node wrapper
+captures stdout and stderr in separate bounded memory buffers, never an artifact,
+cache or file. It parses stdout first and falls back to stderr only when stdout has
+no recognized exact JSON object. Thus a valid stdout result is unaffected by CLI
+notices on stderr, while stderr-only JSON is still diagnosable. On failure, the
+parser permits only an
 exact top-level `name` from this allowlist: `ENOTFOUND`, `ETIMEDOUT`, `ECONNRESET`,
 `ECONNREFUSED`, `EAI_AGAIN`, `invalid_grant`, `INVALID_SFDX_AUTH_URL`,
 `AuthDecryptError`, `RequestError`. The observed CLI wrapper `RefreshTokenAuthError`
 is also recognized. Only for that exact name, top-level string `message` and
 string `cause` are classified through fixed patterns into a literal suffix:
-`dns`, `timeout`, `connection`, `token-rejected`, or `other`. The output is, for
-example, `RefreshTokenAuthError/dns`, never any matched text. ADR 0006 lists the
+`dns`, `timeout`, `connection`, `token-rejected`, `provider-temporary`,
+`request-rejected`, or `other`. Provider descriptions are mapped to those fixed
+labels; they are never printed. The output is, for example,
+`RefreshTokenAuthError/dns`, never any matched text. ADR 0006 lists the
 patterns and precedence; labels are heuristic diagnostics, not proof of root cause.
 Non-string fields and nested objects are not inspected. Anything else, including
 an unknown top-level name, malformed JSON or non-object output, reports
 `unrecognized`. Messages, nested data, URLs, instances
-and parser diagnostics are never printed; success remains silent. The captured
-variable is cleared before reporting. Never print an auth URL to diagnose a run.
+and parser diagnostics are never printed; success remains silent. The wrapper
+removes the auth URL from the child environment, passes it only on stdin and clears
+its input buffer before reporting. Never print an auth URL to diagnose a run.
 A failed authentication run supplies no Apex evidence, and an error class alone
-is not a reason to rotate the secret. See finding 20 in ADR 0006.
+is not a reason to rotate the secret. Logout runs only after this step succeeds;
+an attempted logout that then fails remains a real job failure. See finding 20 and
+the notes 143-145 amendment in ADR 0006.
 
 The Apex job serializes across all PRs using the CI hub, without cancelling an
 active scratch lifecycle. ADR 0030 adds a separate default-branch-owned

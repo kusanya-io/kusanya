@@ -1,6 +1,6 @@
 # ADR 0006: Quota-aware development and independent verification
 
-- Status: Approved by Bill; Phase 0 passed; issue #5 amendments await Claude verification
+- Status: Approved by Bill; Phase 0 passed; notes 143-145 amendment awaits Claude verification
 - Date: 2026-09-10
 - Brief sections: C8, C10, C11 Phase 0, C12, C13; verification protocol
 - Decision owner: Cobitech Solutions
@@ -186,6 +186,35 @@ or parser diagnostics. Success remains silent. Clear the variable before reporti
 do not persist, export, upload or cache the captured output. The secret remains
 scoped to the single authentication step. The diagnostic class is evidence to
 investigate, not proof a retry will work or authority to rotate a credential.
+
+Notes 143-145 amendment (4 November): read the four live pull-request identity
+fields from one API response rather than four independent responses. Retry that
+one read at most three times when the API fails or the returned tuple is malformed;
+never print the response. This reduces transient exposure and ensures the fields
+describe one repository state. The later immediate head recheck remains mandatory.
+
+Superseding finding 20's stdout-only capture mechanism, capture the pinned CLI's
+stdout and stderr into separate, bounded in-memory
+variables inside a shell-free Node wrapper. Parse stdout first and fall back to
+stderr only when stdout is not one recognized exact JSON object. This preserves
+stderr-only structured errors without letting unrelated stderr notices corrupt a
+valid stdout diagnosis, and without slicing JSON text or promoting an array or
+nested object. The wrapper removes the auth URL from the child environment, passes
+it only over stdin and clears the input buffer after the child exits. Extend
+`RefreshTokenAuthError`
+classification with fixed labels: `authentication failure` is `token-rejected`;
+`server_error`, `temporarily_unavailable` and `service unavailable` are
+`provider-temporary`; and `invalid_client`, `invalid_request` and
+`unsupported_grant_type` are `request-rejected`. Retain the existing precedence,
+so network evidence wins over provider evidence. Only literal labels leave the
+parser. Malformed, nested or unknown output remains `unrecognized`; a recognized
+stdout result takes precedence over any stderr content.
+
+Run the final Dev Hub logout only when the authentication step succeeded. This
+prevents a missing CLI or absent authentication from adding a misleading cleanup
+failure, while preserving a genuine post-authentication logout failure as a red
+job. These changes improve diagnosis only: they grant no retry, authentication,
+scratch-org or cleanup authority and do not weaken the exact-head gate.
 
 `BLOCKED` fails the required gate. It never becomes a successful skip and never
 falls back to an existing org. A recognized creation-time quota error follows the
