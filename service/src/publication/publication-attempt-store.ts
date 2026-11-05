@@ -55,6 +55,9 @@ export interface PublicationAttemptOperatorSummary {
   readonly reconciledAt: string | null;
   readonly retryOfAttemptId: string | null;
   readonly retryEligible: boolean;
+  readonly artifactCleanupStatus:
+    'started' | 'succeeded' | 'failed' | 'indeterminate' | null;
+  readonly artifactCleanupEligible: boolean;
 }
 
 export interface PublicationAttemptOperatorPage {
@@ -89,10 +92,29 @@ export class PublicationAttemptRetryError extends Error {
   }
 }
 
+export class PublicationArtifactCleanupError extends Error {
+  constructor() {
+    super('PUBLICATION_ARTIFACT_CLEANUP_REFUSED');
+    this.name = 'PublicationArtifactCleanupError';
+  }
+}
+
 export interface PublicationAttemptRetryStart {
   readonly attemptId: string;
   readonly formVersionId: string;
 }
+
+export interface PublicationArtifactCleanupStart {
+  readonly cleanupAttemptId: string;
+  readonly formVersionId: string;
+  readonly publicationDigest: string;
+  readonly xformVersionId: string;
+  readonly xlsformVersionId: string;
+  readonly priorOutcome: 'started' | 'indeterminate';
+}
+
+export type PublicationArtifactCleanupOutcome =
+  'succeeded' | 'failed' | 'indeterminate';
 
 interface DecodedOperatorCursor {
   readonly createdAt: string;
@@ -332,6 +354,208 @@ export class PublicationAttemptStore {
       return Object.freeze({ attemptId, formVersionId });
     } catch (error) {
       if (error instanceof PublicationAttemptRetryError) throw error;
+      throw new PublicationAttemptError();
+    }
+  }
+
+  /** Start or resume one privileged cleanup of exact unlinked artifacts. */
+  async startArtifactCleanup(
+    contextValue: TrustedAdministratorContext,
+    sourceAttemptId: string,
+  ): Promise<PublicationArtifactCleanupStart> {
+    let context: TrustedAdministratorContext;
+    try {
+      context = decodeTrustedAdministratorContext(contextValue);
+      if (
+        context.role !== 'administrator' ||
+        typeof sourceAttemptId !== 'string' ||
+        !attemptIdPattern.test(sourceAttemptId)
+      )
+        throw new Error();
+    } catch {
+      throw new PublicationArtifactCleanupError();
+    }
+    const cleanupAttemptId = randomUUID();
+    interface CleanupRow {
+      cleanup_attempt_id: unknown;
+      cleanup_outcome: unknown;
+      form_version_id: unknown;
+      publication_digest: unknown;
+      xform_version_id: unknown;
+      xlsform_version_id: unknown;
+    }
+    try {
+      const result = await this.database.query<CleanupRow>(
+        `WITH source AS (
+           SELECT attempt.publication_attempt_id, attempt.tenant_id,
+                  attempt.form_version_id,
+                  trim(attempt.publication_digest) AS publication_digest,
+                  attempt.xform_version_id, attempt.xlsform_version_id
+           FROM tenant_publication_attempts AS attempt
+           JOIN tenant_administrator_tenants AS tenant
+             ON tenant.tenant_id = attempt.tenant_id
+           JOIN tenant_administrator_bindings AS binding
+             ON binding.tenant_id = attempt.tenant_id
+            AND binding.actor_id = $3
+            AND binding.active
+            AND binding.role = 'administrator'
+           WHERE attempt.publication_attempt_id = $2
+             AND attempt.tenant_id = $4
+             AND attempt.salesforce_org_id = $5
+             AND tenant.expected_salesforce_org_id = $5
+             AND tenant.authorization_origin = $6
+             AND tenant.namespace_prefix = $7
+             AND attempt.outcome = 'partial'
+             AND attempt.reconciliation_status = 'unlinked'
+         ), existing AS (
+           SELECT cleanup.cleanup_attempt_id, cleanup.outcome
+           FROM tenant_publication_artifact_cleanups AS cleanup
+           JOIN source
+             ON source.publication_attempt_id = cleanup.publication_attempt_id
+            AND source.tenant_id = cleanup.tenant_id
+           WHERE cleanup.outcome IN ('started', 'succeeded', 'indeterminate')
+           ORDER BY cleanup.created_at DESC
+           LIMIT 1
+         ), inserted AS (
+           INSERT INTO tenant_publication_artifact_cleanups (
+             cleanup_attempt_id, tenant_id, publication_attempt_id,
+             requested_by_actor_id
+           )
+           SELECT $1, source.tenant_id, source.publication_attempt_id, $3
+           FROM source
+           WHERE NOT EXISTS (SELECT 1 FROM existing)
+           ON CONFLICT DO NOTHING
+           RETURNING cleanup_attempt_id, outcome
+         )
+         SELECT selected.cleanup_attempt_id::text,
+                selected.outcome AS cleanup_outcome,
+                source.form_version_id, source.publication_digest,
+                source.xform_version_id, source.xlsform_version_id
+         FROM source
+         CROSS JOIN LATERAL (
+           SELECT inserted.cleanup_attempt_id, inserted.outcome FROM inserted
+           UNION ALL
+           SELECT existing.cleanup_attempt_id, existing.outcome FROM existing
+             WHERE existing.outcome IN ('started', 'indeterminate')
+           LIMIT 1
+         ) AS selected`,
+        [
+          cleanupAttemptId,
+          sourceAttemptId,
+          context.actorId,
+          context.tenantId,
+          context.expectedSalesforceOrgId,
+          context.authorizationOrigin,
+          context.namespacePrefix,
+        ],
+      );
+      if (result.rowCount === 0 && result.rows.length === 0)
+        throw new PublicationArtifactCleanupError();
+      if (result.rowCount !== 1 || result.rows.length !== 1) throw new Error();
+      const row = result.rows[0]!;
+      if (
+        typeof row.cleanup_attempt_id !== 'string' ||
+        !attemptIdPattern.test(row.cleanup_attempt_id) ||
+        !['started', 'indeterminate'].includes(row.cleanup_outcome as string) ||
+        typeof row.form_version_id !== 'string' ||
+        !idPattern.test(row.form_version_id) ||
+        typeof row.publication_digest !== 'string' ||
+        !digestPattern.test(row.publication_digest) ||
+        typeof row.xform_version_id !== 'string' ||
+        !versionIdPattern.test(row.xform_version_id) ||
+        typeof row.xlsform_version_id !== 'string' ||
+        !versionIdPattern.test(row.xlsform_version_id)
+      )
+        throw new Error();
+      return Object.freeze({
+        cleanupAttemptId: row.cleanup_attempt_id,
+        formVersionId: row.form_version_id,
+        publicationDigest: row.publication_digest,
+        xformVersionId: row.xform_version_id,
+        xlsformVersionId: row.xlsform_version_id,
+        priorOutcome: row.cleanup_outcome as 'started' | 'indeterminate',
+      });
+    } catch (error) {
+      if (error instanceof PublicationArtifactCleanupError) throw error;
+      throw new PublicationAttemptError();
+    }
+  }
+
+  /** Resolve a cleanup once; an indeterminate operation may later be resolved. */
+  async completeArtifactCleanup(
+    contextValue: TrustedAdministratorContext,
+    cleanupAttemptId: string,
+    outcome: PublicationArtifactCleanupOutcome,
+    additionalRequestCount: number,
+  ): Promise<PublicationArtifactCleanupOutcome> {
+    let context: TrustedAdministratorContext;
+    try {
+      context = decodeTrustedAdministratorContext(contextValue);
+      if (
+        context.role !== 'administrator' ||
+        !attemptIdPattern.test(cleanupAttemptId) ||
+        !['succeeded', 'failed', 'indeterminate'].includes(outcome) ||
+        !Number.isSafeInteger(additionalRequestCount) ||
+        additionalRequestCount < 1
+      )
+        throw new Error();
+    } catch {
+      throw new PublicationAttemptError();
+    }
+    interface CleanupOutcomeRow {
+      outcome: unknown;
+    }
+    try {
+      const updated = await this.database.query<CleanupOutcomeRow>(
+        `UPDATE tenant_publication_artifact_cleanups AS cleanup
+         SET outcome = $4,
+             resolved_by_actor_id = binding.actor_id,
+             salesforce_request_count =
+               cleanup.salesforce_request_count + $5,
+             completed_at = clock_timestamp()
+         FROM tenant_administrator_bindings AS binding
+         WHERE cleanup.cleanup_attempt_id = $1
+           AND cleanup.tenant_id = $2
+           AND cleanup.outcome IN ('started', 'indeterminate')
+           AND binding.actor_id = $3
+           AND binding.tenant_id = cleanup.tenant_id
+           AND binding.active
+           AND binding.role = 'administrator'
+         RETURNING cleanup.outcome`,
+        [
+          cleanupAttemptId,
+          context.tenantId,
+          context.actorId,
+          outcome,
+          additionalRequestCount,
+        ],
+      );
+      if (updated.rowCount === 1 && updated.rows.length === 1) return outcome;
+      if (updated.rowCount !== 0 || updated.rows.length !== 0)
+        throw new Error();
+      const existing = await this.database.query<CleanupOutcomeRow>(
+        `SELECT cleanup.outcome
+         FROM tenant_publication_artifact_cleanups AS cleanup
+         JOIN tenant_administrator_bindings AS binding
+           ON binding.tenant_id = cleanup.tenant_id
+          AND binding.actor_id = $3
+          AND binding.active
+          AND binding.role = 'administrator'
+         WHERE cleanup.cleanup_attempt_id = $1
+           AND cleanup.tenant_id = $2`,
+        [cleanupAttemptId, context.tenantId, context.actorId],
+      );
+      const existingOutcome = existing.rows[0]?.outcome;
+      if (
+        existing.rowCount !== 1 ||
+        existing.rows.length !== 1 ||
+        !['succeeded', 'failed', 'indeterminate'].includes(
+          existingOutcome as string,
+        )
+      )
+        throw new Error();
+      return existingOutcome as PublicationArtifactCleanupOutcome;
+    } catch {
       throw new PublicationAttemptError();
     }
   }
@@ -586,6 +810,8 @@ export class PublicationAttemptStore {
       created_cursor_at: unknown;
       retry_of_publication_attempt_id: unknown;
       retry_eligible: unknown;
+      artifact_cleanup_status: unknown;
+      artifact_cleanup_eligible: unknown;
     }
     const timestamp = (
       value: unknown,
@@ -630,6 +856,14 @@ export class PublicationAttemptStore {
                       attempt.publication_attempt_id
                   )
                 ) AS retry_eligible,
+                cleanup.outcome AS artifact_cleanup_status,
+                (
+                  binding.active
+                  AND binding.role = 'administrator'
+                  AND attempt.outcome = 'partial'
+                  AND attempt.reconciliation_status = 'unlinked'
+                  AND cleanup.outcome IS DISTINCT FROM 'succeeded'
+                ) AS artifact_cleanup_eligible,
                 to_char(
                   attempt.created_at AT TIME ZONE 'UTC',
                   'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
@@ -639,6 +873,15 @@ export class PublicationAttemptStore {
            ON binding.actor_id = $1 AND binding.tenant_id = attempt.tenant_id
          JOIN tenant_administrator_tenants AS tenant
            ON tenant.tenant_id = attempt.tenant_id
+         LEFT JOIN LATERAL (
+           SELECT artifact.outcome
+           FROM tenant_publication_artifact_cleanups AS artifact
+           WHERE artifact.publication_attempt_id =
+             attempt.publication_attempt_id
+             AND artifact.tenant_id = attempt.tenant_id
+           ORDER BY artifact.created_at DESC
+           LIMIT 1
+         ) AS cleanup ON true
          WHERE attempt.tenant_id = $2
            AND attempt.salesforce_org_id = $3
            AND tenant.expected_salesforce_org_id = $3
@@ -695,7 +938,14 @@ export class PublicationAttemptStore {
             (row.retry_of_publication_attempt_id !== null &&
               (typeof row.retry_of_publication_attempt_id !== 'string' ||
                 !attemptIdPattern.test(row.retry_of_publication_attempt_id))) ||
-            typeof row.retry_eligible !== 'boolean'
+            typeof row.retry_eligible !== 'boolean' ||
+            !(
+              row.artifact_cleanup_status === null ||
+              ['started', 'succeeded', 'failed', 'indeterminate'].includes(
+                row.artifact_cleanup_status as string,
+              )
+            ) ||
+            typeof row.artifact_cleanup_eligible !== 'boolean'
           )
             throw new Error();
           if (
@@ -767,6 +1017,9 @@ export class PublicationAttemptStore {
             reconciledAt: reconciled?.iso ?? null,
             retryOfAttemptId: row.retry_of_publication_attempt_id,
             retryEligible: row.retry_eligible,
+            artifactCleanupStatus: row.artifact_cleanup_status as
+              'started' | 'succeeded' | 'failed' | 'indeterminate' | null,
+            artifactCleanupEligible: row.artifact_cleanup_eligible,
           });
         }),
       );

@@ -10,6 +10,7 @@ export type AdministratorCapability =
   | 'authorize_salesforce'
   | 'publish'
   | 'retry_publication'
+  | 'cleanup_publication_artifacts'
   | 'review_definition'
   | 'view_publication_history';
 
@@ -20,6 +21,7 @@ const roleCapabilities = Object.freeze({
     'authorize_salesforce',
     'publish',
     'retry_publication',
+    'cleanup_publication_artifacts',
     'review_definition',
     'view_publication_history',
   ]),
@@ -47,6 +49,7 @@ export const administratorRoutePolicy = Object.freeze({
   salesforceAuthorization: 'authorize_salesforce',
   salesforcePublication: 'publish',
   salesforcePublicationRetry: 'retry_publication',
+  salesforceArtifactCleanup: 'cleanup_publication_artifacts',
   reviewerPrint: 'review_definition',
   publicationHistory: 'view_publication_history',
 } as const satisfies Record<string, AdministratorCapability>);

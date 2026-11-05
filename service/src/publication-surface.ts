@@ -5,6 +5,7 @@ import { requireHardenedRequestLogging } from './http-security.js';
 import { registerOperatorInterfaceRoutes } from './operator-interface-routes.js';
 import { registerReviewerPrintRoutes } from './print/reviewer-routes.js';
 import { registerPublicationAttemptPresentationRoutes } from './publication/publication-attempt-presentation-routes.js';
+import { registerPublicationArtifactCleanupRoutes } from './publication/publication-artifact-cleanup-routes.js';
 import { registerPublicationAttemptRetentionRoutes } from './publication/publication-attempt-retention-routes.js';
 import type { PublicationAttemptStore } from './publication/publication-attempt-store.js';
 import { registerPublicationRoutes } from './publication/publication-routes.js';
@@ -53,7 +54,13 @@ export interface PublicationSurfaceDependencies {
   readonly oauthConfiguration: TenantOAuthConfiguration;
   readonly attemptStore: Pick<
     PublicationAttemptStore,
-    'start' | 'startRetry' | 'complete' | 'listForOperator' | 'applyRetention'
+    | 'start'
+    | 'startRetry'
+    | 'startArtifactCleanup'
+    | 'completeArtifactCleanup'
+    | 'complete'
+    | 'listForOperator'
+    | 'applyRetention'
   >;
   readonly publisherConfiguration: TenantSalesforcePublisherConfiguration;
   readonly validateXForm: ValidateXForm;
@@ -127,7 +134,15 @@ function checkedDependencies(
     [decoded.oauthTransactionStore, ['begin', 'consume']],
     [
       decoded.attemptStore,
-      ['start', 'startRetry', 'complete', 'listForOperator', 'applyRetention'],
+      [
+        'start',
+        'startRetry',
+        'startArtifactCleanup',
+        'completeArtifactCleanup',
+        'complete',
+        'listForOperator',
+        'applyRetention',
+      ],
     ],
   ] as const) {
     if (store === null || typeof store !== 'object' || types.isProxy(store))
@@ -251,6 +266,21 @@ export function registerPublicationSurface(
     }),
     publisherConfiguration: dependencies.publisherConfiguration,
     validateXForm: dependencies.validateXForm,
+    externalOrigin: dependencies.externalOrigin,
+  });
+  registerPublicationArtifactCleanupRoutes(app, {
+    authenticateAdministrator,
+    connectionStore: dependencies.connectionStore,
+    attemptStore: Object.freeze({
+      startArtifactCleanup: dependencies.attemptStore.startArtifactCleanup.bind(
+        dependencies.attemptStore,
+      ),
+      completeArtifactCleanup:
+        dependencies.attemptStore.completeArtifactCleanup.bind(
+          dependencies.attemptStore,
+        ),
+    }),
+    publisherConfiguration: dependencies.publisherConfiguration,
     externalOrigin: dependencies.externalOrigin,
   });
   registerPublicationAttemptPresentationRoutes(app, {

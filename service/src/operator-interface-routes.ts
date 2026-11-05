@@ -43,6 +43,7 @@ const script = `
     provision: '/api/admin/administrators',
     publish: '/api/admin/salesforce/publications',
     retry: '/api/admin/salesforce/publication-retries',
+    cleanup: '/api/admin/salesforce/publication-artifact-cleanups',
     review: '/api/admin/salesforce/reviewer-print'
   });
   const elements = Object.freeze({
@@ -104,6 +105,7 @@ const script = `
       cell(row, attempt.completedAt);
       cell(row, attempt.attemptId);
       cell(row, attempt.retryOfAttemptId);
+      cell(row, attempt.artifactCleanupStatus);
       const action = document.createElement('td');
       if (attempt.retryEligible === true) {
         const button = document.createElement('button');
@@ -111,6 +113,16 @@ const script = `
         button.className = 'secondary';
         button.textContent = 'Retry';
         button.dataset.attemptId = attempt.attemptId;
+        action.append(button);
+      }
+      if (attempt.artifactCleanupEligible === true) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'secondary';
+        button.textContent = attempt.artifactCleanupStatus === null
+          ? 'Clean files'
+          : 'Resume cleanup';
+        button.dataset.cleanupAttemptId = attempt.attemptId;
         action.append(button);
       }
       row.append(action);
@@ -264,6 +276,24 @@ const script = `
   elements.rows.addEventListener('click', async (event) => {
     const target = event.target;
     if (!(target instanceof HTMLButtonElement)) return;
+    const cleanupAttemptId = target.dataset.cleanupAttemptId;
+    if (cleanupAttemptId) {
+      target.disabled = true;
+      try {
+        const response = await request(endpoints.cleanup, {
+          method: 'POST',
+          headers: { ...protectedHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attemptId: cleanupAttemptId })
+        });
+        if (!response.ok) throw new Error(fixedFailure(response));
+        setStatus('Unlinked Salesforce Files were removed atomically.');
+        await loadAttempts(true);
+      } catch (error) {
+        target.disabled = false;
+        setStatus(error.message);
+      }
+      return;
+    }
     const attemptId = target.dataset.attemptId;
     if (!attemptId) return;
     target.disabled = true;
@@ -378,7 +408,7 @@ const html = `<!doctype html>
       </div>
       <section class="card" aria-labelledby="attempts-title">
         <h2 id="attempts-title">Publication attempts</h2>
-        <div class="scroll"><table><thead><tr><th>Form version</th><th>Status</th><th>Started</th><th>Completed</th><th>Attempt</th><th>Retry of</th><th>Action</th></tr></thead><tbody id="attempt-rows"></tbody></table></div>
+        <div class="scroll"><table><thead><tr><th>Form version</th><th>Status</th><th>Started</th><th>Completed</th><th>Attempt</th><th>Retry of</th><th>Cleanup</th><th>Action</th></tr></thead><tbody id="attempt-rows"></tbody></table></div>
         <p class="actions"><button id="more" class="secondary" type="button" disabled>Load older attempts</button><button id="apply-retention" class="secondary" type="button">Delete expired safe attempts</button></p>
       </section>
     </div>

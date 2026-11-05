@@ -61,4 +61,18 @@ public without sharing class PublicationArtifactGuard {
             }
         }
     }
+
+    /** System-mode existence check used before the atomic cleanup mutation. */
+    public static Boolean hasAnyLinks(Set<Id> documentIds) {
+        if (documentIds == null || documentIds.isEmpty()) {
+            return true;
+        }
+        return ![
+                SELECT Id
+                FROM ContentDocumentLink
+                WHERE ContentDocumentId IN :documentIds
+                LIMIT 1
+            ]
+            .isEmpty();
+    }
 }

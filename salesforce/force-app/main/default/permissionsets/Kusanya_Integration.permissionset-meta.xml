@@ -13,6 +13,10 @@
         <apexClass>PublicationCommitResource</apexClass>
         <enabled>true</enabled>
     </classAccesses>
+    <classAccesses>
+        <apexClass>PublicationArtifactCleanupResource</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
     <customPermissions>
         <enabled>true</enabled>
         <name>Import_Kusanya_Definition</name>

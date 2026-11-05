@@ -92,6 +92,12 @@ function dependencies(): PublicationSurfaceDependencies {
       async startRetry() {
         throw new Error('not reached');
       },
+      async startArtifactCleanup() {
+        throw new Error('not reached');
+      },
+      async completeArtifactCleanup() {
+        throw new Error('not reached');
+      },
       async complete() {
         throw new Error('not reached');
       },
@@ -107,6 +113,8 @@ function dependencies(): PublicationSurfaceDependencies {
               reconciledAt: null,
               retryOfAttemptId: null,
               retryEligible: false,
+              artifactCleanupStatus: null,
+              artifactCleanupEligible: false,
             },
           ],
           nextCursor: null,
@@ -182,6 +190,8 @@ void test('the real app mounts login, Salesforce authorization, publication and 
     'reconciledAt',
     'retryOfAttemptId',
     'retryEligible',
+    'artifactCleanupStatus',
+    'artifactCleanupEligible',
   ]);
   assert.equal(attempts.headers['cache-control'], 'no-store');
   const retry = await app.inject({

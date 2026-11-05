@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  PublicationArtifactCleanupError,
   PublicationAttemptError,
   PublicationAttemptRetryError,
   PublicationAttemptStore,
@@ -132,6 +133,117 @@ void test('retry storage anomalies remain distinct from safe eligibility refusal
   });
   await assert.rejects(
     store.startRetry(context, '10000000-0000-4000-8000-000000000009'),
+    PublicationAttemptError,
+  );
+});
+
+void test('starts or resumes cleanup only from server-derived unlinked evidence', async () => {
+  const queries: { text: string; values: unknown[] }[] = [];
+  const store = new PublicationAttemptStore({
+    async query<Row>(text: string, values: unknown[] = []) {
+      queries.push({ text, values });
+      return {
+        rowCount: 1,
+        rows: [
+          {
+            cleanup_attempt_id: '20000000-0000-4000-8000-000000000009',
+            cleanup_outcome: 'started',
+            form_version_id: 'a0B000000000001AAA',
+            publication_digest: 'd'.repeat(64),
+            xform_version_id: '068000000000001AAA',
+            xlsform_version_id: '068000000000002AAA',
+          },
+        ] as Row[],
+      };
+    },
+  });
+  const source = '10000000-0000-4000-8000-000000000009';
+  assert.deepEqual(await store.startArtifactCleanup(context, source), {
+    cleanupAttemptId: '20000000-0000-4000-8000-000000000009',
+    formVersionId: 'a0B000000000001AAA',
+    publicationDigest: 'd'.repeat(64),
+    xformVersionId: '068000000000001AAA',
+    xlsformVersionId: '068000000000002AAA',
+    priorOutcome: 'started',
+  });
+  assert.match(queries[0]!.text, /binding\.role = 'administrator'/);
+  assert.match(queries[0]!.text, /attempt\.outcome = 'partial'/);
+  assert.match(queries[0]!.text, /reconciliation_status = 'unlinked'/);
+  assert.match(
+    queries[0]!.text,
+    /existing\.outcome IN \('started', 'indeterminate'\)/,
+  );
+  assert.deepEqual(queries[0]!.values.slice(1), [
+    source,
+    context.actorId,
+    context.tenantId,
+    context.expectedSalesforceOrgId,
+    context.authorizationOrigin,
+    context.namespacePrefix,
+  ]);
+});
+
+void test('cleanup admission refusal and storage failures stay distinct', async () => {
+  let calls = 0;
+  const refused = new PublicationAttemptStore({
+    async query<Row>() {
+      calls++;
+      return { rowCount: 0, rows: [] as Row[] };
+    },
+  });
+  const source = '10000000-0000-4000-8000-000000000009';
+  await assert.rejects(
+    refused.startArtifactCleanup({ ...context, role: 'publisher' }, source),
+    PublicationArtifactCleanupError,
+  );
+  assert.equal(calls, 0);
+  await assert.rejects(
+    refused.startArtifactCleanup(context, source),
+    PublicationArtifactCleanupError,
+  );
+  assert.equal(calls, 1);
+  const malformed = new PublicationAttemptStore({
+    async query<Row>() {
+      return {
+        rowCount: 1,
+        rows: [{ cleanup_attempt_id: 'wrong' }] as Row[],
+      };
+    },
+  });
+  await assert.rejects(
+    malformed.startArtifactCleanup(context, source),
+    PublicationAttemptError,
+  );
+});
+
+void test('cleanup completion is additive, administrator-bound and race-idempotent', async () => {
+  const queries: string[] = [];
+  const store = new PublicationAttemptStore({
+    async query<Row>(text: string) {
+      queries.push(text);
+      if (/^\s*UPDATE/.test(text))
+        return { rowCount: 1, rows: [{ outcome: 'succeeded' }] as Row[] };
+      return { rowCount: 0, rows: [] as Row[] };
+    },
+  });
+  assert.equal(
+    await store.completeArtifactCleanup(
+      context,
+      '20000000-0000-4000-8000-000000000009',
+      'succeeded',
+      4,
+    ),
+    'succeeded',
+  );
+  assert.match(queries[0]!, /salesforce_request_count \+ \$5/);
+  assert.match(queries[0]!, /binding\.role = 'administrator'/);
+  await assert.rejects(
+    store.completeArtifactCleanup(
+      { ...context, role: 'publisher' },
+      '20000000-0000-4000-8000-000000000009',
+      'succeeded',
+      4,
+    ),
     PublicationAttemptError,
   );
 });
@@ -375,6 +487,8 @@ void test('lists a bounded least-data operator view with human-judgement states'
                 index === 4 ? '20000000-0000-4000-8000-000000000009' : null,
               retry_eligible:
                 outcome === 'failed' || reconciliation === 'artifacts_missing',
+              artifact_cleanup_status: null,
+              artifact_cleanup_eligible: reconciliation === 'unlinked',
             }) as Row,
         ),
       };
@@ -462,6 +576,8 @@ void test('operator view fails closed on contradictory rows and timestamps', asy
               created_cursor_at: '2026-10-22T10:00:00.000000Z',
               retry_of_publication_attempt_id: null,
               retry_eligible: false,
+              artifact_cleanup_status: null,
+              artifact_cleanup_eligible: false,
               ...variant,
             } as Row,
           ],
@@ -500,6 +616,8 @@ void test('operator view refuses executable timestamp properties without invokin
             reconciled_at: null,
             retry_of_publication_attempt_id: null,
             retry_eligible: false,
+            artifact_cleanup_status: null,
+            artifact_cleanup_eligible: false,
           } as Row,
         ],
       };
@@ -523,6 +641,8 @@ void test('operator pagination is opaque, keyset-bounded and cannot widen tenant
     created_cursor_at: createdCursorAt,
     retry_of_publication_attempt_id: null,
     retry_eligible: true,
+    artifact_cleanup_status: null,
+    artifact_cleanup_eligible: false,
   }));
   const calls: Array<{ text: string; values: unknown[] }> = [];
   const store = new PublicationAttemptStore({
