@@ -323,6 +323,16 @@ trigger without weakening its age/state policy. The scheduler may resolve only s
 unresolved attempts through the existing one-way reconciliation columns. It creates
 no queue, retry, credential or Salesforce-object state.
 
+ADR 0066 adds nullable `retry_of_publication_attempt_id` to
+`tenant_publication_attempts`. Its same-tenant self-reference is immutable and
+unique, so one source has at most one direct retry child. A database trigger permits
+the link only when a live administrator creates a new `started` attempt for the
+source Form Version and the source is either terminal `failed` without
+reconciliation or `partial/artifacts_missing`. The source evidence remains intact;
+unresolved, indeterminate, committed, unlinked and succeeded attempts cannot grant
+retry. Retention skips any source that still has a child, avoiding a foreign-key
+failure while preserving the original age, state and audit rules.
+
 ADR 0045 adds append-only `tenant_salesforce_authorization_audits`. Each successful
 grant records the tenant, its bound trusted administrator actor, normalized `00D`
 org, signed authorizing `005` user and resulting credential version. The audited

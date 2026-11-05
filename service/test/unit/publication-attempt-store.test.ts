@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   PublicationAttemptError,
+  PublicationAttemptRetryError,
   PublicationAttemptStore,
 } from '../../src/publication/publication-attempt-store.js';
 
@@ -53,6 +54,86 @@ void test('starts from the complete trusted tuple and completes only the same te
     'PUBLICATION_PUBLISHER_PARTIAL',
     8,
   ]);
+});
+
+void test('starts one administrator retry from an eligible same-tenant source', async () => {
+  const queries: { text: string; values: unknown[] }[] = [];
+  const store = new PublicationAttemptStore({
+    async query<Row>(text: string, values: unknown[] = []) {
+      queries.push({ text, values });
+      return {
+        rowCount: 1,
+        rows: [{ form_version_id: 'a0B000000000001AAA' }] as Row[],
+      };
+    },
+  });
+  const source = '10000000-0000-4000-8000-000000000009';
+  const started = await store.startRetry(context, source);
+  assert.match(started.attemptId, /^[0-9a-f-]{36}$/);
+  assert.equal(started.formVersionId, 'a0B000000000001AAA');
+  assert.equal(Object.isFrozen(started), true);
+  assert.deepEqual(queries[0]!.values.slice(1), [
+    source,
+    context.actorId,
+    context.tenantId,
+    context.expectedSalesforceOrgId,
+    context.authorizationOrigin,
+    context.namespacePrefix,
+  ]);
+  assert.match(queries[0]!.text, /binding\.role = 'administrator'/);
+  assert.match(queries[0]!.text, /source\.outcome = 'failed'/);
+  assert.match(queries[0]!.text, /source\.outcome = 'partial'/);
+  assert.match(queries[0]!.text, /'artifacts_missing'/);
+  assert.match(
+    queries[0]!.text,
+    /ON CONFLICT \(retry_of_publication_attempt_id\) DO NOTHING/,
+  );
+});
+
+void test('retry refusal is fixed for lower roles, ineligible sources and reuse', async () => {
+  let calls = 0;
+  const store = new PublicationAttemptStore({
+    async query<Row>() {
+      calls++;
+      return { rowCount: 0, rows: [] as Row[] };
+    },
+  });
+  await assert.rejects(
+    store.startRetry(
+      { ...context, role: 'publisher' },
+      '10000000-0000-4000-8000-000000000009',
+    ),
+    PublicationAttemptRetryError,
+  );
+  assert.equal(calls, 0);
+  await assert.rejects(
+    store.startRetry(context, '10000000-0000-4000-8000-000000000009'),
+    (error: unknown) =>
+      error instanceof PublicationAttemptRetryError &&
+      error.message === 'PUBLICATION_ATTEMPT_RETRY_REFUSED',
+  );
+  assert.equal(calls, 1);
+  for (const value of ['', 'not-an-attempt-id', '__proto__'])
+    await assert.rejects(
+      store.startRetry(context, value),
+      PublicationAttemptRetryError,
+    );
+  assert.equal(calls, 1);
+});
+
+void test('retry storage anomalies remain distinct from safe eligibility refusal', async () => {
+  const store = new PublicationAttemptStore({
+    async query<Row>() {
+      return {
+        rowCount: 1,
+        rows: [{ form_version_id: 'wrong' }] as Row[],
+      };
+    },
+  });
+  await assert.rejects(
+    store.startRetry(context, '10000000-0000-4000-8000-000000000009'),
+    PublicationAttemptError,
+  );
 });
 
 void test('refuses absent provisioning, cross-tenant completion and hostile shapes with one fixed code', async () => {
@@ -290,6 +371,10 @@ void test('lists a bounded least-data operator view with human-judgement states'
               created_cursor_at: '2026-10-22T10:00:00.000000Z',
               completed_at: completedAt,
               reconciled_at: reconciledAt,
+              retry_of_publication_attempt_id:
+                index === 4 ? '20000000-0000-4000-8000-000000000009' : null,
+              retry_eligible:
+                outcome === 'failed' || reconciliation === 'artifacts_missing',
             }) as Row,
         ),
       };
@@ -299,6 +384,17 @@ void test('lists a bounded least-data operator view with human-judgement states'
   assert.deepEqual(
     result.attempts.map((attempt) => attempt.operatorStatus),
     states.map((state) => state[4]),
+  );
+  assert.deepEqual(
+    result.attempts.map((attempt) => attempt.retryEligible),
+    states.map(
+      ([outcome, reconciliation]) =>
+        outcome === 'failed' || reconciliation === 'artifacts_missing',
+    ),
+  );
+  assert.equal(
+    result.attempts[4]!.retryOfAttemptId,
+    '20000000-0000-4000-8000-000000000009',
   );
   assert.equal(Object.isFrozen(result), true);
   assert.equal(Object.isFrozen(result.attempts), true);
@@ -364,6 +460,8 @@ void test('operator view fails closed on contradictory rows and timestamps', asy
               form_version_id: 'a0B000000000001AAA',
               created_at: new Date('2026-10-22T10:00:00.000Z'),
               created_cursor_at: '2026-10-22T10:00:00.000000Z',
+              retry_of_publication_attempt_id: null,
+              retry_eligible: false,
               ...variant,
             } as Row,
           ],
@@ -400,6 +498,8 @@ void test('operator view refuses executable timestamp properties without invokin
             created_cursor_at: '2026-10-22T10:00:00.000000Z',
             completed_at: null,
             reconciled_at: null,
+            retry_of_publication_attempt_id: null,
+            retry_eligible: false,
           } as Row,
         ],
       };
@@ -421,6 +521,8 @@ void test('operator pagination is opaque, keyset-bounded and cannot widen tenant
     completed_at: createdAt,
     reconciled_at: null,
     created_cursor_at: createdCursorAt,
+    retry_of_publication_attempt_id: null,
+    retry_eligible: true,
   }));
   const calls: Array<{ text: string; values: unknown[] }> = [];
   const store = new PublicationAttemptStore({
@@ -519,6 +621,10 @@ void test('retention is transactional, tenant-bound and exposes no caller cutoff
   assert.match(calls[3]!.text, /publication_attempt_retention_days/);
   assert.match(calls[3]!.text, /'committed', 'artifacts_missing'/);
   assert.doesNotMatch(calls[3]!.text, /'unlinked'/);
+  assert.match(
+    calls[3]!.text,
+    /retry\.retry_of_publication_attempt_id\s*=\s*attempt\.publication_attempt_id/,
+  );
 });
 
 void test('retention refuses non-administrators and rolls back malformed storage results', async () => {

@@ -393,6 +393,12 @@ export class PublicationMaintenanceStore {
                    'committed', 'artifacts_missing'
                  ))
              )
+             AND NOT EXISTS (
+               SELECT 1
+               FROM tenant_publication_attempts AS retry
+               WHERE retry.retry_of_publication_attempt_id =
+                 attempt.publication_attempt_id
+             )
            ORDER BY COALESCE(
                       attempt.reconciled_at, attempt.completed_at
                     ), attempt.publication_attempt_id

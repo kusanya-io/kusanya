@@ -53,6 +53,8 @@ export interface PublicationAttemptOperatorSummary {
   readonly startedAt: string;
   readonly completedAt: string | null;
   readonly reconciledAt: string | null;
+  readonly retryOfAttemptId: string | null;
+  readonly retryEligible: boolean;
 }
 
 export interface PublicationAttemptOperatorPage {
@@ -78,6 +80,18 @@ export class PublicationAttemptError extends Error {
     super('PUBLICATION_ATTEMPT_STORAGE');
     this.name = 'PublicationAttemptError';
   }
+}
+
+export class PublicationAttemptRetryError extends Error {
+  constructor() {
+    super('PUBLICATION_ATTEMPT_RETRY_REFUSED');
+    this.name = 'PublicationAttemptRetryError';
+  }
+}
+
+export interface PublicationAttemptRetryStart {
+  readonly attemptId: string;
+  readonly formVersionId: string;
 }
 
 interface DecodedOperatorCursor {
@@ -241,6 +255,83 @@ export class PublicationAttemptStore {
       if (result.rowCount !== 1) throw new Error();
       return attemptId;
     } catch {
+      throw new PublicationAttemptError();
+    }
+  }
+
+  /** Start one administrator-authorized retry without mutating source evidence. */
+  async startRetry(
+    contextValue: TrustedAdministratorContext,
+    sourceAttemptId: string,
+  ): Promise<PublicationAttemptRetryStart> {
+    let context: TrustedAdministratorContext;
+    try {
+      context = decodeTrustedAdministratorContext(contextValue);
+      if (
+        context.role !== 'administrator' ||
+        typeof sourceAttemptId !== 'string' ||
+        !attemptIdPattern.test(sourceAttemptId)
+      )
+        throw new Error();
+    } catch {
+      throw new PublicationAttemptRetryError();
+    }
+    const attemptId = randomUUID();
+    interface RetryRow {
+      form_version_id: unknown;
+    }
+    try {
+      const result = await this.database.query<RetryRow>(
+        `INSERT INTO tenant_publication_attempts (
+           publication_attempt_id, tenant_id, actor_id,
+           salesforce_org_id, form_version_id,
+           retry_of_publication_attempt_id
+         )
+         SELECT $1, source.tenant_id, binding.actor_id,
+                source.salesforce_org_id, source.form_version_id,
+                source.publication_attempt_id
+         FROM tenant_publication_attempts AS source
+         JOIN tenant_administrator_tenants AS tenant
+           ON tenant.tenant_id = source.tenant_id
+         JOIN tenant_administrator_bindings AS binding
+           ON binding.tenant_id = source.tenant_id
+          AND binding.actor_id = $3
+          AND binding.active
+          AND binding.role = 'administrator'
+         WHERE source.publication_attempt_id = $2
+           AND source.tenant_id = $4
+           AND source.salesforce_org_id = $5
+           AND tenant.expected_salesforce_org_id = $5
+           AND tenant.authorization_origin = $6
+           AND tenant.namespace_prefix = $7
+           AND (
+             (source.outcome = 'failed'
+               AND source.reconciliation_status IS NULL)
+             OR
+             (source.outcome = 'partial'
+               AND source.reconciliation_status = 'artifacts_missing')
+           )
+         ON CONFLICT (retry_of_publication_attempt_id) DO NOTHING
+         RETURNING form_version_id`,
+        [
+          attemptId,
+          sourceAttemptId,
+          context.actorId,
+          context.tenantId,
+          context.expectedSalesforceOrgId,
+          context.authorizationOrigin,
+          context.namespacePrefix,
+        ],
+      );
+      if (result.rowCount === 0 && result.rows.length === 0)
+        throw new PublicationAttemptRetryError();
+      if (result.rowCount !== 1 || result.rows.length !== 1) throw new Error();
+      const formVersionId = result.rows[0]!.form_version_id;
+      if (typeof formVersionId !== 'string' || !idPattern.test(formVersionId))
+        throw new Error();
+      return Object.freeze({ attemptId, formVersionId });
+    } catch (error) {
+      if (error instanceof PublicationAttemptRetryError) throw error;
       throw new PublicationAttemptError();
     }
   }
@@ -493,6 +584,8 @@ export class PublicationAttemptStore {
       completed_at: unknown;
       reconciled_at: unknown;
       created_cursor_at: unknown;
+      retry_of_publication_attempt_id: unknown;
+      retry_eligible: unknown;
     }
     const timestamp = (
       value: unknown,
@@ -519,6 +612,24 @@ export class PublicationAttemptStore {
                 attempt.reconciliation_status,
                 attempt.created_at, attempt.completed_at,
                 attempt.reconciled_at,
+                attempt.retry_of_publication_attempt_id::text,
+                (
+                  binding.active
+                  AND binding.role = 'administrator'
+                  AND (
+                    (attempt.outcome = 'failed'
+                      AND attempt.reconciliation_status IS NULL)
+                    OR
+                    (attempt.outcome = 'partial'
+                      AND attempt.reconciliation_status = 'artifacts_missing')
+                  )
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM tenant_publication_attempts AS retry
+                    WHERE retry.retry_of_publication_attempt_id =
+                      attempt.publication_attempt_id
+                  )
+                ) AS retry_eligible,
                 to_char(
                   attempt.created_at AT TIME ZONE 'UTC',
                   'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
@@ -578,6 +689,13 @@ export class PublicationAttemptStore {
             (completed !== null &&
               reconciled !== null &&
               reconciled.milliseconds < completed.milliseconds)
+          )
+            throw new Error();
+          if (
+            (row.retry_of_publication_attempt_id !== null &&
+              (typeof row.retry_of_publication_attempt_id !== 'string' ||
+                !attemptIdPattern.test(row.retry_of_publication_attempt_id))) ||
+            typeof row.retry_eligible !== 'boolean'
           )
             throw new Error();
           if (
@@ -647,6 +765,8 @@ export class PublicationAttemptStore {
             startedAt: created.iso,
             completedAt: completed?.iso ?? null,
             reconciledAt: reconciled?.iso ?? null,
+            retryOfAttemptId: row.retry_of_publication_attempt_id,
+            retryEligible: row.retry_eligible,
           });
         }),
       );
@@ -725,6 +845,12 @@ export class PublicationAttemptStore {
                  AND attempt.reconciliation_status IN (
                    'committed', 'artifacts_missing'
                  ))
+             )
+             AND NOT EXISTS (
+               SELECT 1
+               FROM tenant_publication_attempts AS retry
+               WHERE retry.retry_of_publication_attempt_id =
+                 attempt.publication_attempt_id
              )
            ORDER BY COALESCE(
                       attempt.reconciled_at, attempt.completed_at

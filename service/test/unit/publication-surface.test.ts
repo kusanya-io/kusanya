@@ -89,6 +89,9 @@ function dependencies(): PublicationSurfaceDependencies {
       async start() {
         throw new Error('not reached');
       },
+      async startRetry() {
+        throw new Error('not reached');
+      },
       async complete() {
         throw new Error('not reached');
       },
@@ -102,6 +105,8 @@ function dependencies(): PublicationSurfaceDependencies {
               startedAt: '2026-10-27T00:00:00.000Z',
               completedAt: null,
               reconciledAt: null,
+              retryOfAttemptId: null,
+              retryEligible: false,
             },
           ],
           nextCursor: null,
@@ -175,8 +180,21 @@ void test('the real app mounts login, Salesforce authorization, publication and 
     'startedAt',
     'completedAt',
     'reconciledAt',
+    'retryOfAttemptId',
+    'retryEligible',
   ]);
   assert.equal(attempts.headers['cache-control'], 'no-store');
+  const retry = await app.inject({
+    method: 'POST',
+    url: '/api/admin/salesforce/publication-retries',
+    headers: {
+      origin,
+      cookie: `__Host-kusanya_admin_session=${opaqueSession}`,
+      'x-csrf-token': csrfToken,
+    },
+    payload: { attemptId: 'not-an-attempt-id' },
+  });
+  assert.equal(retry.statusCode, 400);
   const reviewerPrint = await app.inject({
     method: 'POST',
     url: '/api/admin/salesforce/reviewer-print',

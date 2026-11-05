@@ -502,3 +502,11 @@ unexpected verification and cleanup exceptions without granting retry authority.
 Privileged retry, unlinked Salesforce File
 cleanup and privileged disconnect/rebind remain separate note 34 strands. No C10 or
 Phase 1 gate claim is made.
+
+ADR 0066 implements the privileged publication-retry strand as a separate
+administrator-only command. It creates one immutable child attempt from only
+terminal failed/no-reconciliation or partial/artifacts-missing evidence, preserves
+the source, and reuses the ordinary attempt-scoped publisher. Uncertain, committed,
+unlinked, succeeded and already-used sources remain ineligible; scheduled work never
+publishes. After independent verification, note 34 retains unlinked Salesforce File
+cleanup and privileged disconnect/rebind. No C10 or Phase 1 gate claim is made.

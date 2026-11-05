@@ -452,6 +452,40 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/FixedError' }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /api/admin/salesforce/publication-retries:
+    post:
+      operationId: retrySalesforcePublication
+      summary: Retry one safely classified publication attempt as a new attempt
+      description: >-
+        Administrator only. The source must be either terminal failed without a
+        reconciliation status, or partial and reconciled as artifacts_missing.
+        A source may create only one direct retry. Unresolved, indeterminate,
+        committed, unlinked, succeeded and already-retried sources are refused.
+        The source evidence is never mutated or erased.
+      security: [{ administratorSession: [], csrfToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [attemptId]
+              properties:
+                attemptId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Retry publication committed or already committed
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Rejected' }
+        '409':
+          description: Source is ineligible, already used, partial or unresolved
+        '422':
+          description: Retry was admitted but the current definition was rejected
+        '503': { $ref: '#/components/responses/Unavailable' }
   /api/admin/salesforce/publication-attempts:
     get:
       operationId: listPublicationAttempts
@@ -592,6 +626,8 @@ components:
           startedAt,
           completedAt,
           reconciledAt,
+          retryOfAttemptId,
+          retryEligible,
         ]
       properties:
         attemptId: { type: string, format: uuid }
@@ -611,3 +647,10 @@ components:
           anyOf: [{ type: string, format: date-time }, { type: 'null' }]
         reconciledAt:
           anyOf: [{ type: string, format: date-time }, { type: 'null' }]
+        retryOfAttemptId:
+          anyOf: [{ type: string, format: uuid }, { type: 'null' }]
+        retryEligible:
+          type: boolean
+          description: >-
+            True only for a live administrator when this source is safely
+            classified and has no direct retry child.

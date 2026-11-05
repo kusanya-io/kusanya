@@ -123,6 +123,8 @@ const responseSchema = {
           'startedAt',
           'completedAt',
           'reconciledAt',
+          'retryOfAttemptId',
+          'retryEligible',
         ],
         properties: {
           attemptId: { type: 'string' },
@@ -142,6 +144,10 @@ const responseSchema = {
           startedAt: { type: 'string' },
           completedAt: nullableTimestamp,
           reconciledAt: nullableTimestamp,
+          retryOfAttemptId: {
+            anyOf: [{ type: 'string' }, { type: 'null' }],
+          },
+          retryEligible: { type: 'boolean' },
         },
       },
     },

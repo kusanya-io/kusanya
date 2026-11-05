@@ -405,6 +405,10 @@ void test('scheduled retention uses its own audit source in one transaction', as
   assert.match(statements[3]!, /LIMIT \$1/);
   assert.match(statements[3]!, /'committed',\s*'artifacts_missing'/);
   assert.doesNotMatch(statements[3]!, /'unlinked'/);
+  assert.match(
+    statements[3]!,
+    /retry\.retry_of_publication_attempt_id\s*=\s*attempt\.publication_attempt_id/,
+  );
   assert.equal(statements[4], 'COMMIT');
   assert.equal(statements[5], 'RELEASE');
 });
