@@ -110,6 +110,12 @@ oversized or hostile request is refused without partial deletion. Foreign-artifa
 survival is asserted as the owning user rather than through the integration user's
 private-File visibility.
 
+ADR 0070 additionally treats a `ContentDistribution` on either exact version as
+an external share and refuses the whole pair. It pins the reachable missing-owner-
+link branch. The deletion remains one `Database.delete` call with
+`allOrNone=true`; the redundant savepoint and rollback branch was removed because
+the single all-or-none DML statement is already the atomic boundary.
+
 The same PostgreSQL evidence adds the note 150 tripwire: once a retry child exists,
 the source projection must report `retryEligible: false`.
 

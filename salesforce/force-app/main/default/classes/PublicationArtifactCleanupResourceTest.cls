@@ -205,6 +205,59 @@ private class PublicationArtifactCleanupResourceTest {
     }
 
     @IsTest
+    static void refusesMissingOwnerLinkOrPublicDelivery() {
+        User integration;
+        System.runAs(new User(Id = UserInfo.getUserId())) {
+            integration = createUser('cleanext');
+            assignPermission(integration.Id, 'Kusanya_Integration');
+        }
+        System.runAs(integration) {
+            Form_Version__c version = createDraft('External cleanup refusal');
+            Map<String, Id> files = createFiles();
+            ContentVersion xml = [
+                SELECT ContentDocumentId
+                FROM ContentVersion
+                WHERE Id = :files.get('xml')
+            ];
+            delete [
+                SELECT Id
+                FROM ContentDocumentLink
+                WHERE
+                    ContentDocumentId = :xml.ContentDocumentId
+                    AND LinkedEntityId = :integration.Id
+            ];
+            RestResponse missingLink = invoke(
+                'POST',
+                'application/json',
+                validBody(version.Id, files.get('xml'), files.get('xlsx'))
+            );
+            Assert.areEqual(400, missingLink.statusCode);
+            Assert.areEqual(REFUSED, missingLink.responseBody.toString());
+            Assert.areEqual(2, countVersions(files));
+
+            Map<String, Id> deliveredFiles = createFiles();
+            insert new ContentDistribution(
+                Name = 'Public cleanup refusal',
+                ContentVersionId = deliveredFiles.get('xml'),
+                PreferencesAllowViewInBrowser = true,
+                PreferencesLinkLatestVersion = false
+            );
+            RestResponse delivered = invoke(
+                'POST',
+                'application/json',
+                validBody(
+                    version.Id,
+                    deliveredFiles.get('xml'),
+                    deliveredFiles.get('xlsx')
+                )
+            );
+            Assert.areEqual(400, delivered.statusCode);
+            Assert.areEqual(REFUSED, delivered.responseBody.toString());
+            Assert.areEqual(2, countVersions(deliveredFiles));
+        }
+    }
+
+    @IsTest
     static void strictlyDecodesAndChecksPermissionBeforeTheBody() {
         User ordinary;
         System.runAs(new User(Id = UserInfo.getUserId())) {
@@ -321,6 +374,14 @@ private class PublicationArtifactCleanupResourceTest {
             'xml' => createFile('xform', 'xml', '<data/>'),
             'xlsx' => createFile('xlsform', 'xlsx', 'workbook')
         };
+    }
+
+    private static Integer countVersions(Map<String, Id> files) {
+        return [
+            SELECT COUNT()
+            FROM ContentVersion
+            WHERE Id IN :new Set<Id>{ files.get('xml'), files.get('xlsx') }
+        ];
     }
 
     private static Id createFile(String suffix, String extension, String body) {

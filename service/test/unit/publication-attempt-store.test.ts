@@ -529,6 +529,10 @@ void test('lists a bounded least-data operator view with human-judgement states'
   assert.match(queryText, /LIMIT 100/);
   assert.match(queryText, /binding\.actor_id = \$1/);
   assert.match(queryText, /tenant\.namespace_prefix = \$5/);
+  assert.match(
+    queryText,
+    /NOT EXISTS \([\s\S]*retry\.retry_of_publication_attempt_id\s*=\s*attempt\.publication_attempt_id[\s\S]*\) AS retry_eligible/,
+  );
   const projection = queryText.slice(0, queryText.indexOf('FROM'));
   for (const excluded of [
     'actor_id',
