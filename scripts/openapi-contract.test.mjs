@@ -67,14 +67,13 @@ void test('operator OpenAPI remains least-data and documents the lifecycle surfa
     'unlinked_artifacts_confirmed',
     'artifacts_missing_confirmed',
   ];
+  const operatorStatus = summary.match(
+    /^        operatorStatus:\n([\s\S]*?)(?=^        [A-Za-z][A-Za-z0-9]*:)/m,
+  )?.[1];
+  assert.ok(operatorStatus, 'operatorStatus schema is documented');
   for (const status of statuses)
-    assert.match(summary, new RegExp(`^            - ${status}$`, 'm'));
-  assert.equal(
-    statuses.filter((status) =>
-      new RegExp(`^            - ${status}$`, 'm').test(summary),
-    ).length,
-    7,
-  );
+    assert.match(operatorStatus, new RegExp(`^            - ${status}$`, 'm'));
+  assert.equal((operatorStatus.match(/^            - /gm) ?? []).length, 7);
 
   const cleanupPath = pathBlock(
     contract,

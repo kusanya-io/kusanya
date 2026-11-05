@@ -30,7 +30,7 @@ public with sharing class PublicationArtifactCleanup {
                 WHERE Id = :versionId
                 WITH USER_MODE
             ];
-            [
+            Form__c lockedForm = [
                 SELECT Id
                 FROM Form__c
                 WHERE Id = :identity.Form__c
