@@ -522,3 +522,14 @@ is proved. The source evidence is retained. Note 150 is pinned by asserting that
 source with a retry child is never projected retryable. After independent
 verification, privileged disconnect/rebind is the remaining note 34 strand. No C10
 or Phase 1 gate claim is made.
+
+ADR 0068 implements note 34's final privileged disconnect/rebind strand. A live full
+administrator can remove only the current tenant-derived credential after PostgreSQL
+proves no active, uncertain or uncleared publication evidence remains. Rebind is a
+separate audited action available only while disconnected; it changes the expected
+org/origin/namespace tuple but creates no credential, so the ordinary one-time OAuth
+flow must authorize the new org. Tenant-row locks serialize publication and cleanup
+admission with disconnect, and cleanup also requires connected state. Authorization and
+publication histories survive. After independent verification this closes note 34;
+notes 136, 137, 140, 150, 152 and 153 remain as separately recorded depth or evidence
+items. No C10 or Phase 1 gate claim is made.

@@ -345,6 +345,17 @@ requires an HMAC browser binding to the exact still-active initiating session an
 returns no connection metadata. Real Salesforce provider descriptions are discarded
 at the HTTP edge.
 
+ADR 0068 mounts the explicit connection lifecycle beside that authorization flow.
+`POST /api/admin/salesforce/connection/disconnect` is administrator-only and accepts
+no body, query, tenant, org, credential or force selector. It removes the encrypted
+credential only after PostgreSQL proves that no active, uncertain or uncleared
+publication evidence would be abandoned; authorization and publication history
+remain. `POST /api/admin/salesforce/connection/rebind` is also administrator-only and
+accepts exactly a new Salesforce org ID, authorization origin and namespace. It is
+available only while disconnected, creates no credential and must be followed by the
+ordinary one-time authorization flow. Both operations require the exact application
+origin, live administrator session and its CSRF token and return no connection data.
+
 `POST /api/admin/salesforce/authorization` accepts no body, query or tenant selector.
 It requires a live `administrator` role, the exact application origin and the
 session-derived CSRF token, then redirects to the tenant's stored Salesforce login

@@ -65,6 +65,12 @@ function dependencies(): PublicationSurfaceDependencies {
       ttlSeconds: 3600,
     },
     connectionStore: {
+      async disconnect() {
+        throw new Error('not reached');
+      },
+      async rebind() {
+        throw new Error('not reached');
+      },
       async withRefreshLock() {
         throw new Error('not reached');
       },
@@ -563,6 +569,8 @@ void test('composition refuses an unhardened host and any missing capability', a
   for (const [storeName, method] of [
     ['oauthTransactionStore', 'begin'],
     ['oauthTransactionStore', 'consume'],
+    ['connectionStore', 'disconnect'],
+    ['connectionStore', 'rebind'],
     ['connectionStore', 'saveAuthorization'],
   ] as const) {
     const app = createApp(config, { async ping() {}, async close() {} }, false);

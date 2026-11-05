@@ -367,6 +367,72 @@ paths:
         '401': { $ref: '#/components/responses/AuthenticationRequired' }
         '403': { $ref: '#/components/responses/Rejected' }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /api/admin/salesforce/connection/disconnect:
+    post:
+      operationId: disconnectTenantSalesforceConnection
+      summary: Remove the current tenant's encrypted Salesforce credential
+      description: >-
+        Administrator only. The request has no body, query, tenant, org or
+        credential selector. Active or unresolved publication and
+        artifact-cleanup evidence refuses the operation. Historical evidence is
+        retained and the tenant remains disconnected until separately authorized.
+      security: [{ administratorSession: [], csrfToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      responses:
+        '204':
+          description: Credential removed and disconnect audit committed
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Rejected' }
+        '409':
+          description: Connection state or retained publication evidence refuses disconnect
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/admin/salesforce/connection/rebind:
+    post:
+      operationId: rebindTenantSalesforceConnection
+      summary: Change the expected Salesforce tuple of a disconnected tenant
+      description: >-
+        Administrator only. Rebinding is possible only after a successful
+        disconnect and creates no credential. The ordinary one-time authorization
+        flow must subsequently authorize the new tuple.
+      security: [{ administratorSession: [], csrfToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [salesforceOrgId, authorizationOrigin, namespacePrefix]
+              properties:
+                salesforceOrgId:
+                  type: string
+                  pattern: '^00D[A-Za-z0-9]{12}([A-Za-z0-9]{3})?$'
+                authorizationOrigin:
+                  type: string
+                  format: uri
+                  pattern: '^https://[A-Za-z0-9.-]+\.salesforce\.com$'
+                namespacePrefix:
+                  type: string
+                  pattern: '^(|[a-z][a-z0-9]{0,14}__)$'
+      responses:
+        '204':
+          description: Expected tuple changed and rebind audit committed; no credential created
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Rejected' }
+        '409':
+          description: Tenant is connected, tuple is stale or target org is already bound
+        '503': { $ref: '#/components/responses/Unavailable' }
   /api/admin/salesforce/publications:
     post:
       operationId: publishSalesforceDefinition

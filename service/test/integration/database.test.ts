@@ -23,6 +23,7 @@ import {
   normalizeSalesforceOrgId,
   normalizeSalesforceUserId,
   TenantConnectionStore,
+  type QueryConnection,
   type QueryExecutor,
 } from '../../src/tenant/connection-store.js';
 import {
@@ -159,9 +160,10 @@ void test(
     await applyMigrations(pool);
     await pool.query(
       `INSERT INTO tenant_administrator_tenants
-         (tenant_id, expected_salesforce_org_id, authorization_origin, namespace_prefix)
-       VALUES ($1, $2, 'https://login.salesforce.com', 'ksny__'),
-              ($3, $4, 'https://login.salesforce.com', '')`,
+         (tenant_id, expected_salesforce_org_id, authorization_origin,
+          namespace_prefix, salesforce_connection_state)
+       VALUES ($1, $2, 'https://login.salesforce.com', 'ksny__', 'connected'),
+              ($3, $4, 'https://login.salesforce.com', '', 'connected')`,
       [tenantId, orgId, otherTenantId, otherOrgId],
     );
     await pool.query(
@@ -458,9 +460,9 @@ void test(
     await pool.query(
       `INSERT INTO tenant_administrator_tenants
          (tenant_id, expected_salesforce_org_id, authorization_origin,
-          namespace_prefix)
-       VALUES ($1, $2, 'https://login.salesforce.com', 'ksny__'),
-              ($3, $4, 'https://login.salesforce.com', '')`,
+          namespace_prefix, salesforce_connection_state)
+       VALUES ($1, $2, 'https://login.salesforce.com', 'ksny__', 'connected'),
+              ($3, $4, 'https://login.salesforce.com', '', 'connected')`,
       [tenantId, orgId, otherTenantId, otherOrgId],
     );
     await pool.query(
@@ -687,9 +689,9 @@ void test(
     await pool.query(
       `INSERT INTO tenant_administrator_tenants
          (tenant_id, expected_salesforce_org_id, authorization_origin,
-          namespace_prefix)
-       VALUES ($1, $2, 'https://login.salesforce.com', 'ksny__'),
-              ($3, $4, 'https://login.salesforce.com', '')`,
+          namespace_prefix, salesforce_connection_state)
+       VALUES ($1, $2, 'https://login.salesforce.com', 'ksny__', 'connected'),
+              ($3, $4, 'https://login.salesforce.com', '', 'connected')`,
       [tenantId, orgId, otherTenantId, otherOrgId],
     );
     await pool.query(
@@ -990,9 +992,9 @@ void test(
     await pool.query(
       `INSERT INTO tenant_administrator_tenants
          (tenant_id, expected_salesforce_org_id, authorization_origin,
-          namespace_prefix)
-       VALUES ($1, $2, 'https://login.salesforce.com', 'ksny__'),
-              ($3, $4, 'https://login.salesforce.com', '')`,
+          namespace_prefix, salesforce_connection_state)
+       VALUES ($1, $2, 'https://login.salesforce.com', 'ksny__', 'connected'),
+              ($3, $4, 'https://login.salesforce.com', '', 'connected')`,
       [tenantId, orgId, otherTenantId, otherOrgId],
     );
     await pool.query(
@@ -1619,6 +1621,405 @@ void test(
   },
 );
 void test(
+  'privileged disconnect and rebind preserve audits and serialize publication',
+  {
+    timeout: 15000,
+    skip:
+      !databaseUrl && !databaseRequired
+        ? 'Set DATABASE_URL to a disposable PostgreSQL 17 database'
+        : false,
+  },
+  async (context) => {
+    assert.ok(
+      databaseUrl,
+      'DATABASE_URL is required when REQUIRE_DATABASE_TESTS=true',
+    );
+    const config = readConfig({
+      ...process.env,
+      NODE_ENV: 'test',
+      DATABASE_URL: databaseUrl,
+    });
+    const pool = createPostgresPool(config, () => {});
+    const tenantId = randomUUID();
+    const actorId = `administrator:${randomUUID()}`;
+    const publisherId = `publisher:${randomUUID()}`;
+    const oldOrgId = normalizeSalesforceOrgId(
+      `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+    );
+    const newOrgId = normalizeSalesforceOrgId(
+      `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+    );
+    context.after(async () => {
+      try {
+        const cleanup = await pool.connect();
+        try {
+          await cleanup.query('BEGIN');
+          await cleanup.query(
+            `SELECT set_config(
+               'kusanya.publication_retention_actor', $1, true
+             )`,
+            [actorId],
+          );
+          await cleanup.query(
+            `SELECT set_config(
+               'kusanya.publication_retention_mode', 'administrator', true
+             )`,
+          );
+          await cleanup.query(
+            `UPDATE tenant_publication_attempts
+             SET outcome = 'failed', failure_code = 'TEST_CLEANUP',
+                 salesforce_request_count = 0,
+                 completed_at = clock_timestamp() - interval '4000 days'
+             WHERE tenant_id = $1::uuid AND outcome = 'started'
+               AND reconciliation_status IS NULL`,
+            [tenantId],
+          );
+          await cleanup.query(
+            `UPDATE tenant_publication_attempts
+             SET completed_at = clock_timestamp() - interval '4000 days'
+             WHERE tenant_id = $1::uuid
+               AND outcome IN ('succeeded', 'failed')`,
+            [tenantId],
+          );
+          await cleanup.query(
+            `DELETE FROM tenant_publication_attempts
+             WHERE tenant_id = $1::uuid`,
+            [tenantId],
+          );
+          await cleanup.query('COMMIT');
+        } catch (error) {
+          await cleanup.query('ROLLBACK');
+          throw error;
+        } finally {
+          cleanup.release();
+        }
+        await pool.query(
+          `DELETE FROM tenant_salesforce_connection_lifecycle_audits
+           WHERE tenant_id = $1::uuid`,
+          [tenantId],
+        );
+        await pool.query(
+          `DELETE FROM tenant_salesforce_authorization_audits
+           WHERE tenant_id = $1::uuid`,
+          [tenantId],
+        );
+        await pool.query(
+          `DELETE FROM tenant_connections WHERE tenant_id = $1::uuid`,
+          [tenantId],
+        );
+        await pool.query(
+          `DELETE FROM tenant_administrator_bindings
+           WHERE actor_id = ANY($1::varchar[])`,
+          [[actorId, publisherId]],
+        );
+        await pool.query(
+          `DELETE FROM tenant_administrator_tenants
+           WHERE tenant_id = $1::uuid`,
+          [tenantId],
+        );
+      } finally {
+        await pool.end();
+      }
+    });
+    await applyMigrations(pool);
+    await pool.query(
+      `INSERT INTO tenant_administrator_tenants (
+         tenant_id, expected_salesforce_org_id,
+         authorization_origin, namespace_prefix
+       ) VALUES ($1::uuid, $2, 'https://login.salesforce.com', '')`,
+      [tenantId, oldOrgId],
+    );
+    await pool.query(
+      `INSERT INTO tenant_administrator_bindings (actor_id, tenant_id, role)
+       VALUES ($1, $3::uuid, 'administrator'),
+              ($2, $3::uuid, 'publisher')`,
+      [actorId, publisherId, tenantId],
+    );
+    const executor = createQueryExecutor(pool);
+    const connectionStore = new TenantConnectionStore(
+      executor,
+      createTenantCredentialVault({
+        activeKeyId: 'lifecycle-integration',
+        keys: {
+          'lifecycle-integration': Buffer.alloc(32, 73).toString('base64'),
+        },
+      }),
+    );
+    const attemptStore = new PublicationAttemptStore(executor);
+    const oldBinding = {
+      actorId,
+      tenantId,
+      salesforceOrgId: oldOrgId,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: '',
+    } as const;
+    await connectionStore.saveAuthorization({
+      ...oldBinding,
+      salesforceUserId: '005000000000001',
+      instanceOrigin: 'https://synthetic.my.salesforce.com',
+      refreshToken: 'old-synthetic-refresh-token',
+    });
+    assert.equal(
+      (
+        await pool.query<{ salesforce_connection_state: string }>(
+          `SELECT salesforce_connection_state
+           FROM tenant_administrator_tenants WHERE tenant_id = $1::uuid`,
+          [tenantId],
+        )
+      ).rows[0]?.salesforce_connection_state,
+      'connected',
+    );
+
+    await assert.rejects(
+      connectionStore.disconnect({ ...oldBinding, actorId: publisherId }),
+      /TENANT_CONNECTION_CONFLICT/,
+    );
+    const trusted = {
+      actorId,
+      tenantId,
+      expectedSalesforceOrgId: oldOrgId,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: '',
+      role: 'administrator' as const,
+      csrfToken: 'c'.repeat(43),
+    };
+    const blockingAttempt = await attemptStore.start(
+      trusted,
+      'a0B000000000001AAA',
+    );
+    await assert.rejects(
+      connectionStore.disconnect(oldBinding),
+      /TENANT_CONNECTION_CONFLICT/,
+    );
+    await attemptStore.complete(blockingAttempt, tenantId, {
+      outcome: 'failed',
+      failureCode: 'PUBLICATION_REJECTED',
+      salesforceRequestCount: 0,
+    });
+    await connectionStore.disconnect(oldBinding);
+    assert.equal(await connectionStore.load(tenantId), undefined);
+    const afterDisconnect = await pool.query<{
+      salesforce_connection_state: string;
+      authorization_audits: number;
+      disconnect_audits: number;
+    }>(
+      `SELECT tenant.salesforce_connection_state,
+              (SELECT count(*)::integer
+               FROM tenant_salesforce_authorization_audits
+               WHERE tenant_id = tenant.tenant_id) AS authorization_audits,
+              (SELECT count(*)::integer
+               FROM tenant_salesforce_connection_lifecycle_audits
+               WHERE tenant_id = tenant.tenant_id
+                 AND action = 'disconnect') AS disconnect_audits
+       FROM tenant_administrator_tenants AS tenant
+       WHERE tenant.tenant_id = $1::uuid`,
+      [tenantId],
+    );
+    assert.deepEqual(afterDisconnect.rows[0], {
+      salesforce_connection_state: 'disconnected',
+      authorization_audits: 1,
+      disconnect_audits: 1,
+    });
+    const disconnectedAttempt = await attemptStore.start(
+      trusted,
+      'a0B000000000002AAA',
+    );
+    await attemptStore.complete(disconnectedAttempt, tenantId, {
+      outcome: 'failed',
+      failureCode: 'TENANT_PUBLICATION_NOT_CONNECTED',
+      salesforceRequestCount: 0,
+    });
+
+    await assert.rejects(
+      connectionStore.rebind({
+        ...oldBinding,
+        actorId: publisherId,
+        newSalesforceOrgId: newOrgId,
+        newAuthorizationOrigin: 'https://test.salesforce.com',
+        newNamespacePrefix: 'ksny__',
+      }),
+      /TENANT_CONNECTION_CONFLICT/,
+    );
+    await connectionStore.rebind({
+      ...oldBinding,
+      newSalesforceOrgId: newOrgId,
+      newAuthorizationOrigin: 'https://test.salesforce.com',
+      newNamespacePrefix: 'ksny__',
+    });
+    const rebound = await pool.query<{
+      expected_salesforce_org_id: string;
+      authorization_origin: string;
+      namespace_prefix: string;
+      salesforce_connection_state: string;
+    }>(
+      `SELECT expected_salesforce_org_id, authorization_origin,
+              namespace_prefix, salesforce_connection_state
+       FROM tenant_administrator_tenants WHERE tenant_id = $1::uuid`,
+      [tenantId],
+    );
+    assert.deepEqual(rebound.rows[0], {
+      expected_salesforce_org_id: newOrgId,
+      authorization_origin: 'https://test.salesforce.com',
+      namespace_prefix: 'ksny__',
+      salesforce_connection_state: 'disconnected',
+    });
+    await assert.rejects(
+      connectionStore.rebind({
+        ...oldBinding,
+        newSalesforceOrgId: newOrgId,
+        newAuthorizationOrigin: 'https://test.salesforce.com',
+        newNamespacePrefix: 'ksny__',
+      }),
+      /TENANT_CONNECTION_CONFLICT/,
+    );
+
+    const newBinding = {
+      actorId,
+      tenantId,
+      salesforceOrgId: newOrgId,
+      authorizationOrigin: 'https://test.salesforce.com',
+      namespacePrefix: 'ksny__',
+    } as const;
+    await connectionStore.saveAuthorization({
+      ...newBinding,
+      salesforceUserId: '005000000000002',
+      instanceOrigin: 'https://synthetic.sandbox.my.salesforce.com',
+      refreshToken: 'new-synthetic-refresh-token',
+    });
+    assert.equal(
+      (await connectionStore.load(tenantId))?.salesforceOrgId,
+      newOrgId,
+    );
+    const auditCounts = await pool.query<{
+      authorization_count: number;
+      lifecycle_count: number;
+    }>(
+      `SELECT
+         (SELECT count(*)::integer
+          FROM tenant_salesforce_authorization_audits
+          WHERE tenant_id = $1::uuid) AS authorization_count,
+         (SELECT count(*)::integer
+          FROM tenant_salesforce_connection_lifecycle_audits
+          WHERE tenant_id = $1::uuid) AS lifecycle_count`,
+      [tenantId],
+    );
+    assert.deepEqual(auditCounts.rows[0], {
+      authorization_count: 2,
+      lifecycle_count: 2,
+    });
+
+    const lockClient = await pool.connect();
+    const attemptClient = await pool.connect();
+    const disconnectClient = await pool.connect();
+    const queryConnection = (
+      client: typeof attemptClient,
+    ): QueryConnection => ({
+      async query<Row>(text: string, values: unknown[] = []) {
+        const result = await client.query(text, values);
+        return { rows: result.rows as Row[], rowCount: result.rowCount };
+      },
+      release() {},
+    });
+    const attemptConnection = queryConnection(attemptClient);
+    const disconnectConnection = queryConnection(disconnectClient);
+    const racingAttempts = new PublicationAttemptStore(attemptConnection);
+    const racingConnections = new TenantConnectionStore(
+      {
+        async query<Row>(text: string, values: unknown[] = []) {
+          return disconnectConnection.query<Row>(text, values);
+        },
+        async connect() {
+          return disconnectConnection;
+        },
+      },
+      createTenantCredentialVault({
+        activeKeyId: 'lifecycle-integration',
+        keys: {
+          'lifecycle-integration': Buffer.alloc(32, 73).toString('base64'),
+        },
+      }),
+    );
+    const pids = await Promise.all(
+      [lockClient, attemptClient, disconnectClient].map(async (client) =>
+        Number(
+          (
+            await client.query<{ pid: number }>(
+              'SELECT pg_backend_pid() AS pid',
+            )
+          ).rows[0]?.pid,
+        ),
+      ),
+    );
+    assert.equal(new Set(pids).size, 3);
+    const waitForLock = async (pid: number) => {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const waiting = await pool.query<{ waiting: boolean }>(
+          `SELECT wait_event_type = 'Lock' AS waiting
+           FROM pg_stat_activity WHERE pid = $1`,
+          [pid],
+        );
+        if (waiting.rows[0]?.waiting === true) return;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      assert.fail(
+        'expected a warm PostgreSQL connection to wait on the tenant lock',
+      );
+    };
+    try {
+      await lockClient.query('BEGIN');
+      await lockClient.query(
+        `SELECT tenant_id FROM tenant_administrator_tenants
+         WHERE tenant_id = $1::uuid FOR UPDATE`,
+        [tenantId],
+      );
+      const admittedFirst = racingAttempts.start(
+        { ...trusted, expectedSalesforceOrgId: newOrgId },
+        'a0B000000000003AAA',
+      );
+      await waitForLock(pids[1]!);
+      const refusedDisconnect = racingConnections.disconnect(newBinding);
+      await waitForLock(pids[2]!);
+      await lockClient.query('COMMIT');
+      const admittedAttempt = await admittedFirst;
+      await assert.rejects(refusedDisconnect, /TENANT_CONNECTION_CONFLICT/);
+      await attemptStore.complete(admittedAttempt, tenantId, {
+        outcome: 'failed',
+        failureCode: 'PUBLICATION_REJECTED',
+        salesforceRequestCount: 0,
+      });
+
+      await lockClient.query('BEGIN');
+      await lockClient.query(
+        `SELECT tenant_id FROM tenant_administrator_tenants
+         WHERE tenant_id = $1::uuid FOR UPDATE`,
+        [tenantId],
+      );
+      const disconnectFirst = racingConnections.disconnect(newBinding);
+      await waitForLock(pids[2]!);
+      const recordedAfterDisconnect = racingAttempts.start(
+        { ...trusted, expectedSalesforceOrgId: newOrgId },
+        'a0B000000000004AAA',
+      );
+      await waitForLock(pids[1]!);
+      await lockClient.query('COMMIT');
+      await disconnectFirst;
+      const afterDisconnectAttempt = await recordedAfterDisconnect;
+      await attemptStore.complete(afterDisconnectAttempt, tenantId, {
+        outcome: 'failed',
+        failureCode: 'TENANT_PUBLICATION_NOT_CONNECTED',
+        salesforceRequestCount: 0,
+      });
+      assert.equal(await connectionStore.load(tenantId), undefined);
+    } finally {
+      await lockClient.query('ROLLBACK').catch(() => undefined);
+      lockClient.release();
+      attemptClient.release();
+      disconnectClient.release();
+    }
+  },
+);
+
+void test(
   'unresponsive database connection times out and yields unavailable without details',
   { timeout: 10000 },
   async (context) => {
@@ -2146,6 +2547,22 @@ void test(
       ],
     );
 
+    await applyMigrations(
+      legacyPool,
+      '0015_unlinked_publication_artifact_cleanup',
+    );
+    await legacyPool.query(
+      `INSERT INTO tenant_connections (
+         tenant_id, salesforce_org_id, authorization_origin, instance_origin,
+         namespace_prefix, credential_schema_version, credential_key_id,
+         credential_nonce, credential_ciphertext, credential_tag
+       ) VALUES (
+         $1::uuid, $2, 'https://login.salesforce.com',
+         'https://synthetic.my.salesforce.com', 'ksny__', 1,
+         'upgrade-key', 'upgrade-nonce', 'upgrade-ciphertext', 'upgrade-tag'
+       )`,
+      [tenantId, orgId],
+    );
     await applyMigrations(legacyPool);
     await applyMigrations(legacyPool);
     assert.deepEqual(
@@ -2155,9 +2572,11 @@ void test(
           expected_salesforce_org_id: string;
           authorization_origin: string;
           namespace_prefix: string;
+          salesforce_connection_state: string;
         }>(
           `SELECT tenant_id::text, expected_salesforce_org_id,
-                  authorization_origin, namespace_prefix
+                  authorization_origin, namespace_prefix,
+                  salesforce_connection_state
            FROM tenant_administrator_tenants`,
         )
       ).rows,
@@ -2167,6 +2586,7 @@ void test(
           expected_salesforce_org_id: orgId,
           authorization_origin: 'https://login.salesforce.com',
           namespace_prefix: 'ksny__',
+          salesforce_connection_state: 'connected',
         },
       ],
     );
@@ -2217,6 +2637,7 @@ void test(
         '0013_scheduled_publication_maintenance',
         '0014_privileged_publication_retry',
         '0015_unlinked_publication_artifact_cleanup',
+        '0016_privileged_salesforce_disconnect_rebind',
       ],
     );
   },

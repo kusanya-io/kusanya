@@ -798,6 +798,132 @@ const migrations = Object.freeze([
       FOR EACH ROW
       EXECUTE FUNCTION kusanya_guard_publication_artifact_cleanup()`,
   }),
+  Object.freeze({
+    id: '0016_privileged_salesforce_disconnect_rebind',
+    sql: `ALTER TABLE tenant_administrator_tenants
+      ADD COLUMN salesforce_connection_state varchar(16);
+    UPDATE tenant_administrator_tenants AS tenant
+    SET salesforce_connection_state = CASE
+      WHEN EXISTS (
+        SELECT 1 FROM tenant_connections AS connection
+        WHERE connection.tenant_id = tenant.tenant_id
+      ) THEN 'connected'
+      ELSE 'disconnected'
+    END;
+    ALTER TABLE tenant_administrator_tenants
+      ALTER COLUMN salesforce_connection_state SET NOT NULL,
+      ALTER COLUMN salesforce_connection_state SET DEFAULT 'disconnected',
+      ADD CONSTRAINT tenant_administrator_tenants_connection_state
+        CHECK (salesforce_connection_state IN ('connected', 'disconnected'));
+    ALTER TABLE tenant_salesforce_authorization_audits
+      DROP CONSTRAINT tenant_salesforce_authorization_audits_tenant_id_fkey,
+      ADD CONSTRAINT tenant_salesforce_authorization_audits_tenant
+        FOREIGN KEY (tenant_id)
+        REFERENCES tenant_administrator_tenants(tenant_id);
+    CREATE TABLE tenant_salesforce_connection_lifecycle_audits (
+      connection_lifecycle_audit_id bigint GENERATED ALWAYS AS IDENTITY
+        PRIMARY KEY,
+      tenant_id uuid NOT NULL
+        REFERENCES tenant_administrator_tenants(tenant_id),
+      performed_by_actor_id varchar(128) NOT NULL,
+      action varchar(16) NOT NULL,
+      previous_salesforce_org_id varchar(18) NOT NULL,
+      previous_authorization_origin varchar(2048) NOT NULL,
+      previous_namespace_prefix varchar(17) NOT NULL,
+      previous_credential_version integer,
+      new_salesforce_org_id varchar(18),
+      new_authorization_origin varchar(2048),
+      new_namespace_prefix varchar(17),
+      occurred_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      CONSTRAINT tenant_salesforce_connection_lifecycle_actor
+        FOREIGN KEY (performed_by_actor_id, tenant_id)
+        REFERENCES tenant_administrator_bindings(actor_id, tenant_id),
+      CONSTRAINT tenant_salesforce_connection_lifecycle_action
+        CHECK (action IN ('disconnect', 'rebind')),
+      CONSTRAINT tenant_salesforce_connection_lifecycle_previous_org
+        CHECK (previous_salesforce_org_id ~ '^00D[A-Za-z0-9]{15}$'),
+      CONSTRAINT tenant_salesforce_connection_lifecycle_previous_origin
+        CHECK (length(previous_authorization_origin) BETWEEN 1 AND 2048),
+      CONSTRAINT tenant_salesforce_connection_lifecycle_previous_namespace
+        CHECK (previous_namespace_prefix ~ '^(|[a-z][a-z0-9]{0,14}__)$'),
+      CONSTRAINT tenant_salesforce_connection_lifecycle_new_org
+        CHECK (new_salesforce_org_id IS NULL
+          OR new_salesforce_org_id ~ '^00D[A-Za-z0-9]{15}$'),
+      CONSTRAINT tenant_salesforce_connection_lifecycle_new_origin
+        CHECK (new_authorization_origin IS NULL
+          OR length(new_authorization_origin) BETWEEN 1 AND 2048),
+      CONSTRAINT tenant_salesforce_connection_lifecycle_new_namespace
+        CHECK (new_namespace_prefix IS NULL
+          OR new_namespace_prefix ~ '^(|[a-z][a-z0-9]{0,14}__)$'),
+      CONSTRAINT tenant_salesforce_connection_lifecycle_shape CHECK (
+        (action = 'disconnect'
+          AND previous_credential_version IS NOT NULL
+          AND previous_credential_version >= 1
+          AND new_salesforce_org_id IS NULL
+          AND new_authorization_origin IS NULL
+          AND new_namespace_prefix IS NULL)
+        OR
+        (action = 'rebind'
+          AND previous_credential_version IS NULL
+          AND new_salesforce_org_id IS NOT NULL
+          AND new_authorization_origin IS NOT NULL
+          AND new_namespace_prefix IS NOT NULL
+          AND ROW(previous_salesforce_org_id,
+                  previous_authorization_origin,
+                  previous_namespace_prefix)
+              IS DISTINCT FROM
+              ROW(new_salesforce_org_id,
+                  new_authorization_origin,
+                  new_namespace_prefix))
+      )
+    );
+    CREATE OR REPLACE FUNCTION kusanya_lock_publication_attempt_tenant()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+    DECLARE
+      connected boolean;
+    BEGIN
+      SELECT true INTO connected
+      FROM tenant_administrator_tenants
+      WHERE tenant_id = NEW.tenant_id
+        AND expected_salesforce_org_id = NEW.salesforce_org_id
+      FOR UPDATE;
+      IF connected IS DISTINCT FROM true THEN
+        RAISE EXCEPTION 'publication attempt tenant tuple is not current'
+          USING ERRCODE = '23514';
+      END IF;
+      RETURN NEW;
+    END;
+    $$;
+    CREATE TRIGGER tenant_publication_attempts_tenant_lock
+      BEFORE INSERT ON tenant_publication_attempts
+      FOR EACH ROW
+      EXECUTE FUNCTION kusanya_lock_publication_attempt_tenant();
+    CREATE OR REPLACE FUNCTION kusanya_require_connected_artifact_cleanup()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+    DECLARE
+      connected boolean;
+    BEGIN
+      SELECT true INTO connected
+      FROM tenant_administrator_tenants
+      WHERE tenant_id = NEW.tenant_id
+        AND salesforce_connection_state = 'connected'
+      FOR UPDATE;
+      IF connected IS DISTINCT FROM true THEN
+        RAISE EXCEPTION 'artifact cleanup requires a connected tenant'
+          USING ERRCODE = '23514';
+      END IF;
+      RETURN NEW;
+    END;
+    $$;
+    CREATE TRIGGER tenant_publication_artifact_cleanups_connection_guard
+      BEFORE INSERT ON tenant_publication_artifact_cleanups
+      FOR EACH ROW
+      EXECUTE FUNCTION kusanya_require_connected_artifact_cleanup()`,
+  }),
 ]);
 
 export class MigrationError extends Error {
@@ -825,7 +951,8 @@ export type MigrationTarget =
   | '0012_bootstrap_uniqueness'
   | '0013_scheduled_publication_maintenance'
   | '0014_privileged_publication_retry'
-  | '0015_unlinked_publication_artifact_cleanup';
+  | '0015_unlinked_publication_artifact_cleanup'
+  | '0016_privileged_salesforce_disconnect_rebind';
 
 /** Apply the checked plan through an optional exact target for upgrade verification. */
 export async function applyMigrations(

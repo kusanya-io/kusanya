@@ -42,6 +42,20 @@ export interface TenantAuthorizationAuditInput extends TenantConnectionInput {
   readonly salesforceUserId: string;
 }
 
+export interface TenantConnectionDisconnectInput {
+  readonly actorId: string;
+  readonly tenantId: string;
+  readonly salesforceOrgId: string;
+  readonly authorizationOrigin: string;
+  readonly namespacePrefix: string;
+}
+
+export interface TenantConnectionRebindInput extends TenantConnectionDisconnectInput {
+  readonly newSalesforceOrgId: string;
+  readonly newAuthorizationOrigin: string;
+  readonly newNamespacePrefix: string;
+}
+
 export interface TenantConnection {
   readonly tenantId: string;
   readonly salesforceOrgId: string;
@@ -266,6 +280,77 @@ function decodeAuthorizationInput(value: unknown): DecodedConnectionInput & {
   };
 }
 
+function lifecycleActor(value: unknown): string {
+  if (typeof value !== 'string' || !actorIdPattern.test(value))
+    fail('TENANT_CONNECTION_INPUT');
+  return value;
+}
+
+function lifecycleNamespace(value: unknown): string {
+  if (typeof value !== 'string' || !/^(?:|[a-z][a-z0-9]{0,14}__)$/.test(value))
+    fail('TENANT_CONNECTION_INPUT');
+  try {
+    createSalesforceNames(value);
+  } catch {
+    fail('TENANT_CONNECTION_INPUT');
+  }
+  return value;
+}
+
+function decodeDisconnectInput(
+  value: unknown,
+): TenantConnectionDisconnectInput {
+  const input = plainRecord(value);
+  exactKeys(input, [
+    'actorId',
+    'authorizationOrigin',
+    'namespacePrefix',
+    'salesforceOrgId',
+    'tenantId',
+  ]);
+  return Object.freeze({
+    actorId: lifecycleActor(input.actorId),
+    tenantId: tenantId(input.tenantId),
+    salesforceOrgId: normalizeSalesforceOrgId(input.salesforceOrgId),
+    authorizationOrigin: salesforceOrigin(input.authorizationOrigin),
+    namespacePrefix: lifecycleNamespace(input.namespacePrefix),
+  });
+}
+
+function decodeRebindInput(value: unknown): TenantConnectionRebindInput {
+  const input = plainRecord(value);
+  exactKeys(input, [
+    'actorId',
+    'authorizationOrigin',
+    'namespacePrefix',
+    'newAuthorizationOrigin',
+    'newNamespacePrefix',
+    'newSalesforceOrgId',
+    'salesforceOrgId',
+    'tenantId',
+  ]);
+  const current = decodeDisconnectInput({
+    actorId: input.actorId,
+    tenantId: input.tenantId,
+    salesforceOrgId: input.salesforceOrgId,
+    authorizationOrigin: input.authorizationOrigin,
+    namespacePrefix: input.namespacePrefix,
+  });
+  const decoded = Object.freeze({
+    ...current,
+    newSalesforceOrgId: normalizeSalesforceOrgId(input.newSalesforceOrgId),
+    newAuthorizationOrigin: salesforceOrigin(input.newAuthorizationOrigin),
+    newNamespacePrefix: lifecycleNamespace(input.newNamespacePrefix),
+  });
+  if (
+    decoded.salesforceOrgId === decoded.newSalesforceOrgId &&
+    decoded.authorizationOrigin === decoded.newAuthorizationOrigin &&
+    decoded.namespacePrefix === decoded.newNamespacePrefix
+  )
+    fail('TENANT_CONNECTION_INPUT');
+  return decoded;
+}
+
 function text(value: unknown, maximum: number): string {
   if (typeof value !== 'string' || value.length < 1 || value.length > maximum)
     fail('TENANT_CONNECTION_STORAGE');
@@ -414,6 +499,29 @@ export class TenantConnectionStore {
     try {
       await client.query('BEGIN');
       transaction = true;
+      const locked = await client.query(
+        `SELECT tenant.tenant_id
+         FROM tenant_administrator_tenants AS tenant
+         JOIN tenant_administrator_bindings AS binding
+           ON binding.tenant_id = tenant.tenant_id
+          AND binding.actor_id = $1
+          AND binding.active
+          AND binding.role = 'administrator'
+         WHERE tenant.tenant_id = $2::uuid
+           AND tenant.expected_salesforce_org_id = $3
+           AND tenant.authorization_origin = $4
+           AND tenant.namespace_prefix = $5
+         FOR UPDATE OF tenant`,
+        [
+          input.actorId,
+          input.tenantId,
+          input.salesforceOrgId,
+          input.authorizationOrigin,
+          input.namespacePrefix,
+        ],
+      );
+      if (locked.rowCount !== 1 || locked.rows.length !== 1)
+        fail('TENANT_CONNECTION_CONFLICT');
       const saved = await this.upsert(client, input, encrypted);
       if (saved.rowCount !== 1 || saved.rows.length !== 1)
         fail('TENANT_CONNECTION_CONFLICT');
@@ -446,9 +554,264 @@ export class TenantConnectionStore {
       );
       if (audit.rowCount !== 1 || audit.rows.length !== 1)
         fail('TENANT_CONNECTION_CONFLICT');
+      const activated = await client.query(
+        `UPDATE tenant_administrator_tenants
+         SET salesforce_connection_state = 'connected'
+         WHERE tenant_id = $1::uuid
+           AND expected_salesforce_org_id = $2
+           AND authorization_origin = $3
+           AND namespace_prefix = $4
+           AND salesforce_connection_state IN ('disconnected', 'connected')
+         RETURNING tenant_id`,
+        [
+          input.tenantId,
+          input.salesforceOrgId,
+          input.authorizationOrigin,
+          input.namespacePrefix,
+        ],
+      );
+      if (activated.rowCount !== 1 || activated.rows.length !== 1)
+        fail('TENANT_CONNECTION_CONFLICT');
       await client.query('COMMIT');
       transaction = false;
       return connection;
+    } catch (error) {
+      if (transaction) await client.query('ROLLBACK').catch(() => undefined);
+      if (error instanceof TenantConnectionError) throw error;
+      fail(databaseFailureCode(error));
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Remove one tenant credential only after serializing against publication
+   * starts and proving that no unresolved old-org work would be abandoned.
+   */
+  async disconnect(value: TenantConnectionDisconnectInput): Promise<void> {
+    const input = decodeDisconnectInput(value);
+    if (typeof this.database.connect !== 'function')
+      fail('TENANT_CONNECTION_INPUT');
+    let client: QueryConnection;
+    try {
+      client = await this.database.connect.call(this.database);
+    } catch {
+      fail('TENANT_CONNECTION_STORAGE');
+    }
+    let transaction = false;
+    try {
+      await client.query('BEGIN');
+      transaction = true;
+      const locked = await client.query(
+        `SELECT tenant.tenant_id
+         FROM tenant_administrator_tenants AS tenant
+         JOIN tenant_administrator_bindings AS binding
+           ON binding.tenant_id = tenant.tenant_id
+          AND binding.actor_id = $1
+          AND binding.active
+          AND binding.role = 'administrator'
+         WHERE tenant.tenant_id = $2::uuid
+           AND tenant.expected_salesforce_org_id = $3
+           AND tenant.authorization_origin = $4
+           AND tenant.namespace_prefix = $5
+           AND tenant.salesforce_connection_state = 'connected'
+         FOR UPDATE OF tenant`,
+        [
+          input.actorId,
+          input.tenantId,
+          input.salesforceOrgId,
+          input.authorizationOrigin,
+          input.namespacePrefix,
+        ],
+      );
+      if (locked.rowCount !== 1 || locked.rows.length !== 1)
+        fail('TENANT_CONNECTION_CONFLICT');
+      const disconnected = await client.query(
+        `WITH eligible AS MATERIALIZED (
+           SELECT connection.tenant_id, connection.salesforce_org_id,
+                  connection.authorization_origin,
+                  connection.namespace_prefix,
+                  connection.credential_version
+           FROM tenant_connections AS connection
+           WHERE connection.tenant_id = $1::uuid
+             AND connection.salesforce_org_id = $2
+             AND connection.authorization_origin = $4
+             AND connection.namespace_prefix = $5
+             AND NOT EXISTS (
+               SELECT 1
+               FROM tenant_publication_attempts AS attempt
+               WHERE attempt.tenant_id = connection.tenant_id
+                 AND (
+                   attempt.outcome = 'started'
+                   OR (
+                     attempt.outcome = 'partial'
+                     AND (
+                       attempt.reconciliation_status IS NULL
+                       OR attempt.reconciliation_status = 'indeterminate'
+                       OR (
+                         attempt.reconciliation_status = 'unlinked'
+                         AND NOT EXISTS (
+                           SELECT 1
+                           FROM tenant_publication_artifact_cleanups AS cleanup
+                           WHERE cleanup.publication_attempt_id =
+                                   attempt.publication_attempt_id
+                             AND cleanup.tenant_id = attempt.tenant_id
+                             AND cleanup.outcome = 'succeeded'
+                         )
+                       )
+                     )
+                   )
+                 )
+             )
+             AND NOT EXISTS (
+               SELECT 1
+               FROM tenant_publication_artifact_cleanups AS cleanup
+               WHERE cleanup.tenant_id = connection.tenant_id
+                 AND cleanup.outcome IN ('started', 'indeterminate')
+             )
+           FOR UPDATE OF connection
+         ), removed AS (
+           DELETE FROM tenant_connections AS connection
+           USING eligible
+           WHERE connection.tenant_id = eligible.tenant_id
+           RETURNING connection.tenant_id
+         ), deactivated AS (
+           UPDATE tenant_administrator_tenants AS tenant
+           SET salesforce_connection_state = 'disconnected'
+           FROM eligible, removed
+           WHERE tenant.tenant_id = eligible.tenant_id
+           RETURNING tenant.tenant_id
+         ), cleared AS (
+           DELETE FROM tenant_oauth_transactions AS transaction
+           USING deactivated
+           WHERE transaction.tenant_id = deactivated.tenant_id
+           RETURNING transaction.tenant_id
+         ), audit AS (
+           INSERT INTO tenant_salesforce_connection_lifecycle_audits (
+             tenant_id, performed_by_actor_id, action,
+             previous_salesforce_org_id, previous_authorization_origin,
+             previous_namespace_prefix, previous_credential_version
+           )
+           SELECT eligible.tenant_id, $3, 'disconnect',
+                  eligible.salesforce_org_id,
+                  eligible.authorization_origin,
+                  eligible.namespace_prefix,
+                  eligible.credential_version
+           FROM eligible, removed, deactivated
+           RETURNING connection_lifecycle_audit_id
+         )
+         SELECT connection_lifecycle_audit_id FROM audit`,
+        [
+          input.tenantId,
+          input.salesforceOrgId,
+          input.actorId,
+          input.authorizationOrigin,
+          input.namespacePrefix,
+        ],
+      );
+      if (disconnected.rowCount !== 1 || disconnected.rows.length !== 1)
+        fail('TENANT_CONNECTION_CONFLICT');
+      await client.query('COMMIT');
+      transaction = false;
+    } catch (error) {
+      if (transaction) await client.query('ROLLBACK').catch(() => undefined);
+      if (error instanceof TenantConnectionError) throw error;
+      fail(databaseFailureCode(error));
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Change only a disconnected tenant's expected OAuth binding. */
+  async rebind(value: TenantConnectionRebindInput): Promise<void> {
+    const input = decodeRebindInput(value);
+    if (typeof this.database.connect !== 'function')
+      fail('TENANT_CONNECTION_INPUT');
+    let client: QueryConnection;
+    try {
+      client = await this.database.connect.call(this.database);
+    } catch {
+      fail('TENANT_CONNECTION_STORAGE');
+    }
+    let transaction = false;
+    try {
+      await client.query('BEGIN');
+      transaction = true;
+      const locked = await client.query(
+        `SELECT tenant.tenant_id
+         FROM tenant_administrator_tenants AS tenant
+         JOIN tenant_administrator_bindings AS binding
+           ON binding.tenant_id = tenant.tenant_id
+          AND binding.actor_id = $1
+          AND binding.active
+          AND binding.role = 'administrator'
+         WHERE tenant.tenant_id = $2::uuid
+           AND tenant.expected_salesforce_org_id = $3
+           AND tenant.authorization_origin = $4
+           AND tenant.namespace_prefix = $5
+           AND tenant.salesforce_connection_state = 'disconnected'
+         FOR UPDATE OF tenant`,
+        [
+          input.actorId,
+          input.tenantId,
+          input.salesforceOrgId,
+          input.authorizationOrigin,
+          input.namespacePrefix,
+        ],
+      );
+      if (locked.rowCount !== 1 || locked.rows.length !== 1)
+        fail('TENANT_CONNECTION_CONFLICT');
+      const rebound = await client.query(
+        `WITH eligible AS MATERIALIZED (
+           SELECT tenant_id, expected_salesforce_org_id,
+                  authorization_origin, namespace_prefix
+           FROM tenant_administrator_tenants
+           WHERE tenant_id = $1::uuid
+             AND salesforce_connection_state = 'disconnected'
+             AND NOT EXISTS (
+               SELECT 1 FROM tenant_connections
+               WHERE tenant_id = $1::uuid
+             )
+         ), cleared AS (
+           DELETE FROM tenant_oauth_transactions AS transaction
+           USING eligible
+           WHERE transaction.tenant_id = eligible.tenant_id
+           RETURNING transaction.tenant_id
+         ), changed AS (
+           UPDATE tenant_administrator_tenants AS tenant
+           SET expected_salesforce_org_id = $3,
+               authorization_origin = $4,
+               namespace_prefix = $5
+           FROM eligible
+           WHERE tenant.tenant_id = eligible.tenant_id
+           RETURNING tenant.tenant_id
+         ), audit AS (
+           INSERT INTO tenant_salesforce_connection_lifecycle_audits (
+             tenant_id, performed_by_actor_id, action,
+             previous_salesforce_org_id, previous_authorization_origin,
+             previous_namespace_prefix, new_salesforce_org_id,
+             new_authorization_origin, new_namespace_prefix
+           )
+           SELECT eligible.tenant_id, $2, 'rebind',
+                  eligible.expected_salesforce_org_id,
+                  eligible.authorization_origin, eligible.namespace_prefix,
+                  $3, $4, $5
+           FROM eligible, changed
+           RETURNING connection_lifecycle_audit_id
+         )
+         SELECT connection_lifecycle_audit_id FROM audit`,
+        [
+          input.tenantId,
+          input.actorId,
+          input.newSalesforceOrgId,
+          input.newAuthorizationOrigin,
+          input.newNamespacePrefix,
+        ],
+      );
+      if (rebound.rowCount !== 1 || rebound.rows.length !== 1)
+        fail('TENANT_CONNECTION_CONFLICT');
+      await client.query('COMMIT');
+      transaction = false;
     } catch (error) {
       if (transaction) await client.query('ROLLBACK').catch(() => undefined);
       if (error instanceof TenantConnectionError) throw error;
