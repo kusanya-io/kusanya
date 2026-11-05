@@ -1880,6 +1880,16 @@ void test(
       authorizationOrigin: 'https://test.salesforce.com',
       namespacePrefix: 'ksny__',
     } as const;
+    const reboundTrusted = {
+      ...trusted,
+      expectedSalesforceOrgId: newOrgId,
+      authorizationOrigin: newBinding.authorizationOrigin,
+      namespacePrefix: newBinding.namespacePrefix,
+    };
+    await assert.rejects(
+      attemptStore.start(trusted, 'a0B000000000003AAA'),
+      /PUBLICATION_ATTEMPT_STORAGE/,
+    );
     await connectionStore.saveAuthorization({
       ...newBinding,
       salesforceUserId: '005000000000002',
@@ -1973,7 +1983,7 @@ void test(
         [tenantId],
       );
       const admittedFirst = racingAttempts.start(
-        { ...trusted, expectedSalesforceOrgId: newOrgId },
+        reboundTrusted,
         'a0B000000000003AAA',
       );
       await waitForLock(pids[1]!);
@@ -1997,7 +2007,7 @@ void test(
       const disconnectFirst = racingConnections.disconnect(newBinding);
       await waitForLock(pids[2]!);
       const recordedAfterDisconnect = racingAttempts.start(
-        { ...trusted, expectedSalesforceOrgId: newOrgId },
+        reboundTrusted,
         'a0B000000000004AAA',
       );
       await waitForLock(pids[1]!);
