@@ -220,6 +220,63 @@ test('initial journal configuration failure is nonretryable pre-allocation infra
   assert.ok(!logs.join('\n').includes('relative-private-fixture'));
 });
 
+test('reviewed live classifier probe fires after an empty journal and before Salesforce access', (t) => {
+  const { env } = setup(t);
+  let calls = 0;
+  const logs = [];
+  const result = runVerification({
+    env: {
+      ...env,
+      KUSANYA_LIVE_CLASSIFIER_PROBE: 'unexpected-error-v1',
+    },
+    sf: () => {
+      calls += 1;
+    },
+    log: (line) => logs.push(line),
+    errorLog: (line) => logs.push(line),
+  });
+  assert.equal(result.exitCode, 1);
+  assert.deepEqual(result.result, {
+    schemaVersion: 1,
+    role: identity.role,
+    runId: identity.runId,
+    headSha: identity.sha,
+    startedAt: result.result.startedAt,
+    outcome: 'failed-infrastructure',
+    retryable: false,
+  });
+  assert.equal(calls, 0);
+  assert.deepEqual(readCleanupJournal({ env, identity }).tags, []);
+  assert.ok(
+    logs.includes(
+      'Verification failed (unexpected-error); exception details withheld.',
+    ),
+  );
+  const finalizerRemote = remote('absent');
+  assert.equal(cleanup(env, finalizerRemote.sf).exitCode, 0);
+  assert.equal(finalizerRemote.state.calls.length, 0);
+});
+
+test('live classifier probe refuses every value except the reviewed literal', (t) => {
+  const { env } = setup(t);
+  let calls = 0;
+  const logs = [];
+  const result = runVerification({
+    env: { ...env, KUSANYA_LIVE_CLASSIFIER_PROBE: 'different' },
+    sf: () => {
+      calls += 1;
+    },
+    log: (line) => logs.push(line),
+    errorLog: (line) => logs.push(line),
+  });
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.result.outcome, 'failed-infrastructure');
+  assert.equal(result.result.retryable, false);
+  assert.equal(calls, 0);
+  assert.doesNotMatch(logs.join('\n'), /different/);
+  assert.match(logs.join('\n'), /INVALID_INPUT/);
+});
+
 test('hosted harness persists before create and the separate finalizer is idempotent after success or test failure', (t) => {
   for (const testFails of [false, true]) {
     const { env } = setup(t);

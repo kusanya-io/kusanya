@@ -138,6 +138,15 @@ nonretryable for that head until the maintainer privately reconciles ownership a
 a new reviewed commit enters through the ordinary initial-run policy. See note 148
 in ADR 0006.
 
+ADR 0069 defines the one controlled exception used to prove this classifier in the
+hosted credentialed workflow. Its deliberately non-mergeable proof head fails after
+Dev Hub authentication and empty-journal creation but before discovery, preflight
+or scratch-org allocation. It must emit the bounded `unexpected-error` diagnostic,
+record nonretryable `failed-infrastructure`, and let the finalizer close the empty
+journal without an org call. Claude reviews the proof pin before Bill approves it.
+The hook and workflow value are then removed, both immutable pins move to the clean
+commit, and only that separately reviewed green head may merge.
+
 The Apex job serializes across all PRs using the CI hub, without cancelling an
 active scratch lifecycle. ADR 0030 adds a separate default-branch-owned
 `pull_request_target` workflow for same-repository `synchronize` events. It may

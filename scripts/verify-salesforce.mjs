@@ -79,6 +79,13 @@ export function runVerification({
       env,
       identity: { ...identity, devHub },
     });
+    // Temporary, reviewed live-evidence hook. The proof head sets the one exact
+    // value after Dev Hub authentication; it is removed before this PR merges.
+    if (env.KUSANYA_LIVE_CLASSIFIER_PROBE !== undefined) {
+      if (env.KUSANYA_LIVE_CLASSIFIER_PROBE !== 'unexpected-error-v1')
+        throw new LifecycleError();
+      throw new Error();
+    }
     sf = suppliedClient ?? createSalesforceClient({ cwd: directory, env });
     const discovered = sf('hub-discovery', ['org', 'list', '--all']).result;
     if (
