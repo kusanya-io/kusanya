@@ -24,6 +24,7 @@ import type {
   AdministratorSessionStore,
 } from './tenant/administrator-session.js';
 import { AdministratorSessionError } from './tenant/administrator-session.js';
+import { registerTenantConnectionLifecycleRoutes } from './tenant/connection-lifecycle-routes.js';
 import type { AdministratorOidcIdentity } from './tenant/oidc-login.js';
 import type { TenantConnectionStore } from './tenant/connection-store.js';
 import type {
@@ -46,7 +47,7 @@ export interface PublicationSurfaceDependencies {
   readonly invitationConfiguration: AdministratorInvitationConfiguration;
   readonly sessionConfiguration: AdministratorSessionConfiguration;
   readonly connectionStore: TenantConnectionSessionStore &
-    Pick<TenantConnectionStore, 'saveAuthorization'>;
+    Pick<TenantConnectionStore, 'disconnect' | 'rebind' | 'saveAuthorization'>;
   readonly oauthTransactionStore: Pick<
     TenantOAuthTransactionStore,
     'begin' | 'consume'
@@ -130,7 +131,10 @@ function checkedDependencies(
       ['issue', 'authenticate', 'deprovision', 'changeRole', 'revoke'],
     ],
     [decoded.invitationStore, ['accept', 'issue', 'revoke']],
-    [decoded.connectionStore, ['withRefreshLock', 'saveAuthorization']],
+    [
+      decoded.connectionStore,
+      ['disconnect', 'rebind', 'withRefreshLock', 'saveAuthorization'],
+    ],
     [decoded.oauthTransactionStore, ['begin', 'consume']],
     [
       decoded.attemptStore,
@@ -243,6 +247,18 @@ export function registerPublicationSurface(
       ),
     }),
     oauthConfiguration: dependencies.oauthConfiguration,
+    externalOrigin: dependencies.externalOrigin,
+  });
+  registerTenantConnectionLifecycleRoutes(app, {
+    authenticateAdministrator,
+    connectionStore: Object.freeze({
+      disconnect: dependencies.connectionStore.disconnect.bind(
+        dependencies.connectionStore,
+      ),
+      rebind: dependencies.connectionStore.rebind.bind(
+        dependencies.connectionStore,
+      ),
+    }),
     externalOrigin: dependencies.externalOrigin,
   });
   registerPublicationRoutes(app, {

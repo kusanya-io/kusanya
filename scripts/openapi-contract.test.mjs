@@ -159,4 +159,33 @@ void test('operator OpenAPI remains least-data and documents the lifecycle surfa
     callbackPath,
     /tenantId|actorId|salesforceOrgId|namespacePrefix|refreshToken|accessToken/,
   );
+
+  const disconnectPath = pathBlock(
+    contract,
+    '/api/admin/salesforce/connection/disconnect',
+  );
+  assert.ok(disconnectPath, 'Salesforce disconnect is documented');
+  assert.match(disconnectPath, /^ {4}post:$/m);
+  assert.doesNotMatch(disconnectPath, /^ {4}(?:get|put|patch|delete):$/m);
+  assert.doesNotMatch(disconnectPath, /in: query|requestBody:/);
+  assert.doesNotMatch(
+    disconnectPath,
+    /tenantId|actorId|salesforceOrgId|authorizationOrigin|namespacePrefix|refreshToken|accessToken|^\s+force:/m,
+  );
+
+  const rebindPath = pathBlock(
+    contract,
+    '/api/admin/salesforce/connection/rebind',
+  );
+  assert.ok(rebindPath, 'Salesforce rebind is documented');
+  assert.match(rebindPath, /^ {4}post:$/m);
+  assert.doesNotMatch(rebindPath, /^ {4}(?:get|put|patch|delete):$/m);
+  assert.match(
+    rebindPath,
+    /required: \[salesforceOrgId, authorizationOrigin, namespacePrefix\]/,
+  );
+  assert.doesNotMatch(
+    rebindPath,
+    /tenantId|actorId|refreshToken|accessToken|instanceOrigin|^\s+force:/m,
+  );
 });

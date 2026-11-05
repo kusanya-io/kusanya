@@ -121,6 +121,11 @@ void test('authorization save commits the connection and append-only actor audit
     async query<Row>(text: string, parameters: unknown[] = []) {
       statements.push(text.trim().split(/\s+/, 1)[0]!);
       values.push(parameters);
+      if (/^SELECT tenant\.tenant_id/.test(text.trim()))
+        return {
+          rowCount: 1,
+          rows: [{ tenant_id: tenantId } as Row],
+        } satisfies QueryResult<Row>;
       if (/^INSERT INTO tenant_connections/.test(text.trim()))
         return {
           rowCount: 1,
@@ -132,6 +137,11 @@ void test('authorization save commits the connection and append-only actor audit
         return {
           rowCount: 1,
           rows: [{ authorization_audit_id: '7' } as Row],
+        } satisfies QueryResult<Row>;
+      if (/^UPDATE tenant_administrator_tenants/.test(text.trim()))
+        return {
+          rowCount: 1,
+          rows: [{ tenant_id: tenantId } as Row],
         } satisfies QueryResult<Row>;
       return { rowCount: null, rows: [] } satisfies QueryResult<Row>;
     },
@@ -155,14 +165,189 @@ void test('authorization save commits the connection and append-only actor audit
     actorId: 'administrator:synthetic',
     salesforceUserId: '005000000000001',
   });
-  assert.deepEqual(statements, ['BEGIN', 'INSERT', 'INSERT', 'COMMIT']);
+  assert.deepEqual(statements, [
+    'BEGIN',
+    'SELECT',
+    'INSERT',
+    'INSERT',
+    'UPDATE',
+    'COMMIT',
+  ]);
   assert.equal(connection.credentialVersion, 3);
-  assert.equal(values[2]?.[0], tenantId);
-  assert.equal(values[2]?.[1], 'administrator:synthetic');
-  assert.equal(values[2]?.[2], normalizeSalesforceUserId('005000000000001'));
-  assert.equal(values[2]?.[3], 3);
+  assert.equal(values[3]?.[0], tenantId);
+  assert.equal(values[3]?.[1], 'administrator:synthetic');
+  assert.equal(values[3]?.[2], normalizeSalesforceUserId('005000000000001'));
+  assert.equal(values[3]?.[3], 3);
   assert.doesNotMatch(JSON.stringify(values), /synthetic-refresh-token/);
   assert.equal(released, true);
+});
+
+void test('disconnect locks the tenant, removes only eligible credentials and audits', async () => {
+  const statements: string[] = [];
+  const values: unknown[][] = [];
+  let lifecycleSql = '';
+  let released = false;
+  const client: QueryConnection = {
+    async query<Row>(text: string, parameters: unknown[] = []) {
+      statements.push(text.trim().split(/\s+/, 1)[0]!);
+      values.push(parameters);
+      if (/^SELECT tenant\.tenant_id/.test(text.trim()))
+        return {
+          rowCount: 1,
+          rows: [{ tenant_id: tenantId } as Row],
+        } satisfies QueryResult<Row>;
+      if (/^WITH eligible/.test(text.trim())) {
+        lifecycleSql = text;
+        return {
+          rowCount: 1,
+          rows: [{ connection_lifecycle_audit_id: '9' } as Row],
+        } satisfies QueryResult<Row>;
+      }
+      return { rowCount: null, rows: [] } satisfies QueryResult<Row>;
+    },
+    release() {
+      released = true;
+    },
+  };
+  const store = new TenantConnectionStore(
+    {
+      async query() {
+        throw new Error('unpooled query not expected');
+      },
+      async connect() {
+        return client;
+      },
+    },
+    vault,
+  );
+  await store.disconnect({
+    actorId: 'administrator:synthetic',
+    tenantId,
+    salesforceOrgId: orgId,
+    authorizationOrigin: input.authorizationOrigin,
+    namespacePrefix: '',
+  });
+  assert.deepEqual(statements, ['BEGIN', 'SELECT', 'WITH', 'COMMIT']);
+  assert.deepEqual(values[1], [
+    'administrator:synthetic',
+    tenantId,
+    orgId,
+    input.authorizationOrigin,
+    '',
+  ]);
+  assert.match(lifecycleSql, /attempt\.outcome = 'started'/);
+  assert.match(lifecycleSql, /connection\.authorization_origin = \$4/);
+  assert.match(lifecycleSql, /connection\.namespace_prefix = \$5/);
+  assert.match(lifecycleSql, /cleanup\.outcome = 'succeeded'/);
+  assert.match(
+    lifecycleSql,
+    /cleanup\.outcome IN \('started', 'indeterminate'\)/,
+  );
+  assert.equal(released, true);
+});
+
+void test('rebind changes only a disconnected tuple and records both identities', async () => {
+  const statements: string[] = [];
+  const values: unknown[][] = [];
+  let lifecycleSql = '';
+  const client: QueryConnection = {
+    async query<Row>(text: string, parameters: unknown[] = []) {
+      statements.push(text.trim().split(/\s+/, 1)[0]!);
+      values.push(parameters);
+      if (/^SELECT tenant\.tenant_id/.test(text.trim()))
+        return {
+          rowCount: 1,
+          rows: [{ tenant_id: tenantId } as Row],
+        } satisfies QueryResult<Row>;
+      if (/^WITH eligible/.test(text.trim())) {
+        lifecycleSql = text;
+        return {
+          rowCount: 1,
+          rows: [{ connection_lifecycle_audit_id: '10' } as Row],
+        } satisfies QueryResult<Row>;
+      }
+      return { rowCount: null, rows: [] } satisfies QueryResult<Row>;
+    },
+    release() {},
+  };
+  const store = new TenantConnectionStore(
+    {
+      async query() {
+        throw new Error('unpooled query not expected');
+      },
+      async connect() {
+        return client;
+      },
+    },
+    vault,
+  );
+  await store.rebind({
+    actorId: 'administrator:synthetic',
+    tenantId,
+    salesforceOrgId: orgId,
+    authorizationOrigin: input.authorizationOrigin,
+    namespacePrefix: '',
+    newSalesforceOrgId: '00D000000000002',
+    newAuthorizationOrigin: 'https://test.salesforce.com',
+    newNamespacePrefix: 'ksny__',
+  });
+  assert.deepEqual(statements, ['BEGIN', 'SELECT', 'WITH', 'COMMIT']);
+  assert.deepEqual(values[2], [
+    tenantId,
+    'administrator:synthetic',
+    normalizeSalesforceOrgId('00D000000000002'),
+    'https://test.salesforce.com',
+    'ksny__',
+  ]);
+  assert.match(
+    lifecycleSql,
+    /NOT EXISTS \(\s*SELECT 1 FROM tenant_connections/,
+  );
+  assert.match(
+    lifecycleSql,
+    /INSERT INTO tenant_salesforce_connection_lifecycle_audits/,
+  );
+});
+
+void test('lifecycle inputs fail before database access', async () => {
+  let calls = 0;
+  const store = new TenantConnectionStore(
+    {
+      async query<Row>() {
+        calls++;
+        return { rowCount: 0, rows: [] } satisfies QueryResult<Row>;
+      },
+      async connect(): Promise<never> {
+        calls++;
+        throw new Error('not expected');
+      },
+    },
+    vault,
+  );
+  await assert.rejects(
+    store.disconnect({
+      actorId: 'administrator:synthetic',
+      tenantId,
+      salesforceOrgId: orgId,
+      authorizationOrigin: input.authorizationOrigin,
+      namespacePrefix: 'KSNY__',
+    }),
+    /TENANT_CONNECTION_INPUT/,
+  );
+  await assert.rejects(
+    store.rebind({
+      actorId: 'administrator:synthetic',
+      tenantId,
+      salesforceOrgId: orgId,
+      authorizationOrigin: input.authorizationOrigin,
+      namespacePrefix: '',
+      newSalesforceOrgId: orgId,
+      newAuthorizationOrigin: input.authorizationOrigin,
+      newNamespacePrefix: '',
+    }),
+    /TENANT_CONNECTION_INPUT/,
+  );
+  assert.equal(calls, 0);
 });
 
 void test('load is tenant-keyed, absent-safe and rejects malformed identities before I/O', async () => {

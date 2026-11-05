@@ -243,6 +243,19 @@ org cannot belong to two tenants. Refresh tokens are AES-256-GCM encrypted with 
 fresh nonce and tenant/org authenticated data; key IDs are stored with ciphertext
 while the rotatable keys remain deployment secrets outside PostgreSQL.
 
+ADR 0068 adds a checked `salesforce_connection_state` to the tenant row and the
+`tenant_salesforce_connection_lifecycle_audits` ledger. Existing tenants are
+backfilled connected only when an encrypted connection exists; new and rebound
+tenants are disconnected until the one-time OAuth flow commits a matching credential.
+Disconnect deletes the credential and pending OAuth state but retains authorization,
+publication and cleanup history. Rebind changes only a disconnected tenant's expected
+org/origin/namespace tuple and records both identities. Publication-attempt and
+artifact-cleanup insert triggers lock the tenant row so new work cannot race a
+disconnect; cleanup also requires connected state, while a disconnected publication
+may still retain its existing fixed no-connection failure evidence. The authorization-audit foreign key now targets
+the durable tenant instead of the deletable credential row; old signed Salesforce
+user evidence therefore survives a disconnect and later reauthorization.
+
 `tenant_publication_attempts` (ADR 0047) records the actor, tenant, expected org
 and Form Version before OAuth begins. Its state moves once from `started` to
 `succeeded`, `failed` or `partial`. A partial row retains the exact package digest
@@ -350,8 +363,9 @@ ADR 0045 adds append-only `tenant_salesforce_authorization_audits`. Each success
 grant records the tenant, its bound trusted administrator actor, normalized `00D`
 org, signed authorizing `005` user and resulting credential version. The audited
 OAuth path inserts the audit and upserts the encrypted connection in one transaction,
-so that path cannot commit either write alone. The audit foreign key also prevents
-an audit without its connection. The lower-level connection store can still create
+so that path cannot commit either write alone. Before ADR 0068 the audit foreign key
+prevented an audit without its connection; it now targets the durable tenant so a
+reviewed disconnect can remove the credential without erasing principal history. The lower-level connection store can still create
 a connection without an audit for isolated tests and internal storage work, so the
 reverse is not a schema invariant. Reauthorization adds a new row and never
 overwrites earlier principal history; no OAuth/session credential or callback value
