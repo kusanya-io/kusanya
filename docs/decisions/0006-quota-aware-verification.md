@@ -1,6 +1,6 @@
 # ADR 0006: Quota-aware development and independent verification
 
-- Status: Approved by Bill; Phase 0 passed; note 148 amendment awaits Claude verification
+- Status: Approved by Bill; Phase 0 passed; note 148 live evidence complete
 - Date: 2026-09-10
 - Brief sections: C8, C10, C11 Phase 0, C12, C13; verification protocol
 - Decision owner: Cobitech Solutions
@@ -232,6 +232,13 @@ marker outcome, retryability, budget admission, cleanup ownership, authenticatio
 or exact-head rules. In particular, `failed-cleanup` remains nonretryable and still
 requires private maintainer reconciliation; the category explains where to begin
 that investigation but cannot authorize another run.
+
+ADR 0069 records the controlled first live firing. Run 42083654271 authenticated,
+then reached a reviewed message-free native error before discovery or allocation.
+It emitted only `unexpected-error`, recorded nonretryable `failed-infrastructure`,
+and exercised the empty-journal fallback finalizer with zero Salesforce calls.
+Dev Hub readings proved zero active or run-tagged orgs before and after. The proof
+hook and workflow value are retired and forbidden from the clean merge candidate.
 
 `BLOCKED` fails the required gate. It never becomes a successful skip and never
 falls back to an existing org. A recognized creation-time quota error follows the
