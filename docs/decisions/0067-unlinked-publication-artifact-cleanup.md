@@ -52,11 +52,18 @@ The Apex boundary performs the indivisible Salesforce mutation. It locks the own
 Form before the Form Version, requires Draft state and empty publication metadata,
 and checks the two exact latest ContentVersions are distinct, owned by the calling
 integration user, named for the recorded digest and have the expected XML/XLSX file
-types. A system-mode read refuses any ContentDocumentLink, including one the caller
-could not see. It then deletes both ContentDocuments with user-mode enforcement
-under one savepoint; any failure rolls back both. The integration permission set
-grants only this Apex class in addition to its existing scoped object/File access.
-No collector receives a Salesforce user or licence.
+types. Salesforce automatically creates an inferred link from a privately uploaded
+ContentDocument to its uploading User, so zero links is not a representable private
+File state. A system-mode read therefore requires exactly one link per document:
+the caller's inferred User-owner link with ShareType `I` and Visibility `AllUsers`.
+It refuses a missing or duplicate owner link and every record, library, foreign or
+otherwise differently shaped link, including one the caller could not see. The
+filter is only by ContentDocumentId because Salesforce does not permit the needed
+non-ID exclusions in ContentDocumentLink SOQL; discrimination is performed in Apex.
+It then deletes both ContentDocuments with user-mode enforcement under one
+savepoint; any failure rolls back both. The integration permission set grants only
+this Apex class in addition to its existing scoped object/File access. No collector
+receives a Salesforce user or licence.
 
 An uncertain cleanup response is never treated as permission to delete or publish
 again. The service immediately reuses the read-only inspector: both artifacts
@@ -97,8 +104,11 @@ session object, namespace path, bounded response, orchestration outcomes, least-
 projection and operator command. Real PostgreSQL integration must prove resume,
 terminal success, failed replacement, warm-pool concurrent admission, live actor
 checks, immutable identity and direct forged SQL refusals. Apex tests must prove the
-exact pair succeeds atomically and every changed, foreign, linked, non-Draft,
-published, oversized or hostile request is refused without partial deletion.
+exact pair with only its two platform-required inferred owner links succeeds
+atomically and every changed, foreign, additionally linked, non-Draft, published,
+oversized or hostile request is refused without partial deletion. Foreign-artifact
+survival is asserted as the owning user rather than through the integration user's
+private-File visibility.
 
 The same PostgreSQL evidence adds the note 150 tripwire: once a retry child exists,
 the source projection must report `retryEligible: false`.

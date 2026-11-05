@@ -108,7 +108,12 @@ public with sharing class PublicationArtifactCleanup {
                 xform.ContentDocumentId,
                 xlsform.ContentDocumentId
             };
-            if (PublicationArtifactGuard.hasAnyLinks(documentIds)) {
+            if (
+                PublicationArtifactGuard.hasDisallowedLinks(
+                    documentIds,
+                    UserInfo.getUserId()
+                )
+            ) {
                 refuse();
             }
 

@@ -515,7 +515,8 @@ ADR 0067 implements note 34's unlinked Salesforce File cleanup strand. A live
 administrator selects only an opaque source attempt; PostgreSQL derives exact
 tenant-owned `partial/unlinked` evidence and records a durable cleanup action. One
 namespaced Apex boundary locks and rechecks the Draft Form Version and deletes both
-exact, caller-owned, wholly unlinked ContentDocuments under one savepoint. An
+exact, caller-owned ContentDocuments under one savepoint only when each has exactly
+its platform-required inferred owner link and no business, record or library link. An
 uncertain response is inspected read-only and remains indeterminate unless absence
 is proved. The source evidence is retained. Note 150 is pinned by asserting that a
 source with a retry child is never projected retryable. After independent

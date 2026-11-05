@@ -150,6 +150,8 @@ private class PublicationArtifactCleanupResourceTest {
             );
             Assert.areEqual(400, foreign.statusCode);
             Assert.areEqual(REFUSED, foreign.responseBody.toString());
+        }
+        System.runAs(foreignOwner) {
             Assert.areEqual(
                 2,
                 [
@@ -162,7 +164,9 @@ private class PublicationArtifactCleanupResourceTest {
                         }
                 ]
             );
+        }
 
+        System.runAs(integration) {
             Form_Version__c publishedVersion = createDraft(
                 'Published cleanup refusal'
             );
