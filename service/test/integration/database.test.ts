@@ -12,6 +12,7 @@ import {
 } from '../../src/database.js';
 import { applyMigrations } from '../../src/migrations.js';
 import {
+  PublicationArtifactCleanupError,
   PublicationAttemptError,
   PublicationAttemptRetryError,
   PublicationAttemptStore,
@@ -520,6 +521,12 @@ void test(
     const failed = await make('failed');
     const failedRetry = await store.startRetry(trusted, failed);
     assert.equal(failedRetry.formVersionId, 'a0B000000000001AAA');
+    assert.equal(
+      (await store.listForOperator(trusted)).attempts.find(
+        (attempt) => attempt.attemptId === failed,
+      )?.retryEligible,
+      false,
+    );
     await assert.rejects(
       store.startRetry(trusted, failed),
       PublicationAttemptRetryError,
@@ -644,6 +651,216 @@ void test(
         )
       ).rowCount,
       0,
+    );
+  },
+);
+void test(
+  'unlinked artifact cleanup is tenant-bound, resumable and database-enforced',
+  {
+    timeout: 15000,
+    skip:
+      !databaseUrl && !databaseRequired
+        ? 'Set DATABASE_URL to a disposable PostgreSQL 17 database'
+        : false,
+  },
+  async (context) => {
+    assert.ok(databaseUrl);
+    const config = readConfig({
+      ...process.env,
+      NODE_ENV: 'test',
+      DATABASE_URL: databaseUrl,
+    });
+    const pool = createPostgresPool(config, () => {});
+    const tenantId = randomUUID();
+    const otherTenantId = randomUUID();
+    const actorId = `administrator:${randomUUID()}`;
+    const publisherId = `publisher:${randomUUID()}`;
+    const otherActorId = `administrator:${randomUUID()}`;
+    const orgId = normalizeSalesforceOrgId(
+      `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+    );
+    const otherOrgId = normalizeSalesforceOrgId(
+      `00D${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+    );
+    context.after(() => pool.end());
+    await applyMigrations(pool);
+    await pool.query(
+      `INSERT INTO tenant_administrator_tenants
+         (tenant_id, expected_salesforce_org_id, authorization_origin,
+          namespace_prefix)
+       VALUES ($1, $2, 'https://login.salesforce.com', 'ksny__'),
+              ($3, $4, 'https://login.salesforce.com', '')`,
+      [tenantId, orgId, otherTenantId, otherOrgId],
+    );
+    await pool.query(
+      `INSERT INTO tenant_administrator_bindings
+         (actor_id, tenant_id, role)
+       VALUES ($1, $2, 'administrator'), ($3, $2, 'publisher'),
+              ($4, $5, 'administrator')`,
+      [actorId, tenantId, publisherId, otherActorId, otherTenantId],
+    );
+    const store = new PublicationAttemptStore(createQueryExecutor(pool));
+    const trusted = {
+      actorId,
+      tenantId,
+      expectedSalesforceOrgId: orgId,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: 'ksny__',
+      role: 'administrator' as const,
+      csrfToken: 'c'.repeat(43),
+    };
+    const makeUnlinked = async () => {
+      const id = await store.start(trusted, 'a0B000000000001AAA');
+      await store.complete(id, tenantId, {
+        outcome: 'partial',
+        failureCode: 'PUBLICATION_PUBLISHER_PARTIAL',
+        publicationDigest: 'd'.repeat(64),
+        xformVersionId: '068000000000001AAA',
+        xlsformVersionId: '068000000000002AAA',
+        salesforceRequestCount: 2,
+      });
+      await store.resolve(trusted, id, 'partial', 'unlinked', 1);
+      return id;
+    };
+
+    const source = await makeUnlinked();
+    const started = await store.startArtifactCleanup(trusted, source);
+    assert.deepEqual(started, {
+      cleanupAttemptId: started.cleanupAttemptId,
+      formVersionId: 'a0B000000000001AAA',
+      publicationDigest: 'd'.repeat(64),
+      xformVersionId: '068000000000001AAA',
+      xlsformVersionId: '068000000000002AAA',
+      priorOutcome: 'started',
+    });
+    assert.equal(
+      (await store.startArtifactCleanup(trusted, source)).cleanupAttemptId,
+      started.cleanupAttemptId,
+    );
+    assert.equal(
+      await store.completeArtifactCleanup(
+        trusted,
+        started.cleanupAttemptId,
+        'indeterminate',
+        2,
+      ),
+      'indeterminate',
+    );
+    const resumed = await store.startArtifactCleanup(trusted, source);
+    assert.equal(resumed.cleanupAttemptId, started.cleanupAttemptId);
+    assert.equal(resumed.priorOutcome, 'indeterminate');
+    assert.equal(
+      await store.completeArtifactCleanup(
+        trusted,
+        started.cleanupAttemptId,
+        'succeeded',
+        1,
+      ),
+      'succeeded',
+    );
+    await assert.rejects(
+      store.startArtifactCleanup(trusted, source),
+      PublicationArtifactCleanupError,
+    );
+    const sourceSummary = (await store.listForOperator(trusted)).attempts.find(
+      (attempt) => attempt.attemptId === source,
+    );
+    assert.equal(sourceSummary?.artifactCleanupStatus, 'succeeded');
+    assert.equal(sourceSummary?.artifactCleanupEligible, false);
+
+    const failedSource = await makeUnlinked();
+    const failedCleanup = await store.startArtifactCleanup(
+      trusted,
+      failedSource,
+    );
+    await store.completeArtifactCleanup(
+      trusted,
+      failedCleanup.cleanupAttemptId,
+      'failed',
+      1,
+    );
+    const replacement = await store.startArtifactCleanup(trusted, failedSource);
+    assert.notEqual(
+      replacement.cleanupAttemptId,
+      failedCleanup.cleanupAttemptId,
+    );
+
+    const racingSource = await makeUnlinked();
+    const backendIds = await Promise.all([
+      pool.query<{ backend: number }>(
+        'SELECT pg_backend_pid() AS backend FROM pg_sleep(0.05)',
+      ),
+      pool.query<{ backend: number }>(
+        'SELECT pg_backend_pid() AS backend FROM pg_sleep(0.05)',
+      ),
+    ]);
+    assert.equal(
+      new Set(backendIds.map((result) => result.rows[0]!.backend)).size,
+      2,
+    );
+    const race = await Promise.allSettled([
+      store.startArtifactCleanup(trusted, racingSource),
+      store.startArtifactCleanup(trusted, racingSource),
+    ]);
+    const admitted = race.flatMap((result) =>
+      result.status === 'fulfilled' ? [result.value.cleanupAttemptId] : [],
+    );
+    assert.ok(admitted.length >= 1);
+    assert.equal(new Set(admitted).size, 1);
+    for (const result of race)
+      if (result.status === 'rejected')
+        assert.ok(result.reason instanceof PublicationArtifactCleanupError);
+    assert.equal(
+      (
+        await pool.query(
+          `SELECT 1 FROM tenant_publication_artifact_cleanups
+           WHERE publication_attempt_id = $1`,
+          [racingSource],
+        )
+      ).rowCount,
+      1,
+    );
+
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO tenant_publication_artifact_cleanups (
+           cleanup_attempt_id, tenant_id, publication_attempt_id,
+           requested_by_actor_id
+         ) VALUES ($1, $2, $3, $4)`,
+        [randomUUID(), tenantId, failedSource, publisherId],
+      ),
+      { code: '23514' },
+    );
+    const startedSource = await store.start(trusted, 'a0B000000000001AAA');
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO tenant_publication_artifact_cleanups (
+           cleanup_attempt_id, tenant_id, publication_attempt_id,
+           requested_by_actor_id
+         ) VALUES ($1, $2, $3, $4)`,
+        [randomUUID(), tenantId, startedSource, actorId],
+      ),
+      { code: '23514' },
+    );
+    await assert.rejects(
+      pool.query(
+        `UPDATE tenant_publication_artifact_cleanups
+         SET publication_attempt_id = $1
+         WHERE cleanup_attempt_id = $2`,
+        [failedSource, started.cleanupAttemptId],
+      ),
+      { code: '23514' },
+    );
+    await assert.rejects(
+      pool.query(
+        `UPDATE tenant_publication_artifact_cleanups
+         SET outcome = 'failed', resolved_by_actor_id = $1,
+             salesforce_request_count = salesforce_request_count + 1,
+             completed_at = clock_timestamp()
+         WHERE cleanup_attempt_id = $2`,
+        [publisherId, replacement.cleanupAttemptId],
+      ),
+      { code: '23514' },
     );
   },
 );
@@ -1999,6 +2216,7 @@ void test(
         '0012_bootstrap_uniqueness',
         '0013_scheduled_publication_maintenance',
         '0014_privileged_publication_retry',
+        '0015_unlinked_publication_artifact_cleanup',
       ],
     );
   },

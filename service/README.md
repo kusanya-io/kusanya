@@ -227,6 +227,17 @@ indeterminate, committed or unlinked evidence as permission. A source can create
 only one direct child, and a stale page cannot bypass the database eligibility and
 live-role checks.
 
+ADR 0067 adds administrator-only cleanup for exact Files left by a publication
+attempt reconciled as `unlinked`. Use Clean files from the operator history; never
+delete the recorded ContentDocuments manually. The request supplies only the opaque
+attempt ID. PostgreSQL derives the tenant, org, Form Version, digest and two
+ContentVersion IDs, and Salesforce atomically refuses or deletes the pair after
+locking and rechecking the Draft Form Version and every link. A Resume cleanup label
+means the prior response was absent or uncertain: it does not authorize publication
+or a different delete. `failed` may be attempted again as a new audit row;
+`succeeded` cannot. The publication attempt remains permanently as least-data audit
+evidence even after the Files are absent.
+
 Before applying migration `0004_administrator_tenants` to a database created by PR
 #77, check the legacy bindings for namespace values that the current canonical rule
 will refuse:

@@ -562,6 +562,7 @@ test('permission sets grant scoped definitions and only integration can import o
           'DefinitionImportResource',
           'DefinitionSnapshotResource',
           'PublicationCommitResource',
+          'PublicationArtifactCleanupResource',
         ],
       );
       assert.deepEqual(

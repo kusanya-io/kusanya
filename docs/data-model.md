@@ -333,6 +333,19 @@ unresolved, indeterminate, committed, unlinked and succeeded attempts cannot gra
 retry. Retention skips any source that still has a child, avoiding a foreign-key
 failure while preserving the original age, state and audit rules.
 
+ADR 0067 adds `tenant_publication_artifact_cleanups`. Each row belongs to the same
+tenant as one immutable `partial/unlinked` publication attempt and records the live
+administrator who requested it, the resolving administrator, bounded Salesforce
+request count, outcome and timestamps. The source attempt supplies the Form Version,
+digest and both ContentVersion identities; those values are deliberately not copied
+into the cleanup table or accepted from HTTP. Identity columns are immutable and
+database triggers enforce the live administrator role on insert and resolution.
+A partial unique index permits one `started`, `succeeded` or `indeterminate` cleanup
+per source. `started` and `indeterminate` resume the same row, `succeeded` is
+terminal and single-use, and `failed` permits a new separately audited cleanup.
+Successful cleanup removes only the Salesforce Files. It does not delete or rewrite
+the source attempt, whose unlinked evidence remains protected from retention.
+
 ADR 0045 adds append-only `tenant_salesforce_authorization_audits`. Each successful
 grant records the tenant, its bound trusted administrator actor, normalized `00D`
 org, signed authorizing `005` user and resulting credential version. The audited

@@ -691,6 +691,113 @@ const migrations = Object.freeze([
       FOR EACH ROW
       EXECUTE FUNCTION kusanya_guard_publication_attempt_retry()`,
   }),
+  Object.freeze({
+    id: '0015_unlinked_publication_artifact_cleanup',
+    sql: `CREATE TABLE tenant_publication_artifact_cleanups (
+      cleanup_attempt_id uuid PRIMARY KEY,
+      tenant_id uuid NOT NULL REFERENCES tenant_administrator_tenants(tenant_id),
+      publication_attempt_id uuid NOT NULL,
+      requested_by_actor_id varchar(128) NOT NULL,
+      resolved_by_actor_id varchar(128),
+      outcome varchar(16) NOT NULL DEFAULT 'started',
+      salesforce_request_count integer NOT NULL DEFAULT 0,
+      created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      completed_at timestamptz,
+      CONSTRAINT tenant_publication_artifact_cleanups_source
+        FOREIGN KEY (publication_attempt_id, tenant_id)
+        REFERENCES tenant_publication_attempts(publication_attempt_id, tenant_id),
+      CONSTRAINT tenant_publication_artifact_cleanups_outcome
+        CHECK (outcome IN ('started', 'succeeded', 'failed', 'indeterminate')),
+      CONSTRAINT tenant_publication_artifact_cleanups_count
+        CHECK (salesforce_request_count >= 0),
+      CONSTRAINT tenant_publication_artifact_cleanups_shape
+        CHECK (
+          (outcome = 'started'
+            AND resolved_by_actor_id IS NULL
+            AND completed_at IS NULL)
+          OR
+          (outcome IN ('succeeded', 'failed', 'indeterminate')
+            AND resolved_by_actor_id IS NOT NULL
+            AND salesforce_request_count > 0
+            AND completed_at IS NOT NULL)
+        )
+    );
+    CREATE UNIQUE INDEX tenant_publication_artifact_cleanups_live_source
+      ON tenant_publication_artifact_cleanups(publication_attempt_id)
+      WHERE outcome IN ('started', 'succeeded', 'indeterminate');
+    CREATE OR REPLACE FUNCTION kusanya_guard_publication_artifact_cleanup()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+    DECLARE
+      authorized boolean;
+    BEGIN
+      IF TG_OP = 'INSERT' THEN
+        IF NEW.outcome <> 'started'
+          OR NEW.resolved_by_actor_id IS NOT NULL
+          OR NEW.salesforce_request_count <> 0
+          OR NEW.completed_at IS NOT NULL
+        THEN
+          RAISE EXCEPTION 'artifact cleanup must begin started'
+            USING ERRCODE = '23514';
+        END IF;
+        SELECT true INTO authorized
+        FROM tenant_publication_attempts AS attempt
+        JOIN tenant_administrator_tenants AS tenant
+          ON tenant.tenant_id = attempt.tenant_id
+         AND tenant.expected_salesforce_org_id = attempt.salesforce_org_id
+        JOIN tenant_administrator_bindings AS binding
+          ON binding.tenant_id = attempt.tenant_id
+         AND binding.actor_id = NEW.requested_by_actor_id
+         AND binding.active
+         AND binding.role = 'administrator'
+        WHERE attempt.publication_attempt_id = NEW.publication_attempt_id
+          AND attempt.tenant_id = NEW.tenant_id
+          AND attempt.outcome = 'partial'
+          AND attempt.reconciliation_status = 'unlinked';
+        IF authorized IS DISTINCT FROM true THEN
+          RAISE EXCEPTION 'artifact cleanup source is not eligible'
+            USING ERRCODE = '23514';
+        END IF;
+        RETURN NEW;
+      END IF;
+      IF NEW.cleanup_attempt_id IS DISTINCT FROM OLD.cleanup_attempt_id
+        OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+        OR NEW.publication_attempt_id IS DISTINCT FROM OLD.publication_attempt_id
+        OR NEW.requested_by_actor_id IS DISTINCT FROM OLD.requested_by_actor_id
+        OR NEW.created_at IS DISTINCT FROM OLD.created_at
+      THEN
+        RAISE EXCEPTION 'artifact cleanup identity is immutable'
+          USING ERRCODE = '23514';
+      END IF;
+      IF OLD.outcome NOT IN ('started', 'indeterminate')
+        OR NEW.outcome NOT IN ('succeeded', 'failed', 'indeterminate')
+        OR NEW.resolved_by_actor_id IS NULL
+        OR NEW.salesforce_request_count <= OLD.salesforce_request_count
+        OR NEW.completed_at IS NULL
+      THEN
+        RAISE EXCEPTION 'artifact cleanup transition is invalid'
+          USING ERRCODE = '23514';
+      END IF;
+      SELECT true INTO authorized
+      FROM tenant_administrator_bindings AS binding
+      WHERE binding.tenant_id = OLD.tenant_id
+        AND binding.actor_id = NEW.resolved_by_actor_id
+        AND binding.active
+        AND binding.role = 'administrator';
+      IF authorized IS DISTINCT FROM true THEN
+        RAISE EXCEPTION 'artifact cleanup resolver is not authorized'
+          USING ERRCODE = '23514';
+      END IF;
+      RETURN NEW;
+    END;
+    $$;
+    CREATE TRIGGER tenant_publication_artifact_cleanups_guard
+      BEFORE INSERT OR UPDATE
+      ON tenant_publication_artifact_cleanups
+      FOR EACH ROW
+      EXECUTE FUNCTION kusanya_guard_publication_artifact_cleanup()`,
+  }),
 ]);
 
 export class MigrationError extends Error {
@@ -717,7 +824,8 @@ export type MigrationTarget =
   | '0011_publication_attempt_retention'
   | '0012_bootstrap_uniqueness'
   | '0013_scheduled_publication_maintenance'
-  | '0014_privileged_publication_retry';
+  | '0014_privileged_publication_retry'
+  | '0015_unlinked_publication_artifact_cleanup';
 
 /** Apply the checked plan through an optional exact target for upgrade verification. */
 export async function applyMigrations(

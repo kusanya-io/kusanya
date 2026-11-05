@@ -125,6 +125,8 @@ const responseSchema = {
           'reconciledAt',
           'retryOfAttemptId',
           'retryEligible',
+          'artifactCleanupStatus',
+          'artifactCleanupEligible',
         ],
         properties: {
           attemptId: { type: 'string' },
@@ -148,6 +150,16 @@ const responseSchema = {
             anyOf: [{ type: 'string' }, { type: 'null' }],
           },
           retryEligible: { type: 'boolean' },
+          artifactCleanupStatus: {
+            anyOf: [
+              {
+                type: 'string',
+                enum: ['started', 'succeeded', 'failed', 'indeterminate'],
+              },
+              { type: 'null' },
+            ],
+          },
+          artifactCleanupEligible: { type: 'boolean' },
         },
       },
     },

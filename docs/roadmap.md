@@ -510,3 +510,15 @@ the source, and reuses the ordinary attempt-scoped publisher. Uncertain, committ
 unlinked, succeeded and already-used sources remain ineligible; scheduled work never
 publishes. After independent verification, note 34 retains unlinked Salesforce File
 cleanup and privileged disconnect/rebind. No C10 or Phase 1 gate claim is made.
+
+ADR 0067 implements note 34's unlinked Salesforce File cleanup strand. A live
+administrator selects only an opaque source attempt; PostgreSQL derives exact
+tenant-owned `partial/unlinked` evidence and records a durable cleanup action. One
+namespaced Apex boundary locks and rechecks the Draft Form Version and deletes both
+exact, caller-owned ContentDocuments under one savepoint only when each has exactly
+its platform-required inferred owner link and no business, record or library link. An
+uncertain response is inspected read-only and remains indeterminate unless absence
+is proved. The source evidence is retained. Note 150 is pinned by asserting that a
+source with a retry child is never projected retryable. After independent
+verification, privileged disconnect/rebind is the remaining note 34 strand. No C10
+or Phase 1 gate claim is made.

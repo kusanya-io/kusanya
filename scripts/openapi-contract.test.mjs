@@ -48,6 +48,10 @@ void test('operator OpenAPI remains least-data and documents the lifecycle surfa
     'startedAt',
     'completedAt',
     'reconciledAt',
+    'retryOfAttemptId',
+    'retryEligible',
+    'artifactCleanupStatus',
+    'artifactCleanupEligible',
   ];
   for (const field of expectedFields)
     assert.match(summary, new RegExp(`^        ${field}:`, 'm'));
@@ -63,9 +67,26 @@ void test('operator OpenAPI remains least-data and documents the lifecycle surfa
     'unlinked_artifacts_confirmed',
     'artifacts_missing_confirmed',
   ];
+  const operatorStatus = summary.match(
+    /^        operatorStatus:\n([\s\S]*?)(?=^        [A-Za-z][A-Za-z0-9]*:)/m,
+  )?.[1];
+  assert.ok(operatorStatus, 'operatorStatus schema is documented');
   for (const status of statuses)
-    assert.match(summary, new RegExp(`^            - ${status}$`, 'm'));
-  assert.equal((summary.match(/^            - /gm) ?? []).length, 7);
+    assert.match(operatorStatus, new RegExp(`^            - ${status}$`, 'm'));
+  assert.equal((operatorStatus.match(/^            - /gm) ?? []).length, 7);
+
+  const cleanupPath = pathBlock(
+    contract,
+    '/api/admin/salesforce/publication-artifact-cleanups',
+  );
+  assert.ok(cleanupPath, 'publication artifact cleanup path is documented');
+  assert.match(cleanupPath, /^    post:$/m);
+  assert.doesNotMatch(cleanupPath, /^    (?:get|put|patch|delete):$/m);
+  assert.match(cleanupPath, /required: \[attemptId\]/);
+  assert.doesNotMatch(
+    cleanupPath,
+    /tenantId|actorId|salesforceOrgId|formVersionId|publicationDigest|xformVersionId|xlsformVersionId/,
+  );
 
   const administratorPath = pathBlock(contract, '/api/admin/administrators');
   assert.ok(administratorPath, 'administrator lifecycle path is documented');

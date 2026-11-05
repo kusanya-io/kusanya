@@ -486,6 +486,48 @@ paths:
         '422':
           description: Retry was admitted but the current definition was rejected
         '503': { $ref: '#/components/responses/Unavailable' }
+  /api/admin/salesforce/publication-artifact-cleanups:
+    post:
+      operationId: cleanupSalesforcePublicationArtifacts
+      summary: Delete one exact pair of proven unlinked publication Files
+      description: >-
+        Administrator only. The source must be a partial publication reconciled as
+        unlinked. Tenant, org, Form Version, digest and both ContentVersion IDs are
+        derived server-side. Salesforce deletes the exact pair atomically only while
+        the Form Version remains Draft and neither File has any link. A succeeded
+        cleanup is single-use; started or indeterminate work resumes; a failed
+        cleanup may create a new audited action.
+      security: [{ administratorSession: [], csrfToken: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ExactOrigin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [attemptId]
+              properties:
+                attemptId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Both exact artifacts are absent and cleanup is complete
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [outcome]
+                properties:
+                  outcome: { type: string, const: succeeded }
+        '400': { $ref: '#/components/responses/Rejected' }
+        '401': { $ref: '#/components/responses/AuthenticationRequired' }
+        '403': { $ref: '#/components/responses/Rejected' }
+        '409':
+          description: Source or exact remote evidence is ineligible for cleanup
+        '503':
+          description: Cleanup is unavailable or requires operator investigation
   /api/admin/salesforce/publication-attempts:
     get:
       operationId: listPublicationAttempts
@@ -628,6 +670,8 @@ components:
           reconciledAt,
           retryOfAttemptId,
           retryEligible,
+          artifactCleanupStatus,
+          artifactCleanupEligible,
         ]
       properties:
         attemptId: { type: string, format: uuid }
@@ -654,3 +698,13 @@ components:
           description: >-
             True only for a live administrator when this source is safely
             classified and has no direct retry child.
+        artifactCleanupStatus:
+          anyOf:
+            - type: string
+              enum: [started, succeeded, failed, indeterminate]
+            - { type: 'null' }
+        artifactCleanupEligible:
+          type: boolean
+          description: >-
+            True only for a live administrator when exact unlinked evidence may
+            start or resume a cleanup action.

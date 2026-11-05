@@ -61,4 +61,52 @@ public without sharing class PublicationArtifactGuard {
             }
         }
     }
+
+    /**
+     * System-mode check used before the atomic cleanup mutation. Salesforce
+     * creates one inferred link from every privately uploaded document to its
+     * owner. Cleanup permits exactly that platform-required link and refuses
+     * every other, missing or duplicate link shape.
+     */
+    public static Boolean hasDisallowedLinks(
+        Set<Id> documentIds,
+        Id expectedOwnerId
+    ) {
+        if (
+            documentIds == null ||
+            documentIds.isEmpty() ||
+            expectedOwnerId == null ||
+            expectedOwnerId.getSObjectType() != User.SObjectType
+        ) {
+            return true;
+        }
+        Map<Id, Integer> ownerLinkCounts = new Map<Id, Integer>();
+        for (Id documentId : documentIds) {
+            ownerLinkCounts.put(documentId, 0);
+        }
+        for (ContentDocumentLink link : [
+            SELECT ContentDocumentId, LinkedEntityId, ShareType, Visibility
+            FROM ContentDocumentLink
+            WHERE ContentDocumentId IN :documentIds
+        ]) {
+            if (
+                link.LinkedEntityId != expectedOwnerId ||
+                link.ShareType != 'I' ||
+                link.Visibility != 'AllUsers'
+            ) {
+                return true;
+            }
+            Integer count = ownerLinkCounts.get(link.ContentDocumentId) + 1;
+            if (count != 1) {
+                return true;
+            }
+            ownerLinkCounts.put(link.ContentDocumentId, count);
+        }
+        for (Integer count : ownerLinkCounts.values()) {
+            if (count != 1) {
+                return true;
+            }
+        }
+        return false;
+    }
 }
