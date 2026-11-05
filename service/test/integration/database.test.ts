@@ -1694,6 +1694,11 @@ void test(
           cleanup.release();
         }
         await pool.query(
+          `DELETE FROM tenant_publication_attempt_retention_audits
+           WHERE tenant_id = $1::uuid`,
+          [tenantId],
+        );
+        await pool.query(
           `DELETE FROM tenant_salesforce_connection_lifecycle_audits
            WHERE tenant_id = $1::uuid`,
           [tenantId],
