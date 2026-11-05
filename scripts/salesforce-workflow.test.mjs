@@ -24,6 +24,10 @@ const apexJob = workflow.slice(
   workflow.indexOf('\n  apex:'),
   workflow.indexOf('\n  gate:'),
 );
+const verifier = readFileSync(
+  new URL('./verify-salesforce.mjs', import.meta.url),
+  'utf8',
+);
 function stepConfig(name) {
   const start = workflow.indexOf(`      - name: ${name}\n`);
   assert.ok(start >= 0, `Missing workflow step: ${name}`);
@@ -889,6 +893,7 @@ test('Salesforce workflow keeps the pinned harness, source guard and uncondition
   );
   assert.equal(immutableRefs.length, 2);
   assert.equal(immutableRefs[0], immutableRefs[1]);
+  assert.doesNotMatch(workflow, /c9e6db1bc438e2c0a952414706c56078995006a3/);
   assert.match(workflow, /run: node trusted\/scripts\/verify-salesforce\.mjs/);
   assert.match(
     workflow,
@@ -904,6 +909,12 @@ test('Salesforce workflow keeps the pinned harness, source guard and uncondition
     workflow.indexOf('Recheck exact head immediately before authentication') <
       workflow.indexOf('      - name: Authenticate dedicated Dev Hub'),
   );
+});
+
+test('the controlled classifier proof hook and proof pin cannot reach a merge candidate', () => {
+  assert.doesNotMatch(workflow, /KUSANYA_LIVE_CLASSIFIER_PROBE/);
+  assert.doesNotMatch(verifier, /KUSANYA_LIVE_CLASSIFIER_PROBE/);
+  assert.doesNotMatch(verifier, /unexpected-error-v1/);
 });
 
 test('documentation exemption is explicit, exact-head and cannot imply Apex ran', () => {

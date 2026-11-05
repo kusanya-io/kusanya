@@ -34,9 +34,11 @@ Regenerate it when any lockfile changes with `node scripts/dependency-licences.m
 
 Salesforce CLI is an external build tool; CI pins its version. GitHub Actions pins
 the checkout/setup-node actions to reviewed commit hashes (MIT).
-Local workflow validation for issue #5 uses actionlint 1.7.12 (MIT) and
-ShellCheck 0.11.0 (GPL-3.0), standalone development tools, not service/runtime
-dependencies. No tool binaries are committed or shipped with the product.
+Workflow validation uses actionlint 1.7.12 (MIT) and ShellCheck (GPL-3.0) as
+standalone development tools, not service/runtime dependencies. Public CI verifies
+the official actionlint archive against its published SHA-256 digest and uses the
+hosted runner's ShellCheck executable, logging both versions. Local reviewers may
+use ShellCheck 0.11.0. No tool binaries are committed or shipped with the product.
 The service test stage installs Debian's OpenSSL package solely to create a
 short-lived localhost certificate for the ADR 0058 wire-contract integration test.
 The final runtime stage starts from the clean Node base, so OpenSSL and generated

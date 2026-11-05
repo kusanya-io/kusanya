@@ -138,6 +138,13 @@ nonretryable for that head until the maintainer privately reconciles ownership a
 a new reviewed commit enters through the ordinary initial-run policy. See note 148
 in ADR 0006.
 
+ADR 0069 records the classifier's first hosted firing. The reviewed proof run
+authenticated and stopped before discovery or allocation, emitted only the bounded
+`unexpected-error` label and a nonretryable `failed-infrastructure` marker, then
+exercised fallback cleanup with an empty journal and zero Salesforce calls. No org
+was created. The proof head remains unmerged; tests reject its pin and executable
+proof literals from every clean merge candidate.
+
 The Apex job serializes across all PRs using the CI hub, without cancelling an
 active scratch lifecycle. ADR 0030 adds a separate default-branch-owned
 `pull_request_target` workflow for same-repository `synchronize` events. It may
@@ -339,8 +346,10 @@ attempt finalizer does not pretend the whole job is ended, and does not expand t
 separate ended-run janitor's authority. ADR 0006 records these decisions; ADR 0007
 records Bill's limited Phase 0 deferral. Issue #5 stays open until Claude verifies.
 
-Run `actionlint` with an installed ShellCheck executable, not `-shellcheck=`.
-For example, when both are on PATH: `actionlint -shellcheck shellcheck`.
+Public CI downloads actionlint 1.7.12 from its official release, verifies the
+archive's published SHA-256 digest and runs it with the hosted runner's ShellCheck
+executable. It prints both versions in the public log. Local validation uses the
+same command when both tools are on PATH: `actionlint -shellcheck shellcheck`.
 CI policy/harness/workflow changes require Claude's explicit security review before
 Bill approves their first Salesforce execution, even when public fixtures pass.
 
