@@ -24,6 +24,7 @@ const apexJob = workflow.slice(
   workflow.indexOf('\n  apex:'),
   workflow.indexOf('\n  gate:'),
 );
+const proofPin = 'c9e6db1bc438e2c0a952414706c56078995006a3';
 function stepConfig(name) {
   const start = workflow.indexOf(`      - name: ${name}\n`);
   assert.ok(start >= 0, `Missing workflow step: ${name}`);
@@ -889,6 +890,8 @@ test('Salesforce workflow keeps the pinned harness, source guard and uncondition
   );
   assert.equal(immutableRefs.length, 2);
   assert.equal(immutableRefs[0], immutableRefs[1]);
+  assert.equal(immutableRefs[0], proofPin);
+  assert.doesNotMatch(workflow, /77b85c70e1fe31ce176e90317009dc602e5133a5/);
   assert.match(workflow, /run: node trusted\/scripts\/verify-salesforce\.mjs/);
   assert.match(
     workflow,
@@ -903,6 +906,29 @@ test('Salesforce workflow keeps the pinned harness, source guard and uncondition
   assert.ok(
     workflow.indexOf('Recheck exact head immediately before authentication') <
       workflow.indexOf('      - name: Authenticate dedicated Dev Hub'),
+  );
+});
+
+test('controlled live classifier probe is exact and scoped only to verification', () => {
+  const verify = stepConfig(
+    'Verify reviewed metadata using only trusted harness code',
+  );
+  assert.match(verify, /KUSANYA_LIVE_CLASSIFIER_PROBE: unexpected-error-v1/);
+  assert.equal(
+    (workflow.match(/KUSANYA_LIVE_CLASSIFIER_PROBE:/g) ?? []).length,
+    1,
+  );
+  assert.doesNotMatch(
+    apexJob.split('    steps:\n')[0],
+    /LIVE_CLASSIFIER_PROBE/,
+  );
+  assert.doesNotMatch(
+    stepConfig("Clean up this authenticated run's owned scratch intents"),
+    /LIVE_CLASSIFIER_PROBE/,
+  );
+  assert.doesNotMatch(
+    stepConfig('Authenticate dedicated Dev Hub without printing its auth URL'),
+    /LIVE_CLASSIFIER_PROBE/,
   );
 });
 

@@ -51,7 +51,7 @@ jobs:
       - name: Checkout immutable policy
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: 77b85c70e1fe31ce176e90317009dc602e5133a5
+          ref: c9e6db1bc438e2c0a952414706c56078995006a3
           path: trusted
           persist-credentials: false
           sparse-checkout: scripts
@@ -170,8 +170,9 @@ jobs:
         timeout-minutes: 1
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          # Proposed immutable source pin; Claude must review it before first approval.
-          ref: 77b85c70e1fe31ce176e90317009dc602e5133a5
+          # Temporary proof pin; Claude must review it before Bill approves this
+          # deliberately failing head. This head must never merge.
+          ref: c9e6db1bc438e2c0a952414706c56078995006a3
           path: trusted
           persist-credentials: false
           sparse-checkout: scripts
@@ -283,6 +284,8 @@ jobs:
         env:
           KUSANYA_SALESFORCE_DIR: ${{ github.workspace }}/reviewed/salesforce
           KUSANYA_CLEANUP_JOURNAL: ${{ runner.temp }}/kusanya-scratch-intents.json
+          # ADR 0069: exact, temporary live classifier proof. Remove before merge.
+          KUSANYA_LIVE_CLASSIFIER_PROBE: unexpected-error-v1
         run: node trusted/scripts/verify-salesforce.mjs
       - name: Reject a stale successful run
         timeout-minutes: 1
