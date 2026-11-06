@@ -24,9 +24,11 @@ Close the five notes as one bounded hardening unit without widening any authorit
 - Keep retry admission unchanged. Pin the operator projection's `NOT EXISTS`
   child rule and prove through real PostgreSQL that a source with a retry child is
   reported as ineligible.
-- Treat a public Content Delivery as an external share. Cleanup checks both exact
-  `ContentVersion` identifiers for `ContentDistribution` before deletion and
-  refuses the pair if either has one. The existing link-shape check remains.
+- Treat a public Content Delivery as an external share. The initial implementation
+  checked the two exact `ContentVersion` identifiers before deletion. Independent
+  review then demonstrated that a delivery can remain on an older version of the
+  same document, so ADR 0071 strengthens the guard to derive and check both complete
+  `ContentDocument` identities. The existing link-shape check remains.
 - Pin the reachable zero-owner-link refusal in Apex. Remove the redundant inner
   savepoint and rollback branch: one `Database.delete` call with `allOrNone=true`
   is the atomic boundary, and the outer fixed-error handler remains authoritative.
@@ -66,8 +68,10 @@ whole pair while the ordinary exact private pair still deletes atomically. The
 Apex claims require independent deployment and a protected exact-head run; local
 source conversion is not compilation evidence.
 
-This unit closes notes 150 and 152 through 155. Notes 136, 137 and 140 remain
-informational. It makes no C10, package, namespace, Phase 1 or phase-gate claim.
+This unit closes notes 150 and 152 through 155. Note 159 records the later
+document-wide delivery residual and ADR 0071 closes it. Notes 136, 137 and 140
+remain informational. It makes no C10, package, namespace, Phase 1 or phase-gate
+claim.
 
 ## Revisit when
 

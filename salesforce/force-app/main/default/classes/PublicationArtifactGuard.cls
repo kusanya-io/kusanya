@@ -110,12 +110,12 @@ public without sharing class PublicationArtifactGuard {
         return false;
     }
 
-    /** Refuse deletion while either exact artifact has a public delivery. */
-    public static Boolean hasPublicDistribution(Set<Id> contentVersionIds) {
+    /** Refuse deletion while any version of either document has a delivery. */
+    public static Boolean hasPublicDistribution(Set<Id> contentDocumentIds) {
         List<ContentDistribution> deliveries = [
             SELECT Id
             FROM ContentDistribution
-            WHERE ContentVersionId IN :contentVersionIds
+            WHERE ContentDocumentId IN :contentDocumentIds
             LIMIT 1
         ];
         return !deliveries.isEmpty();

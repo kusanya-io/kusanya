@@ -112,10 +112,7 @@ public with sharing class PublicationArtifactCleanup {
                 PublicationArtifactGuard.hasDisallowedLinks(
                     documentIds,
                     UserInfo.getUserId()
-                ) ||
-                PublicationArtifactGuard.hasPublicDistribution(
-                    new Set<Id>{ xformVersionId, xlsformVersionId }
-                )
+                ) || PublicationArtifactGuard.hasPublicDistribution(documentIds)
             ) {
                 refuse();
             }

@@ -1,6 +1,6 @@
 # ADR 0060: Portable validation for authored JavaScript rules
 
-- Status: Proposed; implementation awaiting independent verification
+- Status: Accepted; C10.12 independently verified on the exact PR #118 head
 - Date: 2026-10-29
 - Brief sections: C1.2, C4, C10.12, C11 Phase 1
 - Decision owner: Cobitech Solutions
@@ -74,8 +74,11 @@ The builder loaded the exact reviewed XML in stock ODK Collect v2026.3.5 on
 2026-10-29. The UI refused blank, `24:00` and `09:60`, with the authored constraint
 message on the two invalid values, and accepted `00:00`, `09:30` and `23:59`.
 Nothing was finalized or submitted. The run was synthetic and offline: no tenant,
-Salesforce org, credential, Task or submission endpoint. C10.12 remains subject to
-independent exact-head reproduction before it passes.
+Salesforce org, credential, Task or submission endpoint. Independent verification
+on PR #118 rebuilt the hash-pinned artifact, confirmed byte identity and reproduced
+the positive and negative Collect observations, including anchored-prefix and
+anchored-suffix controls. That evidence satisfies C10.12 without claiming arbitrary
+JavaScript translation or execution.
 
 ADR 0014 originally targeted v2026.3.4. The existing approved emulator now reports
 v2026.3.5, which ODK released as the latest stable bug-fix build on 2026-09-28;
