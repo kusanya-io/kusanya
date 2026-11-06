@@ -59,6 +59,22 @@ earlier link/ADR sequencing restriction. Keep the project namespace empty; requi
 linking before packaging or namespaced claims and run the suite namespaced as soon
 as linking works, before the next phase gate (ADRs 0006/0008).
 
+## Current Phase 1 gate readiness
+
+The implementation deliverables assigned to Phase 1 now exist: the Salesforce data
+model, deterministic XForm compiler, bounded edited-Kusanya XLSForm export/import,
+reviewer print delivery and tenant-bound publish CLI. C10.10 was independently
+reproduced on the exact PR #121 head under ADR 0061, and C10.12 was independently
+reproduced from the exact PR #118 artifact in stock ODK Collect under ADR 0060.
+Those are evidence inputs to a future gate, not a builder-issued gate verdict.
+
+The remaining Phase 1 gate prerequisite is the vendor-blocked `ksny` Dev Hub link
+and the namespaced suite required by ADR 0008. Until that link exists, keep
+`"namespace": ""`, make no namespaced-behaviour or package claim, and do not ask
+Claude to close Phase 1. Notes 136, 137 and 140 remain informational evidence
+boundaries rather than gate findings. ADR 0071 closes note 159's defensive cleanup
+gap so no known product defect is being carried into that eventual gate.
+
 The first unit contains Folder/Form/Form Version and external namespace resolution.
 The current unit adds Question trees, choices and stored skip rules, separate
 Hint/Author Notes, the Current Version INSERT regression and external `__r`
@@ -90,8 +106,8 @@ separate reviewed tooling/workflow work.
 Those model-era next-unit statements are now historical. ADR 0061 supplies the
 bounded edited Kusanya workbook import and atomic Salesforce round-trip path;
 structural or arbitrary third-party XLSForm conversion remains separate. C10.10
-still requires independent exact-head fresh-org evidence. Do not mark Phase 1
-complete from model or unit tests.
+was independently reproduced from the exact PR #121 head. Do not mark Phase 1
+complete from that acceptance result or from model and unit tests alone.
 
 ADR 0044 adds the administrator browser composition: a trusted injected
 login verifier issues the exact host-only cookie, a live same-origin bootstrap
@@ -132,8 +148,9 @@ mapping configurations, not all C4 records. The current strict binary adapter
 bounded ZIP/XML input and fail-closed unsupported-feature checks, answering note 40.
 ADR 0061 later adds bounded visible-cell import for Kusanya-exported workbooks,
 atomic integration-only Salesforce persistence and a two-boundary XML comparison
-harness. It does not accept arbitrary third-party XLSForms. C10.10 remains open
-until the verifier reproduces the exact-head comparison in a fresh org.
+harness. It does not accept arbitrary third-party XLSForms. The verifier reproduced
+the exact-head comparison in a fresh org, satisfying C10.10 without broadening the
+accepted workbook profile.
 The original interchange unit created no org and changed no workflow, harness,
 namespace or dependency.
 Note 39's reviewer authorization, no-store/header protections and collector-denial

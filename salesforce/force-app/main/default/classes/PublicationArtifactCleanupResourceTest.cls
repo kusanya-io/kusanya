@@ -258,6 +258,70 @@ private class PublicationArtifactCleanupResourceTest {
     }
 
     @IsTest
+    static void refusesDeliveryOnAnOlderVersionOfEitherDocument() {
+        User integration;
+        System.runAs(new User(Id = UserInfo.getUserId())) {
+            integration = createUser('cleanold');
+            assignPermission(integration.Id, 'Kusanya_Integration');
+        }
+        System.runAs(integration) {
+            Form_Version__c version = createDraft('Older delivery refusal');
+            Map<String, Id> files = createFiles();
+            ContentVersion originalXml = [
+                SELECT ContentDocumentId
+                FROM ContentVersion
+                WHERE Id = :files.get('xml')
+            ];
+            ContentVersion xlsform = [
+                SELECT ContentDocumentId
+                FROM ContentVersion
+                WHERE Id = :files.get('xlsx')
+            ];
+            insert new ContentDistribution(
+                Name = 'Older-version public delivery',
+                ContentVersionId = files.get('xml'),
+                PreferencesAllowViewInBrowser = true,
+                PreferencesLinkLatestVersion = false
+            );
+            ContentVersion latestXml = new ContentVersion(
+                ContentDocumentId = originalXml.ContentDocumentId,
+                Title = 'kusanya-' + DIGEST + '-xform',
+                PathOnClient = DIGEST + '.xml',
+                VersionData = Blob.valueOf('<data/>')
+            );
+            insert latestXml;
+
+            RestResponse response = invoke(
+                'POST',
+                'application/json',
+                validBody(version.Id, latestXml.Id, files.get('xlsx'))
+            );
+            Assert.areEqual(400, response.statusCode);
+            Assert.areEqual(REFUSED, response.responseBody.toString());
+            Assert.areEqual(
+                2,
+                [
+                    SELECT COUNT()
+                    FROM ContentDocument
+                    WHERE
+                        Id IN :new Set<Id>{
+                            originalXml.ContentDocumentId,
+                            xlsform.ContentDocumentId
+                        }
+                ]
+            );
+            Assert.areEqual(
+                1,
+                [
+                    SELECT COUNT()
+                    FROM ContentDistribution
+                    WHERE ContentVersionId = :files.get('xml')
+                ]
+            );
+        }
+    }
+
+    @IsTest
     static void strictlyDecodesAndChecksPermissionBeforeTheBody() {
         User ordinary;
         System.runAs(new User(Id = UserInfo.getUserId())) {
