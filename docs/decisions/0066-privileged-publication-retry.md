@@ -58,6 +58,10 @@ no existing child. Publisher and reviewer history remains readable but never mar
 a row retryable. The browser creates the command only from that signal; PostgreSQL
 remains authoritative if the page is stale.
 
+ADR 0070 closes note 150 by pinning this single-use projection directly and by
+proving against PostgreSQL that a source with an existing retry child reports
+`retryEligible: false`.
+
 Retention never selects a source while a retry child references it. The foreign key
 would refuse that delete anyway; excluding it in both interactive and scheduled
 selectors keeps a mixed batch from being wedged. Once a terminal child is itself

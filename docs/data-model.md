@@ -247,6 +247,9 @@ ADR 0068 adds a checked `salesforce_connection_state` to the tenant row and the
 `tenant_salesforce_connection_lifecycle_audits` ledger. Existing tenants are
 backfilled connected only when an encrypted connection exists; new and rebound
 tenants are disconnected until the one-time OAuth flow commits a matching credential.
+ADR 0070 adds migration 0017 so destructive artifact-cleanup admission also
+derives a live credential whose complete tuple matches that tenant row; the state
+flag alone is not authority.
 Disconnect deletes the credential and pending OAuth state but retains authorization,
 publication and cleanup history. Rebind changes only a disconnected tenant's expected
 org/origin/namespace tuple and records both identities. Publication-attempt and

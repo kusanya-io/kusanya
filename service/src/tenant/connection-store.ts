@@ -647,7 +647,6 @@ export class TenantConnectionStore {
                      attempt.outcome = 'partial'
                      AND (
                        attempt.reconciliation_status IS NULL
-                       OR attempt.reconciliation_status = 'indeterminate'
                        OR (
                          attempt.reconciliation_status = 'unlinked'
                          AND NOT EXISTS (

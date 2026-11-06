@@ -64,7 +64,9 @@ New database triggers lock the tenant row before admitting a publication attempt
 artifact cleanup. Publication attempts require the current tenant/org tuple but may
 still record the existing fixed not-connected failure after a disconnect; they can
 no longer cross the disconnect check unseen. Destructive File cleanup additionally
-requires connected state. This makes admission and disconnect mutually serial: an
+requires connected state corroborated by a live credential row matching the
+tenant's complete Salesforce tuple under migration 0017. This makes admission and
+disconnect mutually serial: an
 admitted active attempt makes disconnect ineligible, while a completed disconnect
 makes cleanup impossible and leaves later publication selector-free and credentialless.
 OAuth authorization takes the tenant lock before touching the connection row,
@@ -111,6 +113,10 @@ open. Note 150 remains a presentation-depth item. Note 152's possible
 `ContentDistribution` survivor and note 153's unreachable File-cleanup branches are
 recorded operational gaps outside this credential lifecycle. The first live firing
 of the ADR 0006 unexpected-exception classifier is still owed.
+
+ADR 0070 supersedes those carried gaps: it closes notes 150 and 152 through 155,
+including removal of the unrepresentable `partial`/`indeterminate` disconnect
+predicate. The ADR 0006 live-firing obligation was discharged separately by ADR 0069.
 
 ## Revisit when
 

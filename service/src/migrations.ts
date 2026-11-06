@@ -924,6 +924,33 @@ const migrations = Object.freeze([
       FOR EACH ROW
       EXECUTE FUNCTION kusanya_require_connected_artifact_cleanup()`,
   }),
+  Object.freeze({
+    id: '0017_artifact_cleanup_credential_guard',
+    sql: `CREATE OR REPLACE FUNCTION kusanya_require_connected_artifact_cleanup()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+    DECLARE
+      connected boolean;
+    BEGIN
+      SELECT true INTO connected
+      FROM tenant_administrator_tenants AS tenant
+      JOIN tenant_connections AS connection
+        ON connection.tenant_id = tenant.tenant_id
+       AND connection.salesforce_org_id = tenant.expected_salesforce_org_id
+       AND connection.authorization_origin = tenant.authorization_origin
+       AND connection.namespace_prefix = tenant.namespace_prefix
+      WHERE tenant.tenant_id = NEW.tenant_id
+        AND tenant.salesforce_connection_state = 'connected'
+      FOR UPDATE OF tenant;
+      IF connected IS DISTINCT FROM true THEN
+        RAISE EXCEPTION 'artifact cleanup requires a connected tenant'
+          USING ERRCODE = '23514';
+      END IF;
+      RETURN NEW;
+    END;
+    $$`,
+  }),
 ]);
 
 export class MigrationError extends Error {
@@ -952,7 +979,8 @@ export type MigrationTarget =
   | '0013_scheduled_publication_maintenance'
   | '0014_privileged_publication_retry'
   | '0015_unlinked_publication_artifact_cleanup'
-  | '0016_privileged_salesforce_disconnect_rebind';
+  | '0016_privileged_salesforce_disconnect_rebind'
+  | '0017_artifact_cleanup_credential_guard';
 
 /** Apply the checked plan through an optional exact target for upgrade verification. */
 export async function applyMigrations(

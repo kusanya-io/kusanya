@@ -112,25 +112,22 @@ public with sharing class PublicationArtifactCleanup {
                 PublicationArtifactGuard.hasDisallowedLinks(
                     documentIds,
                     UserInfo.getUserId()
+                ) ||
+                PublicationArtifactGuard.hasPublicDistribution(
+                    new Set<Id>{ xformVersionId, xlsformVersionId }
                 )
             ) {
                 refuse();
             }
 
-            Savepoint checkpoint = Database.setSavepoint();
-            try {
-                Database.delete(
-                    new List<ContentDocument>{
-                        new ContentDocument(Id = xform.ContentDocumentId),
-                        new ContentDocument(Id = xlsform.ContentDocumentId)
-                    },
-                    true,
-                    AccessLevel.USER_MODE
-                );
-            } catch (Exception error) {
-                Database.rollback(checkpoint);
-                refuse();
-            }
+            Database.delete(
+                new List<ContentDocument>{
+                    new ContentDocument(Id = xform.ContentDocumentId),
+                    new ContentDocument(Id = xlsform.ContentDocumentId)
+                },
+                true,
+                AccessLevel.USER_MODE
+            );
         } catch (RefusedException error) {
             throw error;
         } catch (Exception error) {

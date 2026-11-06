@@ -236,6 +236,10 @@ void test('disconnect locks the tenant, removes only eligible credentials and au
     '',
   ]);
   assert.match(lifecycleSql, /attempt\.outcome = 'started'/);
+  assert.doesNotMatch(
+    lifecycleSql,
+    /attempt\.outcome = 'partial'[\s\S]*attempt\.reconciliation_status = 'indeterminate'/,
+  );
   assert.match(lifecycleSql, /connection\.authorization_origin = \$4/);
   assert.match(lifecycleSql, /connection\.namespace_prefix = \$5/);
   assert.match(lifecycleSql, /cleanup\.outcome = 'succeeded'/);

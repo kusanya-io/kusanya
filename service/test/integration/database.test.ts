@@ -711,6 +711,18 @@ void test(
       role: 'administrator' as const,
       csrfToken: 'c'.repeat(43),
     };
+    await pool.query(
+      `INSERT INTO tenant_connections (
+         tenant_id, salesforce_org_id, authorization_origin, instance_origin,
+         namespace_prefix, credential_schema_version, credential_key_id,
+         credential_nonce, credential_ciphertext, credential_tag
+       ) VALUES (
+         $1, $2, 'https://login.salesforce.com',
+         'https://synthetic.my.salesforce.com', 'ksny__', 1,
+         'integration-test', 'nonce', 'ciphertext', 'tag'
+       )`,
+      [tenantId, orgId],
+    );
     const makeUnlinked = async () => {
       const id = await store.start(trusted, 'a0B000000000001AAA');
       await store.complete(id, tenantId, {
@@ -724,6 +736,43 @@ void test(
       await store.resolve(trusted, id, 'partial', 'unlinked', 1);
       return id;
     };
+
+    const driftedTrusted = {
+      ...trusted,
+      actorId: otherActorId,
+      tenantId: otherTenantId,
+      expectedSalesforceOrgId: otherOrgId,
+      namespacePrefix: '',
+    };
+    const driftedSource = await store.start(
+      driftedTrusted,
+      'a0B000000000001AAA',
+    );
+    await store.complete(driftedSource, otherTenantId, {
+      outcome: 'partial',
+      failureCode: 'PUBLICATION_PUBLISHER_PARTIAL',
+      publicationDigest: 'd'.repeat(64),
+      xformVersionId: '068000000000001AAA',
+      xlsformVersionId: '068000000000002AAA',
+      salesforceRequestCount: 2,
+    });
+    await store.resolve(
+      driftedTrusted,
+      driftedSource,
+      'partial',
+      'unlinked',
+      1,
+    );
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO tenant_publication_artifact_cleanups (
+           cleanup_attempt_id, tenant_id, publication_attempt_id,
+           requested_by_actor_id
+         ) VALUES ($1, $2, $3, $4)`,
+        [randomUUID(), otherTenantId, driftedSource, otherActorId],
+      ),
+      { code: '23514' },
+    );
 
     const source = await makeUnlinked();
     const started = await store.startArtifactCleanup(trusted, source);
@@ -2653,6 +2702,7 @@ void test(
         '0014_privileged_publication_retry',
         '0015_unlinked_publication_artifact_cleanup',
         '0016_privileged_salesforce_disconnect_rebind',
+        '0017_artifact_cleanup_credential_guard',
       ],
     );
   },
