@@ -1,6 +1,6 @@
 # ADR 0033: Isolate hosted CI authentication in the existing Dev Hub
 
-- Status: Proposed; migration complete, hosted proof awaiting independent verification
+- Status: Accepted; CI identity proven; namespaced-signup scope amended 2026-11-09
 - Date: 2026-09-30
 - Brief sections: C8, C11 Phase 1, C13; verification protocol
 - Decision owner: Cobitech Solutions
@@ -34,8 +34,9 @@ with the `Minimum Access - Salesforce` profile and a dedicated permission set th
 grants only:
 
 - API Enabled, View Setup and Configuration, and View Roles and Role Hierarchy;
-- Read, Create, Edit and Delete on `ScratchOrgInfo`; and
-- Read, Edit and Delete on `ActiveScratchOrg`.
+- Read, Create, Edit and Delete on `ScratchOrgInfo`;
+- Read, Edit and Delete on `ActiveScratchOrg`; and
+- Read only on `NamespaceRegistry`.
 
 The pinned harness starts with a read of the Dev Hub Limits REST resource. That
 resource requires View Setup and Configuration, and Salesforce enforces View Roles
@@ -55,11 +56,14 @@ must be tested through the complete pinned lifecycle rather than inferred from t
 command list, and this unit preserves the final daily scratch-org slot for its
 exact-head hosted acceptance run.
 
-Do not grant packaging, namespace, customer-org, product-data or administrator
-permissions. A globally unique Salesforce username is an identifier, not a demand
-for another mailbox; the account can use Bill's existing monitored address for
-notifications and recovery. The username and email are operational secrets and do
-not belong in repository files, logs, issues or pull-request comments.
+The `NamespaceRegistry` read is required because Salesforce validates a linked
+namespace as the requesting Dev Hub user during namespaced scratch-org signup. It
+does not grant namespace registration, linking or mutation. Do not grant packaging,
+namespace mutation, customer-org, product-data or administrator permissions. A
+globally unique Salesforce username is an identifier, not a demand for another
+mailbox; the account can use Bill's existing monitored address for notifications
+and recovery. The username and email are operational secrets and do not belong in
+repository files, logs, issues or pull-request comments.
 
 The verifier retains its existing user. CI and verifier must have different
 Salesforce user IDs and independent local authorization entries. A logout or token
@@ -135,6 +139,30 @@ following without exposing credentials:
 The source pull request still merges before its verification-log pull request. A
 failed migration is infrastructure evidence, not permission to weaken the gate,
 reuse the verifier credential or bypass the retry policy.
+
+### Namespaced-signup amendment (2026-11-09)
+
+Activating project namespace `ksny` caused the first hosted namespaced signup to
+fail before allocation. Salesforce's `NamespaceRegistryValidator` evaluates the
+link as the requesting user, while the dedicated CI principal could not query
+`NamespaceRegistry`. Administrative scratch creation did not expose that missing
+permission because the administrator already had setup access. The failed head
+reported nonretryable `failed-cleanup`; no owned or active scratch org existed, and
+the retry policy correctly refuses that head permanently.
+
+Bill approved one exact expansion in Dev Hub `00Dbm00000yeiz3EAA`: Read on
+`NamespaceRegistry` for `Kusanya_CI_Dev_Hub` (`0PSbm00000YwE0bGAF`), with Create,
+Edit, Delete, View All and Modify All false. The operator created object-permission
+row `110bm0000U54JLBAQ2`. A complete post-change query found only the two prior
+scratch-lifecycle grants plus that read-only row; API Enabled, View Setup and View
+Roles remained unchanged. Acting through the dedicated `Kusanya-CI` authorization,
+the operator then read the one `ksny` registry row and its expected holder.
+
+This change is operator-applied at Bill's instruction, like the earlier View Setup
+and View Roles correction. The operator's query proves the configured capability
+but is not arm's-length review. The next exact-head verifier probe and hosted run
+must create as the CI principal and independently confirm ownership and cleanup;
+administrator-created scratch orgs are not evidence for that property.
 
 ## Consequences
 

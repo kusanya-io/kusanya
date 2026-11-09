@@ -28,9 +28,12 @@ setup permissions are read-only: the Limits REST resource used by the pinned
 harness requires View Setup and Configuration, and Salesforce requires View Roles
 and Role Hierarchy as its dependency. Object scope is Read, Create, Edit and Delete
 on `ScratchOrgInfo`, plus Read, Edit and Delete on `ActiveScratchOrg`, without View
-All or Modify All. The CI principal continues to see only its own scratch-org
+All or Modify All, plus Read only on `NamespaceRegistry`. The registry read is
+required by Salesforce's namespaced scratch-org signup validator and grants no
+linking or mutation. The CI principal continues to see only its own scratch-org
 records. ADR 0033 records why the two currently unused `ScratchOrgInfo` mutation
-grants remain candidates for a separately tested tightening.
+grants remain candidates for a separately tested tightening and why the registry
+grant is operator-applied rather than arm's-length evidence.
 
 Update this table whenever an org, role, principal type, credential location or
 owner changes. Record the change in an ADR when it changes a trust boundary.

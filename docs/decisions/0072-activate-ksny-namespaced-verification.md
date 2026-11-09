@@ -76,6 +76,19 @@ the bound connection's stored prefix. Tests exercise both empty and `ksny__`
 connections so the namespaced fix does not silently remove unnamespaced
 compatibility.
 
+The first corrected hosted run then exposed a separate Dev Hub principal boundary:
+Salesforce's namespaced-signup validator queries `NamespaceRegistry` as the
+requesting user, but the dedicated CI permission set did not grant that read. The
+CI signup failed before allocation with no owned or active org. Its nonretryable
+`failed-cleanup` marker permanently burns that head, so it is not rerun.
+
+Bill approved the narrow ADR 0033 amendment: Read only on `NamespaceRegistry` in
+the intended Dev Hub's existing `Kusanya_CI_Dev_Hub` permission set, with every
+mutation and broad-record flag false. The operator-applied grant and a successful
+CI-principal registry query are configuration evidence, not independent acceptance.
+A fresh head is required, and condition 2 remains pending until Claude first creates
+as that principal and the ordinary exact-head protected run passes.
+
 The builder runs public local tests only and does not create a scratch org. The pull
 request must declare the namespace change, the unchanged workflow/harness and the
 absence of package or permission changes. Bill alone approves the protected run.
