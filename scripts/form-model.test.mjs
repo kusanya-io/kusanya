@@ -477,7 +477,7 @@ test('new Apex uses local references, responsibility headers and API 64 without 
         'utf8',
       ),
     ).namespace,
-    '',
+    'ksny',
   );
 });
 

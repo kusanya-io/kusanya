@@ -395,11 +395,11 @@ missing immutable actor/tenant provisioning row still refuses session issuance.
 
 ## Salesforce namespace configuration
 
-`SALESFORCE_NAMESPACE_PREFIX` defaults to empty for Bill's approved unnamespaced
-Phase 1 work. A namespaced connection supplies its API prefix, for example
-`ksny__`; this does not change Salesforce's project namespace or claim a link.
+`SALESFORCE_NAMESPACE_PREFIX` remains an explicit deployment default and retains
+the empty fallback for compatibility. A Kusanya namespaced connection supplies its
+API prefix `ksny__`; the Salesforce source project now declares namespace `ksny`.
 `readConfig().salesforceNames` exposes an immutable resolver for that deployment
-default. Future tenant connections must each call `createSalesforceNames(prefix)`
+default. Tenant connections must each call `createSalesforceNames(prefix)`
 with their own stored configuration; a request header or global default is not
 tenant selection or authorization.
 

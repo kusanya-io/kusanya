@@ -1,6 +1,6 @@
 # ADR 0008: Select the ksny namespace and separate registration from packaging
 
-- Status: Accepted; Bill approved unnamespaced Phase 1; ksny registered but linking blocked; namespaced verification pending
+- Status: Accepted; ksny registered and linked to both approved Dev Hubs; namespaced verification pending
 - Date: 2026-09-11
 - Brief sections: C11 Phase 1 prerequisites, C12, C13
 - Decision owner: Cobitech Solutions
@@ -264,6 +264,37 @@ Apex or synthetic prefix fixtures does not remove that risk or establish
 namespaced behavior. This decision changes no CI workflow, harness pin, approval
 or secret. Future source-namespace/CI changes require their own reviewed work.
 
+## Supported link resolution and source activation (2026-11-09)
+
+Salesforce's supported Environment Hub flow subsequently completed without any
+operator configuration change. The namespace holder remains
+`00Dbm00000yxbH7EAI`. Read-only standard `NamespaceRegistry` queries returned one
+`ksny` row in each approved hub, both with `NamespaceOrg = 00Dbm00000yxbH7`:
+
+- intended development/verification and hosted-CI hub `00Dbm00000yeiz3EAA`:
+  row `1NRbm000000HzBxGAK`, created `2026-11-09T12:52:32Z`;
+- diagnostic hub `00Dak00001Pc1uFEAR`: row `1NRak000000G3WbGAK`, created
+  `2026-11-09T12:39:04Z`.
+
+The built-in `SalesforceDX Namespace Registry` connected apps in both hubs retained
+their prior timestamps and settings. No PKCE setting, callback, consumer detail,
+package, CI credential or existing-org configuration changed. The earlier PKCE
+analysis remains an observed request mismatch and a diagnosis, not a confirmed
+configuration fault. The successful retest shows that matching connected-app
+configuration was not evidence that the Salesforce-side failure persisted.
+
+The intended hub is already the org used by the protected hosted workflow, so no
+CI secret or principal migration is required. Retain `00Dak00001Pc1uFEAR` as a
+diagnostic fallback only: it is not a CI target, does not replace independent
+verification in `00Dbm00000yeiz3EAA`, and requires separate approval before any
+scratch-org use.
+
+Condition 1 of ADR 0071 is now met. Set `salesforce/sfdx-project.json` to namespace
+`ksny` so the ordinary protected run creates a real namespaced scratch org. This
+source change creates no package and grants no additional authority. ADR 0072
+records the exact-head namespaced-suite unit; a passing empty-namespace history or
+synthetic `ksny__` resolver fixture is not substitute evidence.
+
 ## Alternatives considered
 
 An alternative prefix was unnecessary: `ksny` passed the availability check and is
@@ -277,23 +308,24 @@ current approval.
 
 ## Consequences and verification
 
-- Availability alone was not a reservation. Registration is now verified by the
-  builder through the UI and Organization query; Dev Hub linking remains pending.
+- Availability alone was not a reservation. Registration and both approved Dev Hub
+  links are now verified by Organization and standard `NamespaceRegistry` queries.
 - Retain account recovery and administrative access under Cobitech's control. Do
   not put usernames, credentials or recovery material in this repository.
 - For every explicitly approved target Dev Hub, query its Organization identity and
   standard `NamespaceRegistry` rows for `ksny` (not Tooling API). Require exactly one
   row with prefix `ksny` and `NamespaceOrg` matching the namespace-holder's
   case-sensitive 15-character org ID before claiming that hub is linked.
-- Only the existing builder alias's hub was inspected, and it is not linked. The
-  full builder/verifier/CI hub topology remains unverified. A shared Phase 0 hub is
-  not evidence that the approved dedicated CI hub was provisioned.
-- No Phase 1 objects, packaging, deployment or C10 acceptance tests are implemented
-  or claimed here. The existing no-Salesforce-licence-per-collector rule is unchanged.
+- The intended development/verifier/CI roles share `00Dbm00000yeiz3EAA` under the
+  separately verified principal and credential boundaries in the org registry.
+  The diagnostic hub is retained but is not an operational verification target.
+- No package or C10 acceptance test is claimed by the link. The existing
+  no-Salesforce-licence-per-collector rule is unchanged.
 - All ADRs remain outside the documentation-only CI exemption. Batch this record
   with ADR 0002's licence confirmation, ADR 0006's amendment and the first Phase 1
-  unit under Bill's Option 2 approval. Do not claim the link complete or change
-  the exemption to avoid review or scratch capacity requirements.
+  unit under Bill's Option 2 approval. The later link and source activation require
+  ordinary protected-run and independent-verifier evidence; do not change the
+  exemption to avoid those requirements.
 
 Salesforce documents the separate
 [availability, Review and Save steps](https://developer.salesforce.com/docs/platform/pkg2-dev/guide/sfdx-dev-dev2gp-create-namespace.html)

@@ -2,9 +2,9 @@
 
 The source defines the Form/Version foundation plus question trees, choices,
 stored skip rules and mapping definitions below. This is not the whole
-C4 model, a publishing implementation or a claim of deployed/namespaced behavior.
-See ADRs 0009/0010/0013 for schema choices and ADR 0008 for Bill's unnamespaced-development
-approval. `salesforce/sfdx-project.json` still has an empty namespace.
+C4 model or, until ADR 0072's exact-head run passes, a claim of deployed namespaced
+behavior. See ADRs 0009/0010/0013 for schema choices and ADRs 0008/0072 for the
+transition from portable unnamespaced development to project namespace `ksny`.
 
 | Object             | Fields and role                                                                                                                                                                                           | Access / relationships                                                                                                          |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
@@ -395,7 +395,8 @@ of form identity, questions, choice lists and skip rules. No Salesforce fields o
 permissions change in that unit. It uses portable question names, not Salesforce
 record IDs or namespaced API names; future Salesforce readers/importers must resolve
 their connection's namespace before constructing it. Existing empty/`ksny__` resolver
-fixtures do not prove a namespaced deployment.
+fixtures remain compatibility tests; only the ADR 0072 scratch-org run can prove the
+actual namespaced deployment.
 
 ADR 0026 adds an internal, bounded Salesforce reader that translates one Form
 Version and its definition/mapping graph into those existing portable shapes. It

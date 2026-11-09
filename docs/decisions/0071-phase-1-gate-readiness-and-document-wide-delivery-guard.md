@@ -1,6 +1,6 @@
 # ADR 0071: Record Phase 1 gate readiness and guard document-wide deliveries
 
-- Status: Proposed; implementation and readiness record await independent review
+- Status: Accepted; condition 1 met on 2026-11-09; conditions 2 and 3 pending
 - Date: 2026-11-06
 - Decider: Bill Owiti
 - Brief sections: C8, C10.10, C10.12, C11 Phase 1
@@ -19,10 +19,9 @@ boundary is intentionally defensive against an incorrect caller. This is note 15
 Phase 1's implementation and acceptance evidence have also outgrown the historical
 per-unit roadmap text. C10.10 and C10.12 were independently reproduced, while the
 data model, compiler, XLSForm interchange, print delivery and publish CLI are all on
-accepted main. The builder still cannot claim the phase gate: `ksny` is registered
-but its Dev Hub link remains blocked by Salesforce's locked Namespace Registry
-connected-app setting, and ADR 0008 requires a namespaced suite before the next
-phase gate.
+accepted main. The builder still cannot claim the phase gate until the linked
+namespace is exercised by the exact-head suite and the acceptance tests are rerun
+at the gate.
 
 ## Decision
 
@@ -48,8 +47,11 @@ the following are true:
    ordinary protected-run and independent-verifier controls.
 3. Claude runs C10.10 and C10.12 at the gate and records the Phase 1 verdict.
 
-Until then the project namespace remains empty and this unit claims neither a
-namespaced behavior nor a Phase 1 pass.
+Condition 1 was met on 2026-11-09 through Salesforce's supported flow, with one
+verified `ksny` registry row in the intended hub `00Dbm00000yeiz3EAA` and no
+connected-app, PKCE, package or CI-secret change. ADR 0072 activates project
+namespace `ksny` and requests condition 2 evidence. Until that exact-head evidence
+passes, the repository claims neither namespaced behavior nor a Phase 1 pass.
 
 ## Alternatives considered
 
@@ -76,9 +78,9 @@ and 2077 of 2176 executable lines (95.45 percent); the exact new figure must be
 measured rather than predicted. Note 159 closes only after that evidence passes.
 
 C10.10 and C10.12 are recorded as previously satisfied evidence, not re-claimed by
-this hardening unit. Notes 136, 137 and 140 remain informational. The namespace link
-and namespaced suite are an explicit Phase 1 gate blocker, so this record is not a
-gate request.
+this hardening unit. Notes 136, 137 and 140 remain informational. The namespaced
+suite and Claude's gate rerun remain explicit Phase 1 gate blockers, so this record
+is not a gate request.
 
 ## Revisit when
 

@@ -53,11 +53,10 @@ versions, tenant OAuth flow, XML/queue/transaction strategy,
 API-call budget, storage drivers and measured Cobitech upload bandwidth. Packaging
 choice and paid dependencies require Bill's approval under C12.
 
-`ksny` is registered but linking is blocked. Bill's 13 September Option 2 permits
-the first unnamespaced model unit and ADR amendments together, superseding the
-earlier link/ADR sequencing restriction. Keep the project namespace empty; require
-linking before packaging or namespaced claims and run the suite namespaced as soon
-as linking works, before the next phase gate (ADRs 0006/0008).
+`ksny` is registered and, on 2026-11-09, linked through Salesforce's supported flow
+to both approved Dev Hubs without a connected-app, PKCE, package or CI-secret
+change. ADR 0072 activates project namespace `ksny`. The exact-head namespaced suite
+must pass before namespaced claims and before the next phase gate (ADRs 0006/0008/0071).
 
 ## Current Phase 1 gate readiness
 
@@ -68,12 +67,12 @@ reproduced on the exact PR #121 head under ADR 0061, and C10.12 was independentl
 reproduced from the exact PR #118 artifact in stock ODK Collect under ADR 0060.
 Those are evidence inputs to a future gate, not a builder-issued gate verdict.
 
-The remaining Phase 1 gate prerequisite is the vendor-blocked `ksny` Dev Hub link
-and the namespaced suite required by ADR 0008. Until that link exists, keep
-`"namespace": ""`, make no namespaced-behaviour or package claim, and do not ask
-Claude to close Phase 1. Notes 136, 137 and 140 remain informational evidence
-boundaries rather than gate findings. ADR 0071 closes note 159's defensive cleanup
-gap so no known product defect is being carried into that eventual gate.
+The Dev Hub link prerequisite is met. The remaining prerequisites are ADR 0072's
+applicable exact-head namespaced suite and Claude's fresh C10.10/C10.12 Phase 1 gate
+run. Until those pass, make no namespaced-behaviour, package or Phase 1 completion
+claim. Notes 136, 137 and 140 remain informational evidence boundaries rather than
+gate findings. ADR 0071 closes note 159's defensive cleanup gap so no known product
+defect is being carried into that eventual gate.
 
 The first unit contains Folder/Form/Form Version and external namespace resolution.
 The current unit adds Question trees, choices and stored skip rules, separate

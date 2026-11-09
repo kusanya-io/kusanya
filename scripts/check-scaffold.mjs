@@ -8,8 +8,8 @@ const scratch = json('salesforce/config/project-scratch-def.json');
 assert.equal(project.sourceApiVersion, '64.0');
 assert.equal(
   project.namespace,
-  '',
-  'Namespace registration and packaging are deferred.',
+  'ksny',
+  'The verified Dev Hub link requires namespaced scratch orgs.',
 );
 assert.equal(scratch.edition, 'Developer');
 assert.equal(project.packageDirectories[0].path, 'force-app');

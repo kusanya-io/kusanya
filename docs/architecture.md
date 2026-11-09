@@ -336,16 +336,17 @@ protected integration test launches the compiled binary through real TLS, the
 mounted application and PostgreSQL; its temporary OpenSSL certificate tooling is
 present only in the test image, not the runtime image.
 
-Bill's Option 2 permits unnamespaced development while the `ksny` Dev Hub link is
-blocked. Source stays namespace-local with an empty project namespace. The pure
+Bill's Option 2 permitted unnamespaced development while the `ksny` Dev Hub link
+was blocked. The supported link completed on 2026-11-09 and the project now declares
+namespace `ksny`; source remains namespace-local without hard-coded prefixes. The pure
 `createSalesforceNames(prefix)` service helper qualifies explicitly Kusanya-owned
 object/field/relationship names, preserves explicit customer/standard/foreign target identifiers and builds
 namespace-aware Apex REST paths. The deployment default is
 `SALESFORCE_NAMESPACE_PREFIX`, not tenant identity or authorization; future tenant
 connections and CLI/compiler/mapping adapters must supply their own configuration.
-Synthetic empty/`ksny__` fixtures do not prove actual namespaced behavior. Linking
-is required before packaging or namespaced claims, and a namespaced suite must run
-as soon as the link works, before the next phase gate (ADRs 0006, 0008, 0009).
+Synthetic empty/`ksny__` fixtures do not prove actual namespaced behavior. The
+exact-head suite in a namespaced scratch org remains required before the next phase
+gate and before any namespaced-behavior claim (ADRs 0006, 0008, 0071, 0072).
 
 ## Environments
 
