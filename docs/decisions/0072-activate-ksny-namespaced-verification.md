@@ -68,6 +68,14 @@ the ordinary suite rather than remaining latent. Empty-prefix fixtures continue 
 protect compatibility with explicitly unnamespaced tenant connections; they do not
 weaken the deployment namespace.
 
+Independent review of the first namespaced org found that five service requests
+still constructed unqualified Apex REST URLs even though `apexRestPath` already
+handled namespace segments correctly. This unit routes edited-definition import,
+publication snapshot and commit, and reviewer delivery through that resolver using
+the bound connection's stored prefix. Tests exercise both empty and `ksny__`
+connections so the namespaced fix does not silently remove unnamespaced
+compatibility.
+
 The builder runs public local tests only and does not create a scratch org. The pull
 request must declare the namespace change, the unchanged workflow/harness and the
 absence of package or permission changes. Bill alone approves the protected run.

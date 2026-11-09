@@ -11,6 +11,7 @@ import {
   type TenantConnectionSessionStore,
 } from '../tenant/salesforce-session.js';
 import type { TenantSalesforcePublisherConfiguration } from '../publication/tenant-salesforce-publisher.js';
+import { createSalesforceNames } from '../salesforce-names.js';
 import { renderPrintView, type PrintViewResult } from './render.js';
 
 const idPattern = /^[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?$/;
@@ -326,7 +327,9 @@ export async function reviewTenantSalesforceDefinition(
         throw new TenantReviewFailure('TENANT_REVIEW_SESSION');
       requestCount++;
       const response = await fetchImplementation(
-        `${session.instanceOrigin}/services/apexrest/v1/publications/definition`,
+        `${session.instanceOrigin}${createSalesforceNames(
+          session.namespacePrefix,
+        ).apexRestPath('v1/publications/definition')}`,
         {
           method: 'POST',
           headers: {

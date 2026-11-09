@@ -199,8 +199,9 @@ their canonical value.
 `verifySalesforceXlsFormRoundTrip` from
 `service/dist/src/interchange/salesforce-roundtrip.js` combines that importer with
 the integration-only Salesforce boundaries. The caller injects one exact
-`*.salesforce.com` origin and a fresh token provider. The harness makes exactly two
-POST requests: `/v1/definitions/import`, then `/v1/publications/definition`. It
+`*.salesforce.com` origin, the connection's validated namespace prefix and a fresh
+token provider. The harness resolves and makes exactly two POST requests:
+`v1/definitions/import`, then `v1/publications/definition`. It
 normalises only the generated Form key and requires compiled XForm XML byte
 equality, returning a measured request count and both SHA-256 values on success or
 mismatch. Snapshot-local Choice List and Mapping keys resolve relationships but do

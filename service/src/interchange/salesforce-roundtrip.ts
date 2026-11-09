@@ -3,6 +3,10 @@ import { createHash } from 'node:crypto';
 import { types } from 'node:util';
 import { compileForm } from '../compiler/compile.js';
 import type { Diagnostic, FormDefinition } from '../compiler/types.js';
+import {
+  createSalesforceNames,
+  type SalesforceNames,
+} from '../salesforce-names.js';
 import { exportAuthoringBundle } from './bundle.js';
 import { importEditedXlsFormWorkbook } from './xlsx-workbook.js';
 
@@ -12,6 +16,7 @@ const maxResponseBytes = 5_000_000;
 
 export interface SalesforceRoundTripConfiguration {
   readonly instanceOrigin: string;
+  readonly namespacePrefix: string;
   readonly getAccessToken: () => Promise<unknown>;
   readonly perRequestTimeoutMs: number;
   readonly overallTimeoutMs: number;
@@ -91,12 +96,14 @@ function exact(
 
 function configuration(value: SalesforceRoundTripConfiguration): {
   origin: string;
+  names: SalesforceNames;
   token: () => Promise<unknown>;
   perRequest: number;
   overall: number;
 } {
   const input = exact(value, [
     'instanceOrigin',
+    'namespacePrefix',
     'getAccessToken',
     'perRequestTimeoutMs',
     'overallTimeoutMs',
@@ -128,6 +135,7 @@ function configuration(value: SalesforceRoundTripConfiguration): {
     throw new RoundTripFailure('XLSFORM_SALESFORCE_INPUT');
   return {
     origin: input.instanceOrigin,
+    names: createSalesforceNames(input.namespacePrefix as string),
     token: input.getAccessToken as () => Promise<unknown>,
     perRequest: input.perRequestTimeoutMs as number,
     overall: input.overallTimeoutMs as number,
@@ -224,7 +232,7 @@ export async function verifySalesforceXlsFormRoundTrip(
   const deadline = performance.now() + config.overall;
   let requestCount = 0;
   const post = async (
-    path: string,
+    relativeResource: string,
     payload: string,
     status: number,
   ): Promise<unknown> => {
@@ -251,7 +259,7 @@ export async function verifySalesforceXlsFormRoundTrip(
           throw new RoundTripFailure('XLSFORM_SALESFORCE_TIMEOUT');
         requestCount++;
         const response = await fetchImplementation(
-          `${config.origin}/services/apexrest${path}`,
+          `${config.origin}${config.names.apexRestPath(relativeResource)}`,
           {
             method: 'POST',
             headers: {
@@ -287,7 +295,7 @@ export async function verifySalesforceXlsFormRoundTrip(
   try {
     const created = exact(
       await post(
-        '/v1/definitions/import',
+        'v1/definitions/import',
         JSON.stringify({
           schemaVersion: 1,
           definition: imported.bundle.definition,
@@ -305,7 +313,7 @@ export async function verifySalesforceXlsFormRoundTrip(
       throw new RoundTripFailure('XLSFORM_SALESFORCE_RESPONSE');
     const snapshot = exact(
       await post(
-        '/v1/publications/definition',
+        'v1/publications/definition',
         JSON.stringify({
           schemaVersion: 1,
           formVersionId: created.formVersionId,

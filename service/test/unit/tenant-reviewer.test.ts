@@ -89,7 +89,7 @@ void test('renders one tenant-bound snapshot without a publication mutation', as
         });
       assert.equal(
         url,
-        'https://tenant.my.salesforce.com/services/apexrest/v1/publications/definition',
+        'https://tenant.my.salesforce.com/services/apexrest/ksny/v1/publications/definition',
       );
       assert.equal(init.method, 'POST');
       assert.equal(init.redirect, 'manual');
@@ -119,6 +119,38 @@ void test('renders one tenant-bound snapshot without a publication mutation', as
     /attempt-scoped-access-token|synthetic-refresh-token/,
   );
   assert.equal(requests.length, 2);
+});
+
+void test('keeps empty-prefix reviewer delivery compatibility', async () => {
+  let definitionRequests = 0;
+  const result = await reviewTenantSalesforceDefinition(
+    store(connection({ namespacePrefix: '' })),
+    { ...context, namespacePrefix: '' },
+    configuration,
+    { formVersionId },
+    async (input) => {
+      const selected = requestUrl(input);
+      if (selected.endsWith('/services/oauth2/token'))
+        return json({
+          access_token: 'attempt-scoped-access-token',
+          instance_url: 'https://tenant.my.salesforce.com',
+          id: `https://login.salesforce.com/id/${orgId}/005000000000001`,
+          token_type: 'Bearer',
+        });
+      definitionRequests++;
+      assert.equal(
+        selected,
+        'https://tenant.my.salesforce.com/services/apexrest/v1/publications/definition',
+      );
+      return json({
+        schemaVersion: 1,
+        definition: mixedRepeatForm(),
+        mappingBundle,
+      });
+    },
+  );
+  assert.equal(result.ok, true);
+  assert.equal(definitionRequests, 1);
 });
 
 void test('refuses absent and mismatched bindings before retrieving a definition', async () => {

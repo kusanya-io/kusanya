@@ -8,6 +8,7 @@ import { reviewerFixture } from '../fixtures/print.js';
 const versionId = 'a01AA0000000001YAA';
 const configuration = {
   instanceOrigin: 'https://synthetic.my.salesforce.com',
+  namespacePrefix: 'ksny__',
   getAccessToken: async () => 'synthetic-token',
   perRequestTimeoutMs: 1000,
   overallTimeoutMs: 3000,
@@ -47,52 +48,64 @@ function requestBody(init: RequestInit | undefined): Record<string, unknown> {
   return JSON.parse(body) as Record<string, unknown>;
 }
 
-void test('imports, snapshots and proves normalized compiled XML byte equality', async () => {
-  let requests = 0;
-  const result = await verifySalesforceXlsFormRoundTrip(
-    configuration,
-    editedWorkbook(),
-    async (input, init) => {
-      requests++;
-      assert.equal(init?.method, 'POST');
-      assert.equal(init?.redirect, 'manual');
-      assert.equal(init?.credentials, 'omit');
-      assert.equal(
-        (init?.headers as Record<string, string>).authorization,
-        'Bearer synthetic-token',
-      );
-      const request = requestBody(init);
-      if (requestUrl(input).endsWith('/v1/definitions/import')) {
-        assert.deepEqual(Object.keys(request).sort(), [
-          'definition',
-          'mappingBundle',
-          'schemaVersion',
-        ]);
-        return json({ schemaVersion: 1, formVersionId: versionId }, 201);
-      }
-      assert.ok(requestUrl(input).endsWith('/v1/publications/definition'));
-      assert.deepEqual(request, { schemaVersion: 1, formVersionId: versionId });
-      const fixture = reviewerFixture();
-      fixture.form.questions[1]!.label = 'Edited school name';
-      return json(
-        {
+void test('imports and snapshots through namespaced and empty REST paths', async () => {
+  for (const namespacePrefix of ['ksny__', ''] as const) {
+    const restPrefix = namespacePrefix === '' ? '' : 'ksny/';
+    let requests = 0;
+    const result = await verifySalesforceXlsFormRoundTrip(
+      { ...configuration, namespacePrefix },
+      editedWorkbook(),
+      async (input, init) => {
+        requests++;
+        assert.equal(init?.method, 'POST');
+        assert.equal(init?.redirect, 'manual');
+        assert.equal(init?.credentials, 'omit');
+        assert.equal(
+          (init?.headers as Record<string, string>).authorization,
+          'Bearer synthetic-token',
+        );
+        const request = requestBody(init);
+        if (
+          requestUrl(input) ===
+          `${configuration.instanceOrigin}/services/apexrest/${restPrefix}v1/definitions/import`
+        ) {
+          assert.deepEqual(Object.keys(request).sort(), [
+            'definition',
+            'mappingBundle',
+            'schemaVersion',
+          ]);
+          return json({ schemaVersion: 1, formVersionId: versionId }, 201);
+        }
+        assert.equal(
+          requestUrl(input),
+          `${configuration.instanceOrigin}/services/apexrest/${restPrefix}v1/publications/definition`,
+        );
+        assert.deepEqual(request, {
           schemaVersion: 1,
-          definition: {
-            ...fixture.form,
-            form: { ...fixture.form.form, key: 'fresh_org_identity' },
+          formVersionId: versionId,
+        });
+        const fixture = reviewerFixture();
+        fixture.form.questions[1]!.label = 'Edited school name';
+        return json(
+          {
+            schemaVersion: 1,
+            definition: {
+              ...fixture.form,
+              form: { ...fixture.form.form, key: 'fresh_org_identity' },
+            },
+            mappingBundle: fixture.mappings,
           },
-          mappingBundle: fixture.mappings,
-        },
-        200,
-      );
-    },
-  );
-  assert.ok(result.ok, JSON.stringify(result));
-  assert.equal(requests, 2);
-  assert.equal(result.requestCount, 2);
-  assert.equal(result.formVersionId, versionId);
-  assert.equal(result.sourceSha256, result.importedSha256);
-  assert.match(result.sourceSha256, /^[0-9a-f]{64}$/);
+          200,
+        );
+      },
+    );
+    assert.ok(result.ok, JSON.stringify(result));
+    assert.equal(requests, 2);
+    assert.equal(result.requestCount, 2);
+    assert.equal(result.formVersionId, versionId);
+    assert.equal(result.sourceSha256, result.importedSha256);
+    assert.match(result.sourceSha256, /^[0-9a-f]{64}$/);
+  }
 });
 
 void test('refuses a fresh-org definition whose compiled XML differs', async () => {
@@ -139,6 +152,17 @@ void test('fails closed for hostile configuration, responses and deadlines', asy
     },
   );
   assert.equal(hostile.ok, false);
+  assert.equal(calls, 0);
+
+  const invalidNamespace = await verifySalesforceXlsFormRoundTrip(
+    { ...configuration, namespacePrefix: 'ksny' },
+    workbook(),
+    async () => {
+      calls++;
+      return json({}, 200);
+    },
+  );
+  assert.equal(invalidNamespace.ok, false);
   assert.equal(calls, 0);
 
   const extra = await verifySalesforceXlsFormRoundTrip(

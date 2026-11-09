@@ -1,6 +1,10 @@
 /** Attempt-scoped composition of the reviewed Salesforce publication boundaries. */
 import { types } from 'node:util';
 import type { Diagnostic } from '../compiler/types.js';
+import {
+  createSalesforceNames,
+  type SalesforceNames,
+} from '../salesforce-names.js';
 import type { ValidateXForm } from './odk-validate.js';
 import { createPublicationPackage } from './package.js';
 import {
@@ -17,6 +21,7 @@ const maxCommitBytes = 65_536;
 
 export interface SalesforcePublisherConfiguration {
   readonly instanceOrigin: string;
+  readonly namespacePrefix: string;
   readonly getAccessToken: () => Promise<unknown>;
   readonly perRequestTimeoutMs: number;
   readonly overallTimeoutMs: number;
@@ -113,6 +118,7 @@ function exactKeys(
 
 function decodeConfiguration(value: unknown): {
   origin: string;
+  names: SalesforceNames;
   token: () => Promise<unknown>;
   perRequest: number;
   overall: number;
@@ -122,6 +128,7 @@ function decodeConfiguration(value: unknown): {
     record,
     [
       'instanceOrigin',
+      'namespacePrefix',
       'getAccessToken',
       'perRequestTimeoutMs',
       'overallTimeoutMs',
@@ -155,6 +162,7 @@ function decodeConfiguration(value: unknown): {
     throw new PublisherFailure('PUBLICATION_PUBLISHER_INPUT');
   return {
     origin: url.origin,
+    names: createSalesforceNames(record.namespacePrefix as string),
     token: record.getAccessToken as () => Promise<unknown>,
     perRequest: record.perRequestTimeoutMs as number,
     overall: record.overallTimeoutMs as number,
@@ -350,7 +358,7 @@ export async function publishSalesforceDefinition(
     }
   };
   const post = async (
-    path: string,
+    relativeResource: string,
     body: string,
     maximum: number,
     code: PublisherFailureCode,
@@ -366,7 +374,7 @@ export async function publishSalesforceDefinition(
         const accessToken = await token(code);
         requestCount++;
         const response = await fetchImplementation(
-          `${configuration.origin}/services/apexrest${path}`,
+          `${configuration.origin}${configuration.names.apexRestPath(relativeResource)}`,
           {
             method: 'POST',
             headers: {
@@ -416,7 +424,7 @@ export async function publishSalesforceDefinition(
   try {
     snapshot = decodeDefinition(
       await post(
-        '/v1/publications/definition',
+        'v1/publications/definition',
         JSON.stringify({ schemaVersion: 1, formVersionId }),
         maxDefinitionBytes,
         'PUBLICATION_PUBLISHER_DEFINITION',
@@ -515,7 +523,7 @@ export async function publishSalesforceDefinition(
     try {
       const committed = decodeCommit(
         await post(
-          '/v1/publications/commit',
+          'v1/publications/commit',
           commitBody,
           maxCommitBytes,
           'PUBLICATION_PUBLISHER_COMMIT',

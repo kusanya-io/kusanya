@@ -202,6 +202,7 @@ export async function publishTenantSalesforceDefinition(
   return await publishSalesforceDefinition(
     {
       instanceOrigin: session.instanceOrigin,
+      namespacePrefix: session.namespacePrefix,
       getAccessToken: async () => await session.getAccessToken(),
       perRequestTimeoutMs: Math.min(decoded.perRequestTimeoutMs, remaining),
       overallTimeoutMs: remaining,
