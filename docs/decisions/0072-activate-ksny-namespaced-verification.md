@@ -1,6 +1,6 @@
 # ADR 0072: Activate ksny and require exact-head namespaced verification
 
-- Status: Proposed; exact-head namespaced evidence pending independent review
+- Status: Accepted; exact-head namespaced evidence verified on PR #148
 - Date: 2026-11-09
 - Brief sections: C8, C11 Phase 1, C13
 - Decision owner: Cobitech Solutions
@@ -39,9 +39,8 @@ must create a namespaced scratch org, deploy the complete source, pass every Ape
 test at at least 85 percent coverage and delete its owned org. Claude independently
 repeats the applicable suite in its own fresh namespaced scratch org.
 
-This unit satisfies ADR 0071 condition 2 only after both evidence paths pass. It is
-not the Phase 1 gate: Claude must then rerun C10.10 and C10.12 at the gate and issue
-the phase verdict. No package is created and the separate C12 package-format
+Both evidence paths passed on the exact PR #148 head, satisfying ADR 0071 condition 2. This is not the Phase 1 gate: Claude must rerun C10.10 and C10.12 at the gate and
+issue the phase verdict. No package is created and the separate C12 package-format
 decision remains outstanding.
 
 Retain the newly created diagnostic hub only as a non-CI diagnostic fallback. It
@@ -86,8 +85,11 @@ Bill approved the narrow ADR 0033 amendment: Read only on `NamespaceRegistry` in
 the intended Dev Hub's existing `Kusanya_CI_Dev_Hub` permission set, with every
 mutation and broad-record flag false. The operator-applied grant and a successful
 CI-principal registry query are configuration evidence, not independent acceptance.
-A fresh head is required, and condition 2 remains pending until Claude first creates
-as that principal and the ordinary exact-head protected run passes.
+A fresh head was required. Claude first created and deleted a namespaced org as the
+dedicated CI principal, deployed all 170 components and passed 111 tests at 2076 of
+2175 executable lines (95.45 percent). The protected exact-head run reproduced the
+same figures in its own `ksny` org, deleted its owned org and left none active.
+Condition 2 is therefore complete; ADR 0071 records the remaining gate condition.
 
 The builder runs public local tests only and does not create a scratch org. The pull
 request must declare the namespace change, the unchanged workflow/harness and the

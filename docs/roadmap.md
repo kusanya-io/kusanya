@@ -67,12 +67,13 @@ reproduced on the exact PR #121 head under ADR 0061, and C10.12 was independentl
 reproduced from the exact PR #118 artifact in stock ODK Collect under ADR 0060.
 Those are evidence inputs to a future gate, not a builder-issued gate verdict.
 
-The Dev Hub link prerequisite is met. The remaining prerequisites are ADR 0072's
-applicable exact-head namespaced suite and Claude's fresh C10.10/C10.12 Phase 1 gate
-run. Until those pass, make no namespaced-behaviour, package or Phase 1 completion
+The Dev Hub link and applicable exact-head namespaced-suite prerequisites are met.
+The remaining prerequisite is Claude's fresh C10.10/C10.12 run and Phase 1 verdict
+on the dedicated gate head. Until that passes, make no package or Phase 1 completion
 claim. Notes 136, 137 and 140 remain informational evidence boundaries rather than
-gate findings. ADR 0071 closes note 159's defensive cleanup gap so no known product
-defect is being carried into that eventual gate.
+gate findings, and note C remains a non-blocking infrastructure limitation. ADR
+0071 closes note 159's defensive cleanup gap so no known product defect is being
+carried into the gate.
 
 The first unit contains Folder/Form/Form Version and external namespace resolution.
 The current unit adds Question trees, choices and stored skip rules, separate

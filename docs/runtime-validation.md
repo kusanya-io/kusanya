@@ -72,10 +72,14 @@ tenant credential, contact a form server, or inspect unrelated projects/data.
 3. Leave the answer blank and try to advance: required validation must refuse it.
 4. Enter `24:00`, then `09:60`; each must remain on the question and show
    `Use HH:MM in 24-hour time.`
-5. In the same unsent synthetic draft, enter `00:00`, `09:30` and `23:59` one at
-   a time, returning to the question after each; every value must advance to the
-   end screen without any server submission.
-6. Record Collect/Android/emulator versions and only synthetic screenshots. Bill
+5. Enter `23:59x` and `x23:59`; each must remain on the question and show the
+   authored message. These anchored controls distinguish the complete rule from an
+   unanchored substring match.
+6. In the same unsent synthetic draft, enter `00:00`, `09:30`, `19:00` and `23:59`
+   one at a time, returning to the question after each; every value must advance to
+   the end screen without any server submission. The additional positive control
+   proves the form does not merely refuse every value.
+7. Record Collect/Android/emulator versions and only synthetic screenshots. Bill
    decides whether the test form/drafts are retained or removed afterward.
 
 A source/unit/ODK-Validate pass is C10.12 readiness, not acceptance. The acceptance
