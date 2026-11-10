@@ -93,7 +93,11 @@ void test('uses one bound tenant session as the sole credential path for publica
           id: `https://login.salesforce.com/id/${orgId}/${userId}`,
           token_type: 'Bearer',
         });
-      if (requestUrl.endsWith('/services/apexrest/v1/publications/definition'))
+      if (
+        requestUrl.endsWith(
+          '/services/apexrest/ksny/v1/publications/definition',
+        )
+      )
         return json({
           schemaVersion: 1,
           definition: simpleForm(),
@@ -172,7 +176,9 @@ void test('uses one bound tenant session as the sole credential path for publica
             headers: { 'content-type': 'application/octet-stream' },
           },
         );
-      if (requestUrl.endsWith('/services/apexrest/v1/publications/commit')) {
+      if (
+        requestUrl.endsWith('/services/apexrest/ksny/v1/publications/commit')
+      ) {
         const body = JSON.parse(init.body as string) as {
           publicationDigest: string;
         };
@@ -199,6 +205,44 @@ void test('uses one bound tenant session as the sole credential path for publica
       (request.init.headers as Record<string, string>).authorization,
       'Bearer attempt-scoped-access-token',
     );
+  assert.deepEqual(
+    published
+      .map(({ url: value }) => new URL(value).pathname)
+      .filter((path) => path.startsWith('/services/apexrest/')),
+    [
+      '/services/apexrest/ksny/v1/publications/definition',
+      '/services/apexrest/ksny/v1/publications/commit',
+    ],
+  );
+});
+
+void test('passes an empty stored prefix to the publication boundary', async () => {
+  let definitionRequests = 0;
+  const result = await publishTenantSalesforceDefinition(
+    store(connection({ namespacePrefix: '' })),
+    { ...context, namespacePrefix: '' },
+    configuration,
+    { formVersionId },
+    async () => ({ ok: true }),
+    async (input) => {
+      const requestUrl = url(input);
+      if (requestUrl.endsWith('/services/oauth2/token'))
+        return json({
+          access_token: 'attempt-scoped-access-token',
+          instance_url: 'https://tenant.my.salesforce.com',
+          id: `https://login.salesforce.com/id/${orgId}/${userId}`,
+          token_type: 'Bearer',
+        });
+      definitionRequests++;
+      assert.equal(
+        requestUrl,
+        'https://tenant.my.salesforce.com/services/apexrest/v1/publications/definition',
+      );
+      return json({ ...simpleForm(), schemaVersion: 2 });
+    },
+  );
+  assert.equal(result.ok, false);
+  assert.equal(definitionRequests, 1);
 });
 
 void test('refuses absent and mismatched tenant bindings before Salesforce publication', async () => {

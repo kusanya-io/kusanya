@@ -69,6 +69,7 @@ const configuration = (
   extra: Partial<SalesforcePublisherConfiguration> = {},
 ): SalesforcePublisherConfiguration => ({
   instanceOrigin: 'https://tenant.my.salesforce.com',
+  namespacePrefix: 'ksny__',
   getAccessToken: async () => 'PRIVATE_TOKEN',
   perRequestTimeoutMs: 1_000,
   overallTimeoutMs: 10_000,
@@ -100,14 +101,18 @@ function successfulFetch(
     loseCommitResponses?: boolean;
     loseFirstCommitResponse?: boolean;
     mismatch?: boolean;
+    namespacePrefix?: '' | 'ksny__';
   } = {},
 ): (input: string | URL | Request, init?: RequestInit) => Promise<Response> {
   let uploaded: [Uint8Array, Uint8Array] | undefined;
   let commitCalls = 0;
+  const restPrefix = options.namespacePrefix === '' ? '' : 'ksny/';
   return async (input, init = {}) => {
     const url = requestUrl(input);
     observed.push({ url, init });
-    if (url.endsWith('/services/apexrest/v1/publications/definition'))
+    if (
+      url.endsWith(`/services/apexrest/${restPrefix}v1/publications/definition`)
+    )
       return jsonResponse(snapshot());
     if (url.endsWith('/sobjects/Visit__c/describe'))
       return jsonResponse(described());
@@ -159,7 +164,9 @@ function successfulFetch(
     }
     if (url.includes('/sobjects/ContentDocument/') && init.method === 'DELETE')
       return new Response(null, { status: 204 });
-    if (url.endsWith('/services/apexrest/v1/publications/commit')) {
+    if (
+      url.endsWith(`/services/apexrest/${restPrefix}v1/publications/commit`)
+    ) {
       commitCalls++;
       const body = JSON.parse(requestBody(init)) as {
         publicationDigest: string;
@@ -203,13 +210,13 @@ void test('composes definition, Describe, package, attestation and commit in ord
   assert.deepEqual(
     observed.map(({ url }) => new URL(url).pathname),
     [
-      '/services/apexrest/v1/publications/definition',
+      '/services/apexrest/ksny/v1/publications/definition',
       `/services/data/v${salesforcePublisherApiVersion}/sobjects/Visit__c/describe`,
       `/services/data/v${salesforcePublisherApiVersion}/composite/sobjects`,
       `/services/data/v${salesforcePublisherApiVersion}/composite/sobjects/ContentVersion`,
       `/services/data/v${salesforcePublisherApiVersion}/sobjects/ContentVersion/${versionIds[0]}/VersionData`,
       `/services/data/v${salesforcePublisherApiVersion}/sobjects/ContentVersion/${versionIds[1]}/VersionData`,
-      '/services/apexrest/v1/publications/commit',
+      '/services/apexrest/ksny/v1/publications/commit',
     ],
   );
   for (const [index, request] of observed.entries()) {
@@ -233,6 +240,26 @@ void test('composes definition, Describe, package, attestation and commit in ord
     compileWarnings: null,
   });
   assert.ok(Object.isFrozen(result));
+});
+
+void test('keeps empty-prefix Apex REST publication compatibility', async () => {
+  const observed: ObservedRequest[] = [];
+  const result = await publishSalesforceDefinition(
+    configuration({ namespacePrefix: '' }),
+    { formVersionId },
+    acceptXForm,
+    successfulFetch(observed, { namespacePrefix: '' }),
+  );
+  assert.equal(result.ok, true);
+  assert.deepEqual(
+    observed
+      .map(({ url }) => new URL(url).pathname)
+      .filter((path) => path.startsWith('/services/apexrest/')),
+    [
+      '/services/apexrest/v1/publications/definition',
+      '/services/apexrest/v1/publications/commit',
+    ],
+  );
 });
 
 void test('refuses hostile inputs before token acquisition or network I/O', async () => {
@@ -304,6 +331,7 @@ void test('strictly refuses hostile connection configuration without invoking ac
     { ...configuration(), extra: true },
     { ...configuration(), instanceOrigin: 'http://tenant.my.salesforce.com' },
     { ...configuration(), instanceOrigin: 'https://example.com' },
+    { ...configuration(), namespacePrefix: 'ksny' },
     { ...configuration(), perRequestTimeoutMs: 0 },
     { ...configuration(), overallTimeoutMs: 120_001 },
     { ...configuration(), overallTimeoutMs: 999 },

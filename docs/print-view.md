@@ -115,7 +115,9 @@ does not claim it survives Salesforce field normalization.
 Target names follow the existing lexical contract: standard, customer and foreign
 namespace spellings remain intact, and `Account__r` is lexically accepted. That
 does not establish an object, relationship or field through Describe. The
-Salesforce project namespace remains empty; the renderer adds no owned prefix.
+Salesforce project namespace is `ksny`; the renderer still adds no owned prefix
+because its portable target-name inputs preserve standard, customer and foreign
+namespace spellings.
 
 The decoder checks shape, lexical names, references, duplicates and parent
 cycles. It does not validate schema existence, CRUD/FLS, field types, record

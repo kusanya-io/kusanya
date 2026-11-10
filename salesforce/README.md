@@ -140,13 +140,14 @@ cleanup and skips this fallback. It is not a manual target-org deletion tool or 
 Pending/unknown requests still need private reconciliation; runner loss can prevent
 the finalizer. See ADR 0006 and `docs/ci.md` for limits and the cleanup contract.
 
-API 64.0 remains the metadata baseline. `ksny` is registered, but Dev Hub linking
-is blocked by the locked connected-app PKCE setting. Bill's Option 2 explicitly
-permits initial Phase 1 source with `"namespace": ""`; no source/configuration
-switch or package creation is authorized here. Apex and metadata use local API
-references without a hard-coded namespace. Empty-namespace Apex and synthetic
-prefix fixtures do not establish namespaced behavior. Once linking works, the
-suite must run namespaced before the next phase gate (ADRs 0006/0008).
+API 64.0 remains the metadata baseline. `ksny` is registered and linked through
+Salesforce's supported flow to the intended development/verifier/hosted-CI Dev Hub
+and the retained diagnostic hub. The project now declares `"namespace": "ksny"`;
+no package is created. Apex and metadata continue to use local API references
+without a hard-coded namespace. External REST paths and API names must come from
+each connection's configured namespace prefix. The exact-head protected and
+independent namespaced suites are required before a namespaced-behaviour or Phase 1
+claim (ADRs 0006, 0008, 0071 and 0072).
 Every Apex class carries a responsibility header. The original smoke test still
 checks runtime version and zero SOQL/DML; model tests use only synthetic data.
 

@@ -62,6 +62,11 @@ The builder never approves its own run or merges its own PR.
    Never paste it into chat, issues, PR comments, logs or a repository file. Do not
    use a customer org credential or a repository-wide secret. Add the secret only
    after the environment protections are configured.
+   Its `Kusanya_CI_Dev_Hub` permission set must grant Read only on
+   `NamespaceRegistry` in addition to ADR 0033's scratch-lifecycle scope. Salesforce
+   evaluates linked-namespace registration as the requesting user during namespaced
+   scratch signup; without that read the platform validator fails before allocation.
+   Do not grant registry Create, Edit, Delete, View All or Modify All.
 4. Approve a run after inspecting its exact source SHA, workflow YAML and Salesforce
    metadata. Approval releases the credential; the source-repository guard alone
    does not protect against a malicious change to the workflow itself.
@@ -296,6 +301,12 @@ the hub. After migration they share only the hub's allocation and must continue 
 coordinate live capacity and reserve recovery capacity. The original 11 September
 slot estimates were withdrawn in issue #5 note 16. Check actual limits before each
 authorized fresh run.
+
+Namespaced scratch creation additionally requires that principal to read
+`NamespaceRegistry`. The 2026-11-09 operator-applied grant is intentionally limited
+to Read and must be rechecked before approving a protected namespaced run. A
+successful administrator creation does not prove the dedicated CI principal can
+pass Salesforce's namespace validator.
 
 ### Timeout recovery and truthful failures (issue #5)
 
