@@ -23,13 +23,16 @@ inspectable. Any future use or retirement is a separately reviewed operator acti
 
 The hosted CI principal uses the `Minimum Access - Salesforce` profile and the
 dedicated `Kusanya_CI_Dev_Hub` permission set. Its system-permission scope is API
-Enabled, View Setup and Configuration, View Roles and Role Hierarchy, and the
-read-only View Setup Audit Trail permission that Salesforce implies alongside the
-setup grants. The setup permissions are read-only: the Limits REST resource used by the pinned
-harness requires View Setup and Configuration, and Salesforce requires View Roles
-and Role Hierarchy as its dependency. The implied audit-trail permission has no
-separate setup-audit entry and was not introduced by the namespace grant. Object
-scope is Read, Create, Edit and Delete
+Enabled, View Setup and Configuration, View Roles and Role Hierarchy, and View
+Setup Audit Trail. The setup permissions are read-only: the Limits REST resource
+used by the pinned harness requires View Setup and Configuration, and Salesforce
+requires View Roles and Role Hierarchy as its dependency. View Setup Audit Trail
+was enabled at the same timestamp as those explicit setup grants, has no separate
+setup-audit entry and was not introduced by the namespace grant. Its cause is not
+established: comparable permission sets in these orgs carry View Setup without it.
+It remains an open least-privilege question for a separately approved lifecycle
+test rather than a claimed platform dependency. Object scope is Read, Create, Edit
+and Delete
 on `ScratchOrgInfo`, plus Read, Edit and Delete on `ActiveScratchOrg`, without View
 All or Modify All, plus Read only on `NamespaceRegistry`. The registry read is
 required by Salesforce's namespaced scratch-org signup validator and grants no

@@ -34,8 +34,8 @@ with the `Minimum Access - Salesforce` profile and a dedicated permission set th
 grants only:
 
 - API Enabled, View Setup and Configuration, View Roles and Role Hierarchy, and
-  the read-only View Setup Audit Trail permission that Salesforce implies as a
-  dependency of View Setup and Configuration;
+  the measured read-only View Setup Audit Trail permission whose reason for being
+  enabled is not established;
 - Read, Create, Edit and Delete on `ScratchOrgInfo`;
 - Read, Edit and Delete on `ActiveScratchOrg`; and
 - Read only on `NamespaceRegistry`.
@@ -48,10 +48,14 @@ the permission; a direct update exposed the `ViewSetup` dependency on `ViewRoles
 Both permissions are read-only setup visibility. They do not grant broader record
 visibility: after they were enabled, the CI principal still saw only the one
 `ScratchOrgInfo` record that it created while the verifier saw all 52 records.
-Salesforce also enabled `PermissionsViewSetupAuditTrail` at the same timestamp as
-the two explicit setup grants, without a separate audit entry. This implied,
-read-only dependency is part of the measured live scope; it was not added by the
-later `NamespaceRegistry` grant.
+`PermissionsViewSetupAuditTrail` is enabled at the same timestamp as the two
+explicit setup grants, without a separate audit entry. It is part of the measured
+live read-only scope and was not added by the later `NamespaceRegistry` grant, but
+the reason it is enabled is not established. Comparable permission sets in these
+orgs carry View Setup without View Setup Audit Trail, disproving the earlier
+dependency inference. Retain the measured scope until a separately approved
+operator action can test its removal through the complete pinned lifecycle; this
+ADR does not justify it as a Salesforce dependency.
 
 The current `ScratchOrgInfo` Edit and Delete grants are retained for this recovery
 head because the corrected permission set has been exercised successfully with
