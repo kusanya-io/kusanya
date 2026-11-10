@@ -62,6 +62,7 @@ function classify(parsed, processError, stage) {
     return 'CREATION_REJECTED';
   if (
     [
+      'DeployingSettingsTimeoutError',
       'ScratchOrgInfoTimeoutError',
       'ScratchOrgResumeTimeOutError',
       'ETIMEDOUT',

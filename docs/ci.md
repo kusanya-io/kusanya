@@ -288,6 +288,13 @@ role's run has ended; never delete another role's org or one with unknown/live
 status. Failed cleanup fails the run. Never cache org authentication or raw CLI
 output in GitHub artifacts.
 
+The exact Salesforce CLI name `DeployingSettingsTimeoutError` is a retryable
+creation timeout after the same ownership reconciliation and cleanup. It can occur
+after Salesforce has made the scratch org active while the CLI is still
+authenticating or deploying settings. The classification never permits an
+automatic retry, never overrides a failed cleanup and does not apply to Apex test
+failures or similarly named, non-allowlisted errors.
+
 `runJanitor` in `scripts/scratch-lifecycle.mjs` is a tested, default-dry-run helper,
 not a scheduled service or ready-made administrative CLI. Its caller must supply
 authoritative ended-run evidence for the requested role before explicitly applying
