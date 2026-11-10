@@ -290,6 +290,22 @@ test('only allowlisted transient setup errors are retryable; tests and auth are 
     'TIMEOUT',
   );
   assert.equal(
+    command('DeployingSettingsTimeoutError', 'scratch-create').code,
+    'TIMEOUT',
+  );
+  assert.equal(
+    command('DeployingSettingsTimeoutError', 'scratch-create').retryable,
+    true,
+  );
+  assert.equal(
+    command('DeployingSettingsTimeoutError', 'apex-tests').retryable,
+    false,
+  );
+  assert.equal(
+    command('DeployingSettingsTimeoutErrorExtra', 'scratch-create').code,
+    'CLI_FAILED',
+  );
+  assert.equal(
     command(
       'REQUEST_LIMIT_EXCEEDED',
       'scratch-create',

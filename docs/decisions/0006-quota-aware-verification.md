@@ -258,6 +258,15 @@ creation. Delete only positively owned orgs. A janitor requires both its own rol
 tag and authoritative evidence that that run has ended; unknown, active or foreign
 runs are not deletion targets. Cleanup failures fail verification and require
 operator attention. Never cache authentication as a CI artifact.
+
+Salesforce CLI can emit `DeployingSettingsTimeoutError` after scratch signup has
+made the org active but its authenticate/settings phase exceeds the CLI's internal
+deadline. Treat that exact allowlisted name as a retryable `TIMEOUT` only at the
+existing transient lifecycle stages. This changes admission only after the
+lifecycle has reconciled and deleted any positively owned org; it does not make an
+unknown creation, failed cleanup, Apex failure or non-transient stage retryable.
+The raw provider message remains withheld.
+
 The Phase 0 janitor is an injected, default-dry-run lifecycle helper, not an
 automatic scheduler or complete administrative command. Its caller must establish
 authoritative ended-run evidence; pending unknown creations require private

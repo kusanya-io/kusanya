@@ -33,7 +33,9 @@ protected GitHub `salesforce-ci` environment. Use a spare full Salesforce licenc
 with the `Minimum Access - Salesforce` profile and a dedicated permission set that
 grants only:
 
-- API Enabled, View Setup and Configuration, and View Roles and Role Hierarchy;
+- API Enabled, View Setup and Configuration, View Roles and Role Hierarchy, and
+  the read-only View Setup Audit Trail permission that Salesforce implies as a
+  dependency of View Setup and Configuration;
 - Read, Create, Edit and Delete on `ScratchOrgInfo`;
 - Read, Edit and Delete on `ActiveScratchOrg`; and
 - Read only on `NamespaceRegistry`.
@@ -46,6 +48,10 @@ the permission; a direct update exposed the `ViewSetup` dependency on `ViewRoles
 Both permissions are read-only setup visibility. They do not grant broader record
 visibility: after they were enabled, the CI principal still saw only the one
 `ScratchOrgInfo` record that it created while the verifier saw all 52 records.
+Salesforce also enabled `PermissionsViewSetupAuditTrail` at the same timestamp as
+the two explicit setup grants, without a separate audit entry. This implied,
+read-only dependency is part of the measured live scope; it was not added by the
+later `NamespaceRegistry` grant.
 
 The current `ScratchOrgInfo` Edit and Delete grants are retained for this recovery
 head because the corrected permission set has been exercised successfully with
