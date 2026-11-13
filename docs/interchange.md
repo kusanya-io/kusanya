@@ -283,7 +283,13 @@ The optional ODK Validate command remains in the [compiler runbook](compiler.md)
 validation of recompiled XML does not test a spreadsheet converter. No extra
 scratch org, CI change, namespace change, runtime-probe install or device setup is
 authorized. C10.10 still needs exact-head XLSForm file exchange into a fresh
-Salesforce org by the independent verifier. C10.12 passed separately under ADR 0060.
+namespaced Salesforce org by the independent verifier. At the Phase 1 gate repeat
+the three independently accepted edit cases: a visible question-label edit,
+clearing skip-derived relevance, and changing an answer-count repeat to fixed while
+leaving its dependent generated cell at the original exported value. For each case
+record the exact workbook bytes, the normalized Form key, exactly two Salesforce
+requests, both compiled XML hashes and byte equality; the three resulting hashes
+must be distinct. C10.12 is separately rerun in stock Collect under ADR 0060.
 
 Builder checks on the original interchange unit passed: 252 root tests and 151 service tests in both
 PowerShell and Git Bash; service lint/typecheck, repository formatting, scaffold

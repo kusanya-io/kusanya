@@ -1,6 +1,6 @@
 # ADR 0071: Record Phase 1 gate readiness and guard document-wide deliveries
 
-- Status: Accepted; condition 1 met on 2026-11-09; conditions 2 and 3 pending
+- Status: Phase 1 gate requested; conditions 1 and 2 met; condition 3 pending
 - Date: 2026-11-06
 - Decider: Bill Owiti
 - Brief sections: C8, C10.10, C10.12, C11 Phase 1
@@ -50,8 +50,21 @@ the following are true:
 Condition 1 was met on 2026-11-09 through Salesforce's supported flow, with one
 verified `ksny` registry row in the intended hub `00Dbm00000yeiz3EAA` and no
 connected-app, PKCE, package or CI-secret change. ADR 0072 activates project
-namespace `ksny` and requests condition 2 evidence. Until that exact-head evidence
-passes, the repository claims neither namespaced behavior nor a Phase 1 pass.
+namespace `ksny`. Condition 2 was met by the exact PR #148 head: independent and
+hosted runs each created a namespaced scratch org through the dedicated CI
+principal, deployed all 170 components, passed 111 Apex tests at 2076 of 2175
+executable lines (95.45 percent), confirmed all nine owned objects under `ksny__`
+and deleted their owned orgs. The service's empty and `ksny__` name/path fixtures
+also passed, including the live namespaced Apex REST probes that found and fixed
+the original unprefixed paths.
+
+This amendment requests condition 3 as its own Phase 1 gate. The verifier must run
+C10.10 and C10.12 again from the exact gate head rather than carrying their PR #121
+and PR #118 results forward. Because this gate request changes documentation only,
+the automatic pull-request check may take the documentation exemption; the phase
+gate still requires a reviewed manual dispatch with full Apex on the exact head.
+No sentence here claims the gate has passed before the verifier records that
+verdict in `docs/verification-log.md`.
 
 ## Alternatives considered
 
@@ -77,10 +90,21 @@ the older-version delivery regression. The expected control begins from 110 test
 and 2077 of 2176 executable lines (95.45 percent); the exact new figure must be
 measured rather than predicted. Note 159 closes only after that evidence passes.
 
-C10.10 and C10.12 are recorded as previously satisfied evidence, not re-claimed by
-this hardening unit. Notes 136, 137 and 140 remain informational. The namespaced
-suite and Claude's gate rerun remain explicit Phase 1 gate blockers, so this record
-is not a gate request.
+C10.10 and C10.12 are the acceptance claims of this gate request. C10.10 must use a
+fresh namespaced scratch org, an exact Kusanya-exported workbook, one accepted
+visible edit, atomic import plus snapshot, Form-key normalization and byte-identical
+compiled XML. C10.12 must rebuild the pinned validation fixture, confirm SHA-256
+`7e629c7ece2eeb9f75f42535837db62c0c5fe12be1cad52f9d1989cb099b975d`
+and exercise required, invalid, valid and anchored controls in unmodified stock ODK
+Collect v2026.3.5 without finalizing or submitting the form. Phase 0 foundation
+checks and the exact-head full-Apex run also apply because a gate reruns every
+earlier phase.
+
+Notes 136, 137 and 140 remain informational. Note C from PR #150 remains a
+non-blocking gate-infrastructure limitation: an extremely late scratch authenticate
+timeout can outlive the hosted verification step even though cleanup remains
+available. No package is created and no C10.11, Phase 2 or production-readiness
+claim is included.
 
 ## Revisit when
 
