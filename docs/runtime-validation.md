@@ -66,8 +66,11 @@ ODK Collect v2026.3.5, or an independently controlled equivalent with the exact
 version recorded. Do not install or upgrade Collect, change device settings, use a
 tenant credential, contact a form server, or inspect unrelated projects/data.
 
-1. Transfer only `work/c10-12/validation-equivalence.xml` into a fresh offline
-   synthetic project/form using the separately approved device procedure.
+1. Transfer only `work/c10-12/validation-equivalence.xml` into a fresh synthetic
+   project/form using the separately approved device procedure. Before opening the
+   form, enable airplane mode and confirm no network is active if the run is to be
+   described as offline; otherwise record it as unsent and unconfigured rather
+   than offline evidence.
 2. Confirm the form title/key and record the artifact SHA-256 above.
 3. Leave the answer blank and try to advance: required validation must refuse it.
 4. Enter `24:00`, then `09:60`; each must remain on the question and show
@@ -94,6 +97,12 @@ v2026.3.5. Blank, `24:00` and `09:60` were refused; the two invalid values showe
 the end screen in the same unsent draft. No form was finalized or submitted and no
 server, tenant, Salesforce org or credential was used. This is builder evidence;
 the C10.12 claim remains subject to independent exact-head reproduction.
+
+The Phase 1 gate reproduction at PR #152 used the same exact bytes and stock
+v2026.3.5, added `19:00` as a positive control and passed the complete nine-value
+matrix. Airplane mode was off and a network was active, so that run is recorded as
+unsent and unconfigured rather than offline: nothing was finalized or submitted,
+no instance was written, Sent stayed empty and the synthetic project had no server.
 
 ## Reproduce source checks
 

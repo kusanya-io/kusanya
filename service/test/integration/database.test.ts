@@ -2703,6 +2703,7 @@ void test(
         '0015_unlinked_publication_artifact_cleanup',
         '0016_privileged_salesforce_disconnect_rebind',
         '0017_artifact_cleanup_credential_guard',
+        '0018_durable_submission_relays',
       ],
     );
   },

@@ -1,6 +1,6 @@
 # ADR 0071: Record Phase 1 gate readiness and guard document-wide deliveries
 
-- Status: Phase 1 gate requested; conditions 1 and 2 met; condition 3 pending
+- Status: Accepted; Phase 1 gate passed at PR #152
 - Date: 2026-11-06
 - Decider: Bill Owiti
 - Brief sections: C8, C10.10, C10.12, C11 Phase 1
@@ -53,18 +53,19 @@ connected-app, PKCE, package or CI-secret change. ADR 0072 activates project
 namespace `ksny`. Condition 2 was met by the exact PR #148 head: independent and
 hosted runs each created a namespaced scratch org through the dedicated CI
 principal, deployed all 170 components, passed 111 Apex tests at 2076 of 2175
-executable lines (95.45 percent), confirmed all nine owned objects under `ksny__`
-and deleted their owned orgs. The service's empty and `ksny__` name/path fixtures
+executable lines (95.45 percent) and deleted their owned orgs. The independent
+run confirmed all nine owned objects under `ksny__`; the hosted run independently
+confirmed `Namespace = ksny` on its owned org. The service's empty and `ksny__` name/path fixtures
 also passed, including the live namespaced Apex REST probes that found and fixed
 the original unprefixed paths.
 
-This amendment requests condition 3 as its own Phase 1 gate. The verifier must run
-C10.10 and C10.12 again from the exact gate head rather than carrying their PR #121
-and PR #118 results forward. Because this gate request changes documentation only,
-the automatic pull-request check may take the documentation exemption; the phase
-gate still requires a reviewed manual dispatch with full Apex on the exact head.
-No sentence here claims the gate has passed before the verifier records that
-verdict in `docs/verification-log.md`.
+Condition 3 was met at PR #152. The verifier reran C10.10 and C10.12 from the
+exact gate head rather than carrying their PR #121 and PR #118 results forward,
+and recorded `PHASE 1: PASS` with zero findings. The automatic pull-request run
+took `salesforce-identical-exemption`, not the ordinary documentation exemption:
+ADR paths are deliberately excluded from `isOrdinaryDocumentation`. The separate
+reviewed manual dispatch supplied the required exact-head full-Apex evidence;
+dispatch evidence does not attach to the pull request as a check.
 
 ## Alternatives considered
 

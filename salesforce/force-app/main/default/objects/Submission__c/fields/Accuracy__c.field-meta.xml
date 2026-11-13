@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Accuracy__c</fullName><description>Reported horizontal accuracy of the submission-level location in metres.</description><label>Accuracy</label><precision>12</precision><scale>3</scale><type>Number</type></CustomField>

@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Date_Value__c</fullName><description>Date-only typed projection when the question type is date.</description><label>Date Value</label><type>Date</type></CustomField>

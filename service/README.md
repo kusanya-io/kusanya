@@ -1,10 +1,14 @@
 # Kusanya service
 
 Phase 0 supplied an operational scaffold: TypeScript on Node.js 24, Fastify 5,
-and PostgreSQL 17. Collector authentication, OpenRosa, submission storage,
-Salesforce mapping execution and the durable queue belong to later phases. No
-collector Salesforce account is created or required. See the architecture and ADRs
-in `../docs/`.
+and PostgreSQL 17. ADR 0073 adds the first Phase 2 durable raw-submission relay and
+strict XML identity parser. PostgreSQL verifies each raw-byte digest, distinguishes
+connection admission from identity conflict, retains retry failure evidence and
+retires attempt-100 rows without blocking healthy tenant work. Collector
+authentication and mounted OpenRosa routes, Salesforce mapping execution, media,
+acknowledgement and relay retention remain later Phase 2 work.
+No collector Salesforce account is created or required. See the architecture and
+ADRs in `../docs/`.
 
 ADR 0038 adds a service-internal tenant connection vault and the first product
 table. It stores one normalized Salesforce org binding per tenant and only an

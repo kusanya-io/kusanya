@@ -376,15 +376,32 @@ is an audit column. Append-only is enforced by the Kusanya write path, not as ta
 evidence against a privileged database role (ADR 0045).
 
 Checksum-pinned migrations run as an explicit one-shot command. Hashed collector
-credentials, durable relay state for submissions and API-use counters remain future
-tables and must retain tenant-scoped keys and tested isolation.
+credentials and API-use counters remain future tables and must retain tenant-scoped
+keys and tested isolation. ADR 0073 adds `tenant_submission_relays`: exact raw XML,
+a database-verified SHA-256, server-selected tenant/org/form identity, tenant-local
+instance idempotency and a database-enforced one-way queue. Claims lock only relay
+rows; attempt 100 retires to `dead` without blocking healthy work, and scheduled
+retries retain their last fixed failure code. It is not an OpenRosa endpoint, a
+Salesforce mapping transaction or a retention/deletion lifecycle.
 
-ADR 0029 defines the future Answer cardinality boundary for dynamic repeats. The
+ADR 0029 defines the Answer cardinality boundary for dynamic repeats. The
 submitted count is authoritative per enclosing repeat instance; trailing physical
 rows beyond it are excluded from normalized Answers and mapped child records, a
 deficit or invalid count fails closed, and the raw XML remains retained separately.
-Publication package schema 2 pins the rule as `submitted-count-v1`. This unit does
-not add Submission/Answer objects or perform ingestion DML.
+Publication package schema 2 pins the rule as `submitted-count-v1`. ADR 0073 adds
+the storage objects but does not yet parse answers or perform ingestion DML.
+
+## Phase 2 submission foundation
+
+Private `Submission__c` carries a unique external ODK instance ID, form version,
+channel, timestamps/location, raw XML ContentVersion pin plus SHA-256, explicit
+mapping state, failure stage and attempts. Controlled children `Answer__c` and
+`Error_Log__c` follow its lifecycle. Answer retains node name even when no Question
+matches, repeat location, parent and typed projections. Error Log points to the
+Submission that owns the raw XML instead of copying payload into a log. Private
+`Sync_Log__c` reserves received/mapped/failed and charged Salesforce-request counts
+for C10.15. Task, Collector, Device and Form Link lookups are added with their
+owning Phase 3 models rather than represented temporarily as text.
 
 No credentials or raw production seed records may become automated test fixtures.
 

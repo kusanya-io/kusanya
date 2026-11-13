@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Salesforce_Request_Count__c</fullName><defaultValue>0</defaultValue><description>Service-observed Salesforce API requests charged to this sync, used for the C10.15 budget.</description><label>Salesforce Request Count</label><precision>6</precision><required>true</required><scale>0</scale><type>Number</type></CustomField>

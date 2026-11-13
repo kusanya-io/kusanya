@@ -58,22 +58,25 @@ to both approved Dev Hubs without a connected-app, PKCE, package or CI-secret
 change. ADR 0072 activates project namespace `ksny`. The exact-head namespaced suite
 must pass before namespaced claims and before the next phase gate (ADRs 0006/0008/0071).
 
-## Current Phase 1 gate readiness
+## Phase 1 gate result and Phase 2 start
 
-The implementation deliverables assigned to Phase 1 now exist: the Salesforce data
+Phase 1 passed at PR #152 after exact-head C10.10 and C10.12 reproduction. The
+implementation deliverables assigned to Phase 1 exist: the Salesforce data
 model, deterministic XForm compiler, bounded edited-Kusanya XLSForm export/import,
 reviewer print delivery and tenant-bound publish CLI. C10.10 was independently
 reproduced on the exact PR #121 head under ADR 0061, and C10.12 was independently
 reproduced from the exact PR #118 artifact in stock ODK Collect under ADR 0060.
-Those are evidence inputs to a future gate, not a builder-issued gate verdict.
+Those results were rerun at the gate rather than carried forward.
 
-The Dev Hub link and applicable exact-head namespaced-suite prerequisites are met.
-The remaining prerequisite is Claude's fresh C10.10/C10.12 run and Phase 1 verdict
-on the dedicated gate head. Until that passes, make no package or Phase 1 completion
-claim. Notes 136, 137 and 140 remain informational evidence boundaries rather than
-gate findings, and note C remains a non-blocking infrastructure limitation. ADR
-0071 closes note 159's defensive cleanup gap so no known product defect is being
-carried into the gate.
+Claude's Phase 1 verdict is recorded in the verification log with zero findings.
+Notes 136, 137 and 140 remain informational evidence boundaries and note C remains
+a non-blocking infrastructure limitation. Notes D-F from the gate are corrected by
+the first Phase 2 unit.
+
+ADR 0073 starts Phase 2 with the durable tenant-scoped raw-submission relay and the
+C4 Submission/Answer/Error Log/Sync Log model. It mounts no OpenRosa route, performs
+no mapping or media upload and claims no C10 acceptance test. Those capabilities
+remain explicit later units before the Phase 2 gate.
 
 The first unit contains Folder/Form/Form Version and external namespace resolution.
 The current unit adds Question trees, choices and stored skip rules, separate

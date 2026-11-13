@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Failed_Stage__c</fullName><description>Named ingestion stage that last refused the submission.</description><label>Failed Stage</label><type>Picklist</type>
+    <valueSet><restricted>true</restricted><valueSetDefinition><sorted>false</sorted><value><fullName>parse</fullName><default>false</default><label>Parse</label></value><value><fullName>answers</fullName><default>false</default><label>Answers</label></value><value><fullName>task</fullName><default>false</default><label>Task</label></value><value><fullName>mapping</fullName><default>false</default><label>Mapping</label></value><value><fullName>media</fullName><default>false</default><label>Media</label></value><value><fullName>finalize</fullName><default>false</default><label>Finalize</label></value></valueSetDefinition></valueSet>
+</CustomField>

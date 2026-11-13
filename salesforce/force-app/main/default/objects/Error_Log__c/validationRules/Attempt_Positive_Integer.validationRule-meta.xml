@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Attempt_Positive_Integer</fullName><active>true</active><description>Error events belong to a positive integral attempt.</description><errorConditionFormula>OR(Attempt__c &lt; 1, Attempt__c &lt;&gt; FLOOR(Attempt__c))</errorConditionFormula><errorDisplayField>Attempt__c</errorDisplayField><errorMessage>Attempt must be a positive whole number.</errorMessage></ValidationRule>

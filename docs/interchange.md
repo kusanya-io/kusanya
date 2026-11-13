@@ -312,6 +312,11 @@ byte comparison made the mismatch regression fail with unequal hashes, then pass
 again after restoration. The builder created no org; hosted Apex and the fresh-org
 C10.10 round trip remain verifier evidence.
 
+Namespaced scratch-org creation for this runbook must use `salesforce/` as the
+working directory so Salesforce CLI reads the namespaced
+`salesforce/sfdx-project.json`. Creation from the repository root silently produces
+an org with an empty namespace and is not C10.10 evidence.
+
 No builder scratch org, local container run or optional runtime-tool installation
 was used for this unit. Claude's review, the public CI container checks and the
 approved hosted Apex run remain independent evidence, not supplied by this file.

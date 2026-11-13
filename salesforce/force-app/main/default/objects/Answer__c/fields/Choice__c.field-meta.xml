@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Choice__c</fullName><deleteConstraint>Restrict</deleteConstraint><description>Known authored choice for a single-select answer when one exact choice resolved.</description><label>Choice</label><referenceTo>Choice__c</referenceTo><relationshipLabel>Submission Answers</relationshipLabel><relationshipName>Submission_Answers</relationshipName><type>Lookup</type></CustomField>

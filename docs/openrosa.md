@@ -1,7 +1,10 @@
 # OpenRosa implementation status
 
-No OpenRosa endpoints are implemented in Phase 0. The health probes are operational
-HTTP endpoints and are not an OpenRosa implementation.
+No OpenRosa endpoint is mounted yet. The health probes are operational HTTP
+endpoints and are not an OpenRosa implementation. ADR 0073 adds the internal
+durable raw-submission queue and bounded XML identity parser that a future
+authenticated `POST /submission` must use; it cannot acknowledge, map or call
+Salesforce by itself.
 
 Phase 2 must implement and contract-test authenticated `/formList`, `/forms/{id}`,
 media manifests/downloads, submission negotiation via `HEAD /submission` and
