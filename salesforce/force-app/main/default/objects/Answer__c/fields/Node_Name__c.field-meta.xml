@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Node_Name__c</fullName><description>Exact local XML node name, retained even when no definition Question matches it.</description><label>Node Name</label><length>128</length><required>true</required><type>Text</type></CustomField>

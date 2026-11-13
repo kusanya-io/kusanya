@@ -951,6 +951,131 @@ const migrations = Object.freeze([
     END;
     $$`,
   }),
+  Object.freeze({
+    id: '0018_durable_submission_relays',
+    sql: `CREATE TABLE tenant_submission_relays (
+      relay_id uuid PRIMARY KEY,
+      tenant_id uuid NOT NULL REFERENCES tenant_administrator_tenants(tenant_id),
+      salesforce_org_id char(18) NOT NULL,
+      form_version_id char(18) NOT NULL,
+      form_key varchar(128) NOT NULL,
+      form_version bigint NOT NULL,
+      instance_id varchar(255) NOT NULL,
+      channel varchar(5) NOT NULL,
+      raw_xml bytea NOT NULL,
+      xml_sha256 char(64) NOT NULL,
+      state varchar(16) NOT NULL,
+      attempts integer NOT NULL DEFAULT 0,
+      failure_code varchar(64),
+      next_attempt_at timestamptz,
+      acknowledged_at timestamptz,
+      received_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      UNIQUE (tenant_id, instance_id),
+      UNIQUE (tenant_id, relay_id),
+      CHECK (salesforce_org_id ~ '^00D[A-Za-z0-9]{15}$'),
+      CHECK (form_version_id ~ '^[A-Za-z0-9]{18}$'),
+      CHECK (form_key ~ '^[A-Za-z_][A-Za-z0-9_.-]{0,127}$'),
+      CHECK (form_version BETWEEN 1 AND 2147483647),
+      CHECK (instance_id ~ '^uuid:[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[1-5][0-9A-Fa-f]{3}-[89AaBb][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$'),
+      CHECK (channel IN ('phone', 'web')),
+      CHECK (octet_length(raw_xml) BETWEEN 1 AND 5242880),
+      CHECK (xml_sha256 ~ '^[0-9a-f]{64}$'),
+      CHECK (attempts BETWEEN 0 AND 100),
+      CHECK (failure_code IS NULL OR failure_code ~ '^[A-Z][A-Z0-9_]{0,63}$'),
+      CHECK (
+        (state = 'queued' AND acknowledged_at IS NULL)
+        OR (state = 'dispatching' AND attempts > 0 AND failure_code IS NULL
+            AND next_attempt_at IS NULL AND acknowledged_at IS NULL)
+        OR (state = 'committed' AND attempts > 0 AND failure_code IS NULL
+            AND next_attempt_at IS NULL AND acknowledged_at IS NOT NULL)
+        OR (state = 'dead' AND attempts > 0 AND failure_code IS NOT NULL
+            AND next_attempt_at IS NULL AND acknowledged_at IS NULL)
+      ),
+      CHECK (state <> 'queued' OR (
+        attempts >= 0 AND failure_code IS NULL AND
+        (attempts = 0 OR next_attempt_at IS NOT NULL)
+      ))
+    );
+    CREATE INDEX tenant_submission_relays_dispatch
+      ON tenant_submission_relays (tenant_id, next_attempt_at, received_at)
+      WHERE state = 'queued';
+    CREATE OR REPLACE FUNCTION kusanya_require_connected_submission_tenant()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+    DECLARE
+      connected boolean;
+    BEGIN
+      SELECT true INTO connected
+      FROM tenant_administrator_tenants AS tenant
+      JOIN tenant_connections AS connection
+        ON connection.tenant_id = tenant.tenant_id
+       AND connection.salesforce_org_id = tenant.expected_salesforce_org_id
+       AND connection.authorization_origin = tenant.authorization_origin
+       AND connection.namespace_prefix = tenant.namespace_prefix
+      WHERE tenant.tenant_id = NEW.tenant_id
+        AND tenant.expected_salesforce_org_id = NEW.salesforce_org_id
+        AND tenant.salesforce_connection_state = 'connected'
+      FOR UPDATE OF tenant;
+      IF connected IS DISTINCT FROM true THEN
+        RAISE EXCEPTION 'submission relay requires a connected tenant tuple'
+          USING ERRCODE = '23514';
+      END IF;
+      RETURN NEW;
+    END;
+    $$;
+    CREATE TRIGGER tenant_submission_relays_connection_guard
+      BEFORE INSERT ON tenant_submission_relays
+      FOR EACH ROW
+      EXECUTE FUNCTION kusanya_require_connected_submission_tenant();
+    CREATE OR REPLACE FUNCTION kusanya_guard_submission_relay_transition()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN
+      IF ROW(OLD.relay_id, OLD.tenant_id, OLD.salesforce_org_id,
+             OLD.form_version_id, OLD.form_key, OLD.form_version,
+             OLD.instance_id, OLD.channel, OLD.raw_xml, OLD.xml_sha256,
+             OLD.received_at)
+         IS DISTINCT FROM
+         ROW(NEW.relay_id, NEW.tenant_id, NEW.salesforce_org_id,
+             NEW.form_version_id, NEW.form_key, NEW.form_version,
+             NEW.instance_id, NEW.channel, NEW.raw_xml, NEW.xml_sha256,
+             NEW.received_at) THEN
+        RAISE EXCEPTION 'submission relay identity and payload are immutable'
+          USING ERRCODE = '23514';
+      END IF;
+      IF NOT (
+        (OLD.state = 'queued' AND NEW.state = 'dispatching'
+          AND NEW.attempts = OLD.attempts + 1
+          AND NEW.failure_code IS NULL AND NEW.next_attempt_at IS NULL)
+        OR
+        (OLD.state = 'dispatching' AND NEW.state = 'queued'
+          AND NEW.attempts = OLD.attempts
+          AND NEW.failure_code IS NULL AND NEW.next_attempt_at IS NOT NULL)
+        OR
+        (OLD.state = 'dispatching' AND NEW.state = 'committed'
+          AND NEW.attempts = OLD.attempts
+          AND NEW.failure_code IS NULL AND NEW.next_attempt_at IS NULL
+          AND NEW.acknowledged_at IS NOT NULL)
+        OR
+        (OLD.state = 'dispatching' AND NEW.state = 'dead'
+          AND NEW.attempts = OLD.attempts
+          AND NEW.failure_code IS NOT NULL AND NEW.next_attempt_at IS NULL)
+      ) THEN
+        RAISE EXCEPTION 'invalid submission relay transition'
+          USING ERRCODE = '23514';
+      END IF;
+      NEW.updated_at = clock_timestamp();
+      RETURN NEW;
+    END;
+    $$;
+    CREATE TRIGGER tenant_submission_relays_transition_guard
+      BEFORE UPDATE ON tenant_submission_relays
+      FOR EACH ROW
+      EXECUTE FUNCTION kusanya_guard_submission_relay_transition()`,
+  }),
 ]);
 
 export class MigrationError extends Error {
@@ -980,7 +1105,8 @@ export type MigrationTarget =
   | '0014_privileged_publication_retry'
   | '0015_unlinked_publication_artifact_cleanup'
   | '0016_privileged_salesforce_disconnect_rebind'
-  | '0017_artifact_cleanup_credential_guard';
+  | '0017_artifact_cleanup_credential_guard'
+  | '0018_durable_submission_relays';
 
 /** Apply the checked plan through an optional exact target for upgrade verification. */
 export async function applyMigrations(

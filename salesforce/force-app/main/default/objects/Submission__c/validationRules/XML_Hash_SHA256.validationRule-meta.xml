@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>XML_Hash_SHA256</fullName><active>true</active><description>Require the lowercase SHA-256 spelling used for byte-exact replay detection.</description><errorConditionFormula>NOT(REGEX(XML_Hash__c, &quot;^[0-9a-f]{64}$&quot;))</errorConditionFormula><errorDisplayField>XML_Hash__c</errorDisplayField><errorMessage>XML Hash must be a lowercase SHA-256 value.</errorMessage></ValidationRule>

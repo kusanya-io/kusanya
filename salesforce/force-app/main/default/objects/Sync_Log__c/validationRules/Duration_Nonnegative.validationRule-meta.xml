@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Duration_Nonnegative</fullName><active>true</active><description>Measured sync duration cannot be negative.</description><errorConditionFormula>AND(NOT(ISBLANK(Duration_Milliseconds__c)), Duration_Milliseconds__c &lt; 0)</errorConditionFormula><errorDisplayField>Duration_Milliseconds__c</errorDisplayField><errorMessage>Duration cannot be negative.</errorMessage></ValidationRule>

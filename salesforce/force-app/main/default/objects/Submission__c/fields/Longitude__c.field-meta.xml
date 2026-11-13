@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Longitude__c</fullName><description>Submission-level capture longitude in decimal degrees when configured.</description><label>Longitude</label><precision>12</precision><scale>8</scale><type>Number</type></CustomField>

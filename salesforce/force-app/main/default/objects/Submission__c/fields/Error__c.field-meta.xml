@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Error__c</fullName><description>Bounded administrator-facing mapping failure detail retained with the raw XML; never contains credentials.</description><label>Error</label><length>32768</length><type>LongTextArea</type><visibleLines>6</visibleLines></CustomField>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>One collector or browser instance received for a published form version. Raw XML is retained as a Salesforce File and mapping state is explicit for idempotent retry.</description>
+    <enableActivities>false</enableActivities>
+    <enableFeeds>false</enableFeeds>
+    <enableHistory>false</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <externalSharingModel>Private</externalSharingModel>
+    <label>Submission</label>
+    <nameField>
+        <description>System-generated human-readable submission identifier.</description>
+        <displayFormat>SUB-{0000000000}</displayFormat>
+        <label>Submission Name</label>
+        <startingNumber>1</startingNumber>
+        <type>AutoNumber</type>
+    </nameField>
+    <pluralLabel>Submissions</pluralLabel>
+    <sharingModel>Private</sharingModel>
+</CustomObject>

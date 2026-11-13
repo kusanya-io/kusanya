@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus><description>Immutable bounded failure evidence for one submission attempt. The raw XML remains on the parent Submission rather than being copied into logs.</description>
+    <enableActivities>false</enableActivities><enableFeeds>false</enableFeeds><enableHistory>false</enableHistory><enableReports>true</enableReports><enableSearch>true</enableSearch>
+    <externalSharingModel>ControlledByParent</externalSharingModel><label>Error Log</label>
+    <nameField><description>System-generated identifier for one submission failure event.</description><displayFormat>ERR-{0000000000}</displayFormat><label>Error Log Name</label><startingNumber>1</startingNumber><type>AutoNumber</type></nameField>
+    <pluralLabel>Error Logs</pluralLabel><sharingModel>ControlledByParent</sharingModel>
+</CustomObject>
