@@ -977,25 +977,26 @@ const migrations = Object.freeze([
       CHECK (form_version_id ~ '^[A-Za-z0-9]{18}$'),
       CHECK (form_key ~ '^[A-Za-z_][A-Za-z0-9_.-]{0,127}$'),
       CHECK (form_version BETWEEN 1 AND 2147483647),
-      CHECK (instance_id ~ '^uuid:[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[1-5][0-9A-Fa-f]{3}-[89AaBb][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$'),
+      CHECK (instance_id ~ '^uuid:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
       CHECK (channel IN ('phone', 'web')),
       CHECK (octet_length(raw_xml) BETWEEN 1 AND 5242880),
       CHECK (xml_sha256 ~ '^[0-9a-f]{64}$'),
+      CHECK (xml_sha256 = encode(sha256(raw_xml), 'hex')),
       CHECK (attempts BETWEEN 0 AND 100),
       CHECK (failure_code IS NULL OR failure_code ~ '^[A-Z][A-Z0-9_]{0,63}$'),
       CHECK (
-        (state = 'queued' AND acknowledged_at IS NULL)
+        (state = 'queued' AND acknowledged_at IS NULL AND (
+          (attempts = 0 AND failure_code IS NULL AND next_attempt_at IS NULL)
+          OR (attempts > 0 AND failure_code IS NOT NULL
+              AND next_attempt_at IS NOT NULL)
+        ))
         OR (state = 'dispatching' AND attempts > 0 AND failure_code IS NULL
             AND next_attempt_at IS NULL AND acknowledged_at IS NULL)
         OR (state = 'committed' AND attempts > 0 AND failure_code IS NULL
             AND next_attempt_at IS NULL AND acknowledged_at IS NOT NULL)
         OR (state = 'dead' AND attempts > 0 AND failure_code IS NOT NULL
             AND next_attempt_at IS NULL AND acknowledged_at IS NULL)
-      ),
-      CHECK (state <> 'queued' OR (
-        attempts >= 0 AND failure_code IS NULL AND
-        (attempts = 0 OR next_attempt_at IS NOT NULL)
-      ))
+      )
     );
     CREATE INDEX tenant_submission_relays_dispatch
       ON tenant_submission_relays (tenant_id, next_attempt_at, received_at)
@@ -1020,7 +1021,7 @@ const migrations = Object.freeze([
       FOR UPDATE OF tenant;
       IF connected IS DISTINCT FROM true THEN
         RAISE EXCEPTION 'submission relay requires a connected tenant tuple'
-          USING ERRCODE = '23514';
+          USING ERRCODE = 'KS001';
       END IF;
       RETURN NEW;
     END;
@@ -1051,9 +1052,14 @@ const migrations = Object.freeze([
           AND NEW.attempts = OLD.attempts + 1
           AND NEW.failure_code IS NULL AND NEW.next_attempt_at IS NULL)
         OR
+        (OLD.state = 'queued' AND NEW.state = 'dead'
+          AND OLD.attempts >= 100 AND NEW.attempts = OLD.attempts
+          AND NEW.failure_code = 'ATTEMPT_LIMIT_EXHAUSTED'
+          AND NEW.next_attempt_at IS NULL)
+        OR
         (OLD.state = 'dispatching' AND NEW.state = 'queued'
           AND NEW.attempts = OLD.attempts
-          AND NEW.failure_code IS NULL AND NEW.next_attempt_at IS NOT NULL)
+          AND NEW.failure_code IS NOT NULL AND NEW.next_attempt_at IS NOT NULL)
         OR
         (OLD.state = 'dispatching' AND NEW.state = 'committed'
           AND NEW.attempts = OLD.attempts

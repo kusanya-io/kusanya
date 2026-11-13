@@ -12,6 +12,7 @@ const failureCodePattern = /^[A-Z][A-Z0-9_]{0,63}$/;
 
 export type SubmissionRelayFailureCode =
   | 'SUBMISSION_RELAY_INPUT'
+  | 'SUBMISSION_RELAY_ADMISSION'
   | 'SUBMISSION_RELAY_CONFLICT'
   | 'SUBMISSION_RELAY_STATE'
   | 'SUBMISSION_RELAY_STORAGE';
@@ -73,9 +74,9 @@ function storageCode(error: unknown): SubmissionRelayFailureCode {
   const descriptor = Object.getOwnPropertyDescriptor(error, 'code');
   if (!descriptor || !Object.hasOwn(descriptor, 'value'))
     return 'SUBMISSION_RELAY_STORAGE';
-  return descriptor.value === '23505'
-    ? 'SUBMISSION_RELAY_CONFLICT'
-    : 'SUBMISSION_RELAY_STORAGE';
+  if (descriptor.value === '23505') return 'SUBMISSION_RELAY_CONFLICT';
+  if (descriptor.value === 'KS001') return 'SUBMISSION_RELAY_ADMISSION';
+  return 'SUBMISSION_RELAY_STORAGE';
 }
 
 function checkedTenantId(value: unknown): string {
@@ -278,7 +279,13 @@ export class SubmissionRelayStore {
     let result;
     try {
       result = await this.database.query<RelayRow>(
-        `WITH candidates AS (
+        `WITH exhausted AS (
+           UPDATE tenant_submission_relays
+           SET state = 'dead', failure_code = 'ATTEMPT_LIMIT_EXHAUSTED',
+               next_attempt_at = NULL, updated_at = clock_timestamp()
+           WHERE tenant_id = $1 AND state = 'queued' AND attempts >= 100
+           RETURNING relay_id
+         ), candidates AS (
            SELECT relay.relay_id
            FROM tenant_submission_relays AS relay
            JOIN tenant_administrator_tenants AS tenant
@@ -291,9 +298,10 @@ export class SubmissionRelayStore {
             AND connection.authorization_origin = tenant.authorization_origin
             AND connection.namespace_prefix = tenant.namespace_prefix
            WHERE relay.tenant_id = $1 AND relay.state = 'queued'
+             AND relay.attempts < 100
              AND (relay.next_attempt_at IS NULL OR relay.next_attempt_at <= $2)
            ORDER BY relay.received_at, relay.relay_id
-           FOR UPDATE SKIP LOCKED
+           FOR UPDATE OF relay SKIP LOCKED
            LIMIT $3
          )
          UPDATE tenant_submission_relays AS relay
@@ -365,9 +373,9 @@ export class SubmissionRelayStore {
     const next = checkedDate(retryAt);
     await this.transition(
       `UPDATE tenant_submission_relays
-       SET state = 'queued', failure_code = NULL, next_attempt_at = $3
+       SET state = 'queued', failure_code = $4, next_attempt_at = $3
        WHERE tenant_id = $1 AND relay_id = $2 AND state = 'dispatching'`,
-      [tenantId, relayId, next],
+      [tenantId, relayId, next, failureCode],
     );
   }
 

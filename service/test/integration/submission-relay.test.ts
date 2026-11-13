@@ -99,7 +99,7 @@ void test(
       }),
       (error: unknown) =>
         error instanceof SubmissionRelayError &&
-        error.code === 'SUBMISSION_RELAY_STORAGE',
+        error.code === 'SUBMISSION_RELAY_ADMISSION',
     );
     const first = await store.enqueue({
       tenantId,
@@ -191,6 +191,82 @@ void test(
         ['committed', 2, true],
         ['dead', 1, false],
       ],
+    );
+
+    const exhaustedInstance = 'uuid:123e4567-e89b-12d3-a456-426614174090';
+    const healthyInstance = 'uuid:123e4567-e89b-12d3-a456-426614174091';
+    const exhausted = await store.enqueue({
+      tenantId,
+      salesforceOrgId: orgId,
+      formVersionId,
+      channel: 'phone',
+      rawXml: bytes(xml('exhausted', exhaustedInstance)),
+    });
+    for (let attempt = 1; attempt <= 100; attempt++) {
+      const batch = await store.claimBatch(tenantId, 1, new Date());
+      assert.equal(batch.length, 1);
+      assert.equal(batch[0]!.relayId, exhausted.relayId);
+      assert.equal(batch[0]!.attempt, attempt);
+      await store.markFailed(
+        tenantId,
+        exhausted.relayId,
+        'SALESFORCE_UNAVAILABLE',
+        new Date(Date.now() - 1_000),
+      );
+    }
+    const healthy = await store.enqueue({
+      tenantId,
+      salesforceOrgId: orgId,
+      formVersionId,
+      channel: 'phone',
+      rawXml: bytes(xml('healthy', healthyInstance)),
+    });
+    const afterExhaustion = await store.claimBatch(tenantId, 200, new Date());
+    assert.deepEqual(
+      afterExhaustion.map((row) => row.relayId),
+      [healthy.relayId],
+    );
+    const retired = await pool.query<{
+      state: string;
+      attempts: number;
+      failure_code: string;
+    }>(
+      `SELECT state, attempts, failure_code
+       FROM tenant_submission_relays
+       WHERE tenant_id = $1 AND relay_id = $2`,
+      [tenantId, exhausted.relayId],
+    );
+    assert.deepEqual(retired.rows, [
+      {
+        state: 'dead',
+        attempts: 100,
+        failure_code: 'ATTEMPT_LIMIT_EXHAUSTED',
+      },
+    ]);
+    await store.markCommitted(tenantId, healthy.relayId);
+
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO tenant_submission_relays
+           (relay_id, tenant_id, salesforce_org_id, form_version_id,
+            form_key, form_version, instance_id, channel, raw_xml,
+            xml_sha256, state, attempts)
+         VALUES ($1, $2, $3, $4, 'phase2_probe', 1, $5, 'phone',
+                 $6, $7, 'queued', 0)`,
+        [
+          randomUUID(),
+          tenantId,
+          orgId,
+          formVersionId,
+          'uuid:123e4567-e89b-12d3-a456-426614174092',
+          Buffer.from(xml('digest-mismatch')),
+          '0'.repeat(64),
+        ],
+      ),
+      (error: unknown) =>
+        typeof error === 'object' &&
+        error !== null &&
+        Object.getOwnPropertyDescriptor(error, 'code')?.value === '23514',
     );
 
     await assert.rejects(

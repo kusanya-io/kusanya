@@ -611,6 +611,18 @@ test('permission sets grant scoped definitions and only integration can import o
   ]) {
     const xml = read(`permissionsets/${name}.permissionset-meta.xml`);
     assert.ok(tag(xml, 'description')?.trim());
+    const topLevelElements = [
+      ...xml.matchAll(/^    <([A-Za-z][A-Za-z0-9]*)>/gm),
+    ].map((match) => match[1]);
+    const elementRuns = topLevelElements.filter(
+      (element, index) =>
+        index === 0 || element !== topLevelElements[index - 1],
+    );
+    assert.equal(
+      new Set(elementRuns).size,
+      elementRuns.length,
+      `${name} repeats a top-level metadata element after another type`,
+    );
     assert.doesNotMatch(
       xml,
       /<userPermissions>|<applicationVisibilities>|<externalDataSourceAccesses>|<flowAccesses>|<license>/,

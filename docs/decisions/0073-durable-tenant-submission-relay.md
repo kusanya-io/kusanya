@@ -28,15 +28,24 @@ tenant/org/form-version tuple, the ODK form key/version and canonical `uuid:`
 instance identity. A database trigger admits rows only while that exact tenant
 connection tuple is current and connected. `(tenant_id, instance_id)` is unique.
 An exact replay returns the existing relay; the same identity with different XML,
-form, channel or org is a conflict.
+form, channel or org is a conflict. PostgreSQL independently verifies that the
+stored SHA-256 is the digest of the stored raw bytes. Connection-admission failure
+uses its own fixed `SUBMISSION_RELAY_ADMISSION` boundary code rather than being
+reported as an identity conflict or generic storage failure.
 
 The relay state machine is database-enforced:
 
 `queued -> dispatching -> committed | dead`, with `dispatching -> queued` only for
-a scheduled retry. Identity, tenant, raw bytes, digest and received time are
-immutable. Claims use one tenant-keyed `FOR UPDATE SKIP LOCKED` statement, increment
-the attempt atomically and are bounded to 200 rows. A committed row carries the
-acknowledgement time; no HTTP boundary may acknowledge before that state exists.
+a scheduled retry. A retry retains its last fixed failure code; queued rows are
+therefore either new with zero attempts and no failure, or scheduled after a real
+failure with both retry time and failure evidence. A row that has already used 100
+attempts is moved to terminal `dead` with `ATTEMPT_LIMIT_EXHAUSTED` before claim
+candidates are selected, so it cannot poison the tenant's claim transaction.
+Identity, tenant, raw bytes, digest and received time are immutable. Claims use one
+tenant-keyed `FOR UPDATE OF relay SKIP LOCKED` statement, lock only relay rows,
+increment the attempt atomically and are bounded to 200 rows. A committed row
+carries the acknowledgement time; no HTTP boundary may acknowledge before that
+state exists.
 
 Use the already pinned `saxes` streaming parser to extract only routing identity.
 It rejects DTDs, processing instructions, comments, malformed XML, multiple roots,
@@ -82,9 +91,17 @@ cross-tenant claims, stored-byte tampering, XML active content and all bounds.
 PostgreSQL integration tests must prove the trigger rejects a disconnected or
 mismatched tuple, two tenants can retain the same instance identity independently,
 one relay cannot be claimed twice, retry increments attempts and direct payload or
-terminal-state rewrites fail with `23514`. Apex tests must prove duplicate instance
-IDs fail, raw unknown nodes are representable, answer/error children follow the
-submission lifecycle and a submission prevents deleting its definition version.
+terminal-state rewrites fail with `23514`. They also prove an attempt-100 row becomes
+dead without blocking a healthy row, admission has a distinct code, the raw-byte
+digest check is enforced and retry evidence is retained. Apex accepts only canonical
+lowercase `uuid:` instance identities so the case-sensitive external ID cannot store
+case variants of one logical UUID. Apex tests must prove duplicate instance IDs fail,
+raw unknown nodes are representable, answer/error children follow the submission
+lifecycle and a submission prevents deleting its definition version.
+
+Direct SQL deletion and a retention policy for relay rows are deliberately not part
+of this foundation. Until that reviewed lifecycle exists, privileged database roles
+remain capable of deletion; application code exposes no deletion operation.
 
 Notes D, E and F from the Phase 1 gate are corrected in the same documentation
 change: the namespaced-org working directory is explicit, evidence attribution is

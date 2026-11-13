@@ -102,6 +102,16 @@ private class SubmissionModelTest {
             StatusCode.DUPLICATE_VALUE,
             duplicate.getErrors()[0].getStatusCode()
         );
+        String uppercaseHex = 'uuid:' + instanceId.substring(5).toUpperCase();
+        Database.SaveResult caseVariant = Database.insert(
+            submission(version.Id, uppercaseHex),
+            false
+        );
+        Assert.isFalse(caseVariant.isSuccess());
+        Assert.areEqual(
+            StatusCode.FIELD_CUSTOM_VALIDATION_EXCEPTION,
+            caseVariant.getErrors()[0].getStatusCode()
+        );
         Database.DeleteResult protectedVersion = Database.delete(
             version,
             false

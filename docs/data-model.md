@@ -378,9 +378,11 @@ evidence against a privileged database role (ADR 0045).
 Checksum-pinned migrations run as an explicit one-shot command. Hashed collector
 credentials and API-use counters remain future tables and must retain tenant-scoped
 keys and tested isolation. ADR 0073 adds `tenant_submission_relays`: exact raw XML,
-SHA-256, server-selected tenant/org/form identity, tenant-local instance idempotency
-and a database-enforced one-way queue. It is not an OpenRosa endpoint or a
-Salesforce mapping transaction.
+a database-verified SHA-256, server-selected tenant/org/form identity, tenant-local
+instance idempotency and a database-enforced one-way queue. Claims lock only relay
+rows; attempt 100 retires to `dead` without blocking healthy work, and scheduled
+retries retain their last fixed failure code. It is not an OpenRosa endpoint, a
+Salesforce mapping transaction or a retention/deletion lifecycle.
 
 ADR 0029 defines the Answer cardinality boundary for dynamic repeats. The
 submitted count is authoritative per enclosing repeat instance; trailing physical

@@ -118,7 +118,10 @@ void test('claim verifies stored bytes and exposes only a bounded tenant batch',
   let observedValues: unknown[] = [];
   const database: QueryExecutor = {
     async query<Row>(text: string, values: unknown[] = []) {
-      assert.match(text, /FOR UPDATE SKIP LOCKED/);
+      assert.match(text, /FOR UPDATE OF relay SKIP LOCKED/);
+      assert.match(text, /attempts >= 100/);
+      assert.match(text, /ATTEMPT_LIMIT_EXHAUSTED/);
+      assert.match(text, /relay\.attempts < 100/);
       assert.match(text, /JOIN tenant_connections AS connection/);
       assert.match(text, /tenant\.salesforce_connection_state = 'connected'/);
       observedValues = values;
@@ -188,6 +191,8 @@ void test('state transitions are tenant-scoped and refuse missing rows', async (
     assert.equal(call.values[1], relayId);
   }
   assert.match(calls[0]!.text, /state = 'queued'/);
+  assert.match(calls[0]!.text, /failure_code = \$4/);
+  assert.equal(calls[0]!.values[3], 'SALESFORCE_UNAVAILABLE');
   assert.match(calls[1]!.text, /state = 'dead'/);
   assert.match(calls[2]!.text, /state = 'committed'/);
 
@@ -215,6 +220,12 @@ void test('hostile inputs and driver failures stay fixed-code and non-disclosing
     },
   });
   await assert.rejects(store.enqueue(input), /SUBMISSION_RELAY_STORAGE/);
+  const admission = new SubmissionRelayStore({
+    async query() {
+      throw Object.assign(new Error('must remain private'), { code: 'KS001' });
+    },
+  });
+  await assert.rejects(admission.enqueue(input), /SUBMISSION_RELAY_ADMISSION/);
   for (const invalid of [
     { ...input, tenantId: 'other' },
     { ...input, channel: 'email' },
