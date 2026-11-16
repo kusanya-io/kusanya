@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Question__c</fullName><deleteConstraint>Restrict</deleteConstraint><description>Known definition question for this answer. Null is deliberate for an unknown submitted node that must remain auditable.</description><label>Question</label><referenceTo>Question__c</referenceTo><relationshipLabel>Submission Answers</relationshipLabel><relationshipName>Submission_Answers</relationshipName><type>Lookup</type></CustomField>

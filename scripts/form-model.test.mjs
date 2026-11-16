@@ -122,6 +122,61 @@ const objects = {
     'Target_Key__c',
   ],
 };
+const submissionObjects = {
+  Submission__c: [
+    'Form_Version__c',
+    'Instance_Id__c',
+    'Channel__c',
+    'Status__c',
+    'Submitted_At__c',
+    'Received_At__c',
+    'Started_At__c',
+    'Ended_At__c',
+    'Latitude__c',
+    'Longitude__c',
+    'Accuracy__c',
+    'XML_Hash__c',
+    'Raw_XML_Version__c',
+    'Mapped_Record_Id__c',
+    'Error__c',
+    'Failed_Stage__c',
+    'Attempts__c',
+  ],
+  Answer__c: [
+    'Submission__c',
+    'Question__c',
+    'Node_Name__c',
+    'Repeat_Path__c',
+    'Repeat_Index__c',
+    'Parent_Answer__c',
+    'Value__c',
+    'Numeric_Value__c',
+    'Date_Value__c',
+    'Datetime_Value__c',
+    'Choice__c',
+    'File_Content_Document_Id__c',
+  ],
+  Error_Log__c: [
+    'Submission__c',
+    'Stage__c',
+    'Error_Code__c',
+    'Detail__c',
+    'Attempt__c',
+    'Occurred_At__c',
+  ],
+  Sync_Log__c: [
+    'Started_At__c',
+    'Completed_At__c',
+    'Status__c',
+    'Received_Count__c',
+    'Mapped_Count__c',
+    'Failed_Count__c',
+    'Salesforce_Request_Count__c',
+    'Duration_Milliseconds__c',
+    'Error_Code__c',
+  ],
+};
+const allObjects = { ...objects, ...submissionObjects };
 const derivedKeys = new Set([
   'Form_Version__c.Version_Key__c',
   'Question__c.Question_Key__c',
@@ -136,9 +191,9 @@ const picklistValues = (xml) =>
   );
 
 // Source-contract checks only: hosted deployment and Apex establish runtime behavior.
-test('model contains the C4 form, question, choice, skip and mapping fields with descriptions', () => {
-  assert.deepEqual(files('objects/').sort(), Object.keys(objects).sort());
-  for (const [object, expected] of Object.entries(objects)) {
+test('model contains the C4 definitions and Phase 2 submission fields with descriptions', () => {
+  assert.deepEqual(files('objects/').sort(), Object.keys(allObjects).sort());
+  for (const [object, expected] of Object.entries(allObjects)) {
     const base = `objects/${object}/`;
     const objectXml = read(`${base}${object}.object-meta.xml`);
     assert.ok(tag(objectXml, 'description')?.trim(), `${object} description`);
@@ -169,27 +224,38 @@ test('model contains the C4 form, question, choice, skip and mapping fields with
 });
 
 test('model ownership and file pointers use the documented metadata contracts', () => {
-  for (const object of Object.keys(objects)) {
-    const expected = ['Folder__c', 'Form__c', 'Choice_List__c'].includes(object)
+  for (const object of Object.keys(allObjects)) {
+    const expected = [
+      'Folder__c',
+      'Form__c',
+      'Choice_List__c',
+      'Submission__c',
+      'Sync_Log__c',
+    ].includes(object)
       ? 'Private'
       : 'ControlledByParent';
     const xml = read(`objects/${object}/${object}.object-meta.xml`);
     assert.equal(tag(xml, 'sharingModel'), expected);
     assert.equal(tag(xml, 'externalSharingModel'), expected);
   }
-  for (const [object, field, target] of [
-    ['Form_Version__c', 'Form__c', 'Form__c'],
-    ['Question__c', 'Form_Version__c', 'Form_Version__c'],
-    ['Choice__c', 'Choice_List__c', 'Choice_List__c'],
-    ['Skip_Rule__c', 'Question__c', 'Question__c'],
-    ['Mapping__c', 'Form_Version__c', 'Form_Version__c'],
-    ['Field_Mapping__c', 'Mapping__c', 'Mapping__c'],
+  for (const [object, field, target, writeRequiresMasterRead] of [
+    ['Form_Version__c', 'Form__c', 'Form__c', false],
+    ['Question__c', 'Form_Version__c', 'Form_Version__c', false],
+    ['Choice__c', 'Choice_List__c', 'Choice_List__c', false],
+    ['Skip_Rule__c', 'Question__c', 'Question__c', false],
+    ['Mapping__c', 'Form_Version__c', 'Form_Version__c', false],
+    ['Field_Mapping__c', 'Mapping__c', 'Mapping__c', false],
+    ['Answer__c', 'Submission__c', 'Submission__c', true],
+    ['Error_Log__c', 'Submission__c', 'Submission__c', true],
   ]) {
     const parent = fieldXml(object, field);
     assert.equal(tag(parent, 'type'), 'MasterDetail');
     assert.equal(tag(parent, 'referenceTo'), target);
     assert.equal(tag(parent, 'reparentableMasterDetail'), 'false');
-    assert.equal(tag(parent, 'writeRequiresMasterRead'), 'false');
+    assert.equal(
+      tag(parent, 'writeRequiresMasterRead'),
+      String(writeRequiresMasterRead),
+    );
   }
   for (const field of ['XForm__c', 'XLSForm__c']) {
     const xml = read(`objects/Form_Version__c/fields/${field}.field-meta.xml`);
@@ -545,6 +611,18 @@ test('permission sets grant scoped definitions and only integration can import o
   ]) {
     const xml = read(`permissionsets/${name}.permissionset-meta.xml`);
     assert.ok(tag(xml, 'description')?.trim());
+    const topLevelElements = [
+      ...xml.matchAll(/^    <([A-Za-z][A-Za-z0-9]*)>/gm),
+    ].map((match) => match[1]);
+    const elementRuns = topLevelElements.filter(
+      (element, index) =>
+        index === 0 || element !== topLevelElements[index - 1],
+    );
+    assert.equal(
+      new Set(elementRuns).size,
+      elementRuns.length,
+      `${name} repeats a top-level metadata element after another type`,
+    );
     assert.doesNotMatch(
       xml,
       /<userPermissions>|<applicationVisibilities>|<externalDataSourceAccesses>|<flowAccesses>|<license>/,
@@ -583,11 +661,14 @@ test('permission sets grant scoped definitions and only integration can import o
     const grants = [
       ...xml.matchAll(/<objectPermissions>([\s\S]*?)<\/objectPermissions>/g),
     ].map((match) => match[1]);
+    const definitionGrants = grants.filter((grant) =>
+      Object.hasOwn(objects, tag(grant, 'object')),
+    );
     assert.deepEqual(
-      grants.map((grant) => tag(grant, 'object')).sort(),
+      definitionGrants.map((grant) => tag(grant, 'object')).sort(),
       Object.keys(objects).sort(),
     );
-    for (const grant of grants) {
+    for (const grant of definitionGrants) {
       assert.equal(tag(grant, 'allowRead'), 'true');
       assert.equal(tag(grant, 'allowCreate'), String(canWrite));
       assert.equal(tag(grant, 'allowEdit'), String(canWrite));
@@ -615,11 +696,14 @@ test('permission sets grant scoped definitions and only integration can import o
         expected.push(`${object}.${field}`);
       }
     }
+    const definitionFieldGrants = fieldGrants.filter((grant) =>
+      Object.hasOwn(objects, tag(grant, 'field').split('.')[0]),
+    );
     assert.deepEqual(
-      fieldGrants.map((grant) => tag(grant, 'field')).sort(),
+      definitionFieldGrants.map((grant) => tag(grant, 'field')).sort(),
       expected.sort(),
     );
-    for (const grant of fieldGrants) {
+    for (const grant of definitionFieldGrants) {
       assert.equal(tag(grant, 'readable'), 'true');
       assert.equal(
         tag(grant, 'editable'),
@@ -629,6 +713,82 @@ test('permission sets grant scoped definitions and only integration can import o
             (tag(grant, 'field') !== 'Form__c.Publisher__c' ||
               name === 'Kusanya_Admin'),
         ),
+      );
+    }
+  }
+});
+
+test('submission permissions keep collector data scoped by role', () => {
+  const expectedObjects = Object.keys(submissionObjects).sort();
+  for (const [name, permissions] of Object.entries({
+    Kusanya_Admin: {
+      Submission__c: [true, true, false],
+      Answer__c: [true, true, true],
+      Error_Log__c: [false, false, false],
+      Sync_Log__c: [true, true, false],
+    },
+    Kusanya_Integration: {
+      Submission__c: [true, true, false],
+      Answer__c: [true, true, true],
+      Error_Log__c: [true, false, false],
+      Sync_Log__c: [true, true, false],
+    },
+    Kusanya_Supervisor: {
+      Submission__c: [false, false, false],
+      Answer__c: [false, false, false],
+      Error_Log__c: [false, false, false],
+      Sync_Log__c: [false, false, false],
+    },
+  })) {
+    const xml = read(`permissionsets/${name}.permissionset-meta.xml`);
+    const grants = [
+      ...xml.matchAll(/<objectPermissions>([\s\S]*?)<\/objectPermissions>/g),
+    ]
+      .map((match) => match[1])
+      .filter((grant) =>
+        Object.hasOwn(submissionObjects, tag(grant, 'object')),
+      );
+    assert.deepEqual(
+      grants.map((grant) => tag(grant, 'object')).sort(),
+      expectedObjects,
+    );
+    for (const grant of grants) {
+      const object = tag(grant, 'object');
+      const [create, edit, remove] = permissions[object];
+      assert.equal(tag(grant, 'allowRead'), 'true');
+      assert.equal(tag(grant, 'allowCreate'), String(create));
+      assert.equal(tag(grant, 'allowEdit'), String(edit));
+      assert.equal(tag(grant, 'allowDelete'), String(remove));
+      assert.equal(tag(grant, 'viewAllRecords'), 'true');
+      assert.equal(tag(grant, 'modifyAllRecords'), 'false');
+    }
+    const fieldGrants = [
+      ...xml.matchAll(/<fieldPermissions>([\s\S]*?)<\/fieldPermissions>/g),
+    ]
+      .map((match) => match[1])
+      .filter((grant) =>
+        Object.hasOwn(submissionObjects, tag(grant, 'field').split('.')[0]),
+      );
+    const expectedFields = [];
+    for (const [object, fields] of Object.entries(submissionObjects)) {
+      for (const field of fields) {
+        const metadata = fieldXml(object, field);
+        if (
+          tag(metadata, 'required') !== 'true' &&
+          tag(metadata, 'type') !== 'MasterDetail'
+        )
+          expectedFields.push(`${object}.${field}`);
+      }
+    }
+    assert.deepEqual(
+      fieldGrants.map((grant) => tag(grant, 'field')).sort(),
+      expectedFields.sort(),
+    );
+    for (const grant of fieldGrants) {
+      assert.equal(tag(grant, 'readable'), 'true');
+      assert.equal(
+        tag(grant, 'editable'),
+        String(name !== 'Kusanya_Supervisor'),
       );
     }
   }

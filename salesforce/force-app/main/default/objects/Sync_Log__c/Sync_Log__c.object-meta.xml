@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus><description>Aggregate evidence for one service-to-Salesforce sync call, including submission counts, duration and charged API requests.</description>
+    <enableActivities>false</enableActivities><enableFeeds>false</enableFeeds><enableHistory>false</enableHistory><enableReports>true</enableReports><enableSearch>true</enableSearch>
+    <externalSharingModel>Private</externalSharingModel><label>Sync Log</label>
+    <nameField><description>System-generated identifier for one sync call.</description><displayFormat>SYNC-{0000000000}</displayFormat><label>Sync Log Name</label><startingNumber>1</startingNumber><type>AutoNumber</type></nameField>
+    <pluralLabel>Sync Logs</pluralLabel><sharingModel>Private</sharingModel>
+</CustomObject>

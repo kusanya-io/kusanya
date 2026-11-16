@@ -34,7 +34,8 @@ API-call budget require a Phase 2 ADR and tests before implementation.
   path. No CI deployment to Cobitech or Azure.
 - A reserved mobile directory and decision/verification documentation.
 
-There is no product database schema yet. See [data model status](data-model.md),
+The service database now contains tenant administration/publication state and the
+first Phase 2 durable submission relay. See [data model status](data-model.md),
 [OpenAPI](openapi.yaml), [OpenRosa status](openrosa.md) and [threat model](threat-model.md).
 
 ## Initial Phase 1 source
@@ -45,8 +46,8 @@ identities. Question parent scope distinguishes once-only siblings from repeat
 children; Hint and Author Notes are separate fields. Integrity triggers reject
 invalid trees/references/ownership without exposing definition data. Stored skip
 conditions can now be compiled from a portable in-memory definition. These slices expose no form/publish API or
-collector delivery path. C10 tests 10 and
-12 remain unimplemented, not represented by source/smoke tests.
+collector delivery path. C10 tests 10 and 12 passed at the dedicated Phase 1 gate;
+the source checks in this section are not substitutes for that exact-head evidence.
 
 The first [compiler unit](compiler.md) is a pure TypeScript module inside the
 service, as permitted by C2 (ADR 0014). It accepts a strict, bounded neutral bundle,

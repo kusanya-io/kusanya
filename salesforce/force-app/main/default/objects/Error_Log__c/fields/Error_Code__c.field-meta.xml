@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Error_Code__c</fullName><description>Fixed non-sensitive machine code used by retry and operator presentation.</description><label>Error Code</label><length>64</length><required>true</required><type>Text</type></CustomField>

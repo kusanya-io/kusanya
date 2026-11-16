@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Attempts_Nonnegative_Integer</fullName><active>true</active><description>Submission attempt counts are whole and never negative.</description><errorConditionFormula>OR(Attempts__c &lt; 0, Attempts__c &lt;&gt; FLOOR(Attempts__c))</errorConditionFormula><errorDisplayField>Attempts__c</errorDisplayField><errorMessage>Attempts must be a nonnegative whole number.</errorMessage></ValidationRule>

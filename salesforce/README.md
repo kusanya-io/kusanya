@@ -39,7 +39,9 @@ protect Mapping/Field Mapping references (three fixed queries, no DML).
 Form/Form Version cascades bypass it; the deletion tests cover that
 platform distinction and partial-DML retries. Source conversion is not a deploy
 test. Published/Superseded definitions are now protected by ADR 0027;
-submission-aware retention and draft recovery remain deferred.
+submission-aware retention of published definitions and draft recovery remain
+deferred. ADR 0073 now adds the private Submission model itself; it does not yet
+perform ingestion or mapping.
 
 Form and direct Form Version deletion first remove only their target-owned skip
 rules (one query, at most one all-or-none child delete), then allow the native
@@ -56,7 +58,8 @@ configuration, not validated target access; transforms and stamps are not execut
 See ADR 0013 for partial-write staging, direct deletion and compiler responsibilities.
 
 The unassigned Admin/Integration/Supervisor permission sets cover nine definition
-objects. Integration and Supervisor have View All Records on that exact allowlist
+objects plus the Phase 2 Submission, Answer, Error Log and Sync Log models.
+Integration and Supervisor have View All Records on their reviewed allowlists
 for the reviewed snapshot reader, with Modify All Records still false. Only Admin
 can edit a Form's Publisher selection; the selected user receives one explicit
 record share but no permission assignment or setup privilege.
@@ -70,6 +73,14 @@ tenant integration identity on the `Minimum Access - Salesforce` profile, never
 `Standard User` and never a Salesforce user or licence per collector. Effective
 authority includes the profile: using a broader profile invalidates the review-only
 customer-record claim even when these permission sets remain narrow.
+
+ADR 0073's Submission identity is a unique external canonical ODK `uuid:` value.
+Its Answer and Error Log children follow the Submission lifecycle; an unknown XML
+node is retained through `Answer__c.Node_Name__c` with a null Question lookup.
+Raw XML is represented by a pinned ContentVersion identity and SHA-256 rather than
+copied into Error Log. Sync Log reserves aggregate counts and API consumption.
+Task, Collector, Device and Form Link relationships wait for their owning models;
+no placeholder lookup, collector Salesforce user or mapping endpoint is created.
 
 ## Iterative development only
 

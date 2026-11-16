@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Submission__c</fullName><description>Submission retaining the exact raw payload associated with this failure.</description><label>Submission</label><referenceTo>Submission__c</referenceTo><relationshipLabel>Error Logs</relationshipLabel><relationshipName>Error_Logs</relationshipName><reparentableMasterDetail>false</reparentableMasterDetail><type>MasterDetail</type><writeRequiresMasterRead>true</writeRequiresMasterRead></CustomField>

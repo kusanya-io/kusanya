@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Repeat_Index_Positive_Integer</fullName><active>true</active><description>When present, a repeat index is one-based and integral.</description><errorConditionFormula>AND(NOT(ISBLANK(Repeat_Index__c)), OR(Repeat_Index__c &lt; 1, Repeat_Index__c &lt;&gt; FLOOR(Repeat_Index__c)))</errorConditionFormula><errorDisplayField>Repeat_Index__c</errorDisplayField><errorMessage>Repeat Index must be a positive whole number.</errorMessage></ValidationRule>

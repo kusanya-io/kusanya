@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Value__c</fullName><description>Exact normalized textual answer used for audit and transform input.</description><label>Value</label><length>32768</length><type>LongTextArea</type><visibleLines>4</visibleLines></CustomField>
