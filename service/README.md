@@ -1,12 +1,15 @@
 # Kusanya service
 
 Phase 0 supplied an operational scaffold: TypeScript on Node.js 24, Fastify 5,
-and PostgreSQL 17. ADR 0073 adds the first Phase 2 durable raw-submission relay and
-strict XML identity parser. PostgreSQL verifies each raw-byte digest, distinguishes
-connection admission from identity conflict, retains retry failure evidence and
-retires attempt-100 rows without blocking healthy tenant work. Collector
-authentication and mounted OpenRosa routes, Salesforce mapping execution, media,
-acknowledgement and relay retention remain later Phase 2 work.
+and PostgreSQL 17. ADRs 0073 to 0075 add the first Phase 2 durable raw-submission
+relay, strict XML identity parser, credential-bound dispatcher and namespaced
+Salesforce raw-receipt transport. PostgreSQL verifies each raw-byte digest,
+distinguishes connection admission from identity conflict, retains terminal failure
+evidence and recovers leases against the database clock. Salesforce stores an
+idempotent `Submission__c` plus byte-attested private raw-XML File, but receipt stays
+retryable until mapping completes. Collector authentication and mounted OpenRosa
+routes, Salesforce mapping execution, media, acknowledgement, scheduler composition
+and relay retention remain later Phase 2 work.
 No collector Salesforce account is created or required. See the architecture and
 ADRs in `../docs/`.
 

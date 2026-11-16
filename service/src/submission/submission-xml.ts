@@ -2,7 +2,9 @@
 import { SaxesParser, type SaxesTagPlain } from 'saxes';
 import { types } from 'node:util';
 
-const maximumXmlBytes = 5_242_880;
+// Leaves room for canonical base64 plus the bounded JSON envelope under the
+// synchronous Apex REST request limit used by the receipt transport.
+const maximumXmlBytes = 750_000;
 const maximumNodes = 10_000;
 const maximumDepth = 64;
 const maximumText = 5_000_000;

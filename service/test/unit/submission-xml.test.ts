@@ -61,7 +61,7 @@ void test('submission XML refuses active content and ambiguous identity', () => 
 
 void test('submission XML applies byte, node and depth bounds', () => {
   assert.throws(
-    () => decodeSubmissionXml(bytes('x'.repeat(5_242_881))),
+    () => decodeSubmissionXml(bytes('x'.repeat(750_001))),
     /SUBMISSION_XML_INPUT/,
   );
   assert.throws(

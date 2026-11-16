@@ -224,16 +224,15 @@ void test('stale recovery is tenant-scoped, bounded and attempt-safe', async () 
       return result([{ relay_id: relayId } as Row]);
     },
   });
-  const staleBefore = new Date('2026-11-16T09:00:00.000Z');
-  const retryAt = new Date('2026-11-16T09:05:00.000Z');
-  assert.equal(await store.recoverStale(tenantId, staleBefore, retryAt, 25), 1);
+  assert.deepEqual(await store.recoverStale(tenantId, 5_000, 25), [relayId]);
   assert.match(sql, /state = 'dispatching'/);
-  assert.match(sql, /updated_at <= \$2/);
+  assert.match(sql, /updated_at <= clock_timestamp\(\)/);
+  assert.match(sql, /\$2::bigint \* interval '1 millisecond'/);
   assert.match(sql, /FOR UPDATE SKIP LOCKED/);
   assert.match(sql, /DISPATCH_LEASE_EXPIRED/);
   assert.match(sql, /ATTEMPT_LIMIT_EXHAUSTED/);
-  assert.match(sql, /ELSE \$3::timestamptz END/);
-  assert.deepEqual(values, [tenantId, staleBefore, retryAt, 25]);
+  assert.match(sql, /ELSE clock_timestamp\(\) END/);
+  assert.deepEqual(values, [tenantId, 5_000, 25]);
 });
 
 void test('hostile inputs and driver failures stay fixed-code and non-disclosing', async () => {

@@ -597,7 +597,7 @@ test('every metadata file keeps repeated direct children in one contiguous run',
   }
 });
 
-test('permission sets grant scoped definitions and only integration can import or publish', () => {
+test('permission sets grant scoped definitions and only integration can import, publish or receive submissions', () => {
   const reviewerApi = read(
     'permissionsets/Kusanya_Reviewer_Integration.permissionset-meta.xml',
   );
@@ -679,6 +679,7 @@ test('permission sets grant scoped definitions and only integration can import o
           'DefinitionSnapshotResource',
           'PublicationCommitResource',
           'PublicationArtifactCleanupResource',
+          'SubmissionIngestResource',
         ],
       );
       assert.deepEqual(
@@ -687,6 +688,7 @@ test('permission sets grant scoped definitions and only integration can import o
           'Import_Kusanya_Definition',
           'Publish_Kusanya',
           'Review_Kusanya_Definition',
+          'Ingest_Kusanya_Submissions',
         ],
       );
       for (const grant of [...classAccesses, ...customPermissions]) {

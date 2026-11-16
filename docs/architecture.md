@@ -35,7 +35,10 @@ API-call budget require a Phase 2 ADR and tests before implementation.
 - A reserved mobile directory and decision/verification documentation.
 
 The service database now contains tenant administration/publication state and the
-first Phase 2 durable submission relay. See [data model status](data-model.md),
+first Phase 2 durable submission relay. Its credential-bound dispatcher calls a
+namespace-aware Salesforce raw-receipt boundary that stores exact XML as a private
+File, but the scheduler remains unmounted and receipt is not mapping completion.
+See [data model status](data-model.md),
 [OpenAPI](openapi.yaml), [OpenRosa status](openrosa.md) and [threat model](threat-model.md).
 
 ## Initial Phase 1 source

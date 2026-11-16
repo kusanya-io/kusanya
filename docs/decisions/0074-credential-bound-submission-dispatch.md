@@ -32,25 +32,29 @@ decryption or delivery. The claim-time join remains a scheduling optimization on
 Credential-lock acquisition and refresh together have a local deadline, so a worker
 blocked behind a disconnect cannot outlive its lease and later reach delivery.
 
-`updated_at` is the lease clock. Before every claim, a bounded `FOR UPDATE SKIP
+`updated_at` is the lease clock, evaluated against PostgreSQL
+`clock_timestamp()` rather than caller time. Before every claim, a bounded `FOR UPDATE SKIP
 LOCKED` reaper moves expired `dispatching` rows back to `queued` with fixed
 `DISPATCH_LEASE_EXPIRED` evidence and an immediate retry time. An expired attempt at
-the ceiling becomes terminal `dead` with `ATTEMPT_LIMIT_EXHAUSTED`. The configured
+the ceiling becomes terminal `dead` while retaining its final fixed cause. The configured
 lease must exceed the sum of the independently bounded OAuth refresh and delivery
 deadlines by at least one second.
 
 Every commit or failure transition includes the claimed attempt number. A stale
 worker therefore cannot complete or fail a row after another worker has recovered
 and reclaimed it. Missing, duplicate, extra or malformed batch outcomes retry the
-whole claimed set under the existing instance-id idempotency rule. A local deadline
-releases the relay even when the injected delivery transport ignores its abort
-signal. Delivery returns only the closed dispositions `committed`, `retry` and
-`dead`; external messages never become stored failure codes. A retry requested on
-attempt 100 is stored and reported as terminal rather than promising another claim.
+whole claimed set under the existing instance-id idempotency rule. The local OAuth
+and delivery timers stay referenced until their `finally` blocks clear them, so an
+otherwise idle one-shot worker still releases the relay when the injected transport
+ignores abort. The OAuth deadline also aborts the token exchange, so a late response
+cannot persist rotation after the relay is requeued. Delivery returns only the
+closed dispositions `committed`, `retry` and `dead`; external messages never become
+stored failure codes. A retry requested on attempt 100 retains that final code and
+is reported as terminal rather than promising another claim.
 
-The dispatcher makes one delivery call for one tenant batch of at most 200. The
-actual Apex ingestion transport is injected and remains a later unit, so this ADR
-does not yet set or claim the C10.15 API-call budget.
+The dispatcher makes one delivery call for one tenant batch of at most 200. ADR
+0075 supplies the raw-receipt transport but leaves mapping and scheduler composition
+for later units, so this ADR does not set or claim the C10.15 API-call budget.
 
 ## Alternatives considered
 
@@ -70,14 +74,16 @@ does not yet set or claim the C10.15 API-call budget.
 
 The dispatcher has no public route or scheduler, does not implement Salesforce
 mapping, and cannot acknowledge an OpenRosa client. It claims no C10 acceptance
-test. A later transport must preserve the one-call tenant batch, Salesforce-side
-instance idempotency and per-row closed outcomes before this can become a delivery
-path.
+test. ADR 0075's transport preserves one Salesforce request for a size-bounded
+prefix, Salesforce-side instance idempotency and per-row closed outcomes, but keeps
+received rows retryable until mapping exists.
 
-Unit tests prove the reaper runs before claim, the complete claim tuple is checked
+Unit tests prove the reaper runs before claim using the database clock, the complete claim tuple is checked
 again while loading the credential, disconnect/rebind prevents OAuth and delivery,
-the deadline does not depend on transport abort compliance, attempt numbers fence
-state transitions, and malformed outcomes cannot partially settle a batch. A real
+the deadline does not depend on transport abort compliance, late token rotation is
+discarded, attempt numbers fence state transitions, locally snapshotted claims cannot
+be mutated by the store, overlapping recovery/claim counts once in `touched`, and
+malformed outcomes cannot partially settle a batch. A real
 PostgreSQL race leaves disconnect uncommitted while claim succeeds, then proves the
 credential load blocks, observes the committed deletion, performs zero OAuth or
 delivery calls and safely requeues the relay. Real PostgreSQL also proves a recovered
