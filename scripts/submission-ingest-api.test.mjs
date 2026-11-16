@@ -50,6 +50,14 @@ test('submission receipt is one user-mode transaction with no mapping authority'
   assert.equal((service.match(/AccessLevel\.USER_MODE/g) ?? []).length, 3);
   assert.match(service, /FirstPublishLocationId = submissions\[index\]\.Id/);
   assert.match(service, /Crypto\.generateDigest\('SHA-256', xml\)/);
+  assert.match(
+    service,
+    /existing\.Form_Version__c !=\s*formVersionByInstance\.get\(input\.instanceId\)/,
+  );
+  assert.doesNotMatch(
+    service,
+    /String\.valueOf\(existing\.Form_Version__c\) !=\s*input\.formVersionId/,
+  );
   assert.doesNotMatch(
     service,
     /Answer__c|Task__c|Mapped_Record_Id__c|Database\.upsert|Type\.forName|Schema\.getGlobalDescribe/,
@@ -87,7 +95,11 @@ test('hosted receipt tests pin bytes replay conflicts and denied principals', ()
   assert.doesNotMatch(source, /@TestSetup/);
   assert.match(source, /receivesExactBytesAndReplaysWithoutDuplicateRecords/);
   assert.match(source, /refusesConflictsMalformedBodiesAndUngrantedCallers/);
-  assert.match(source, /Assert\.areEqual\(xml, raw\.VersionData\)/);
+  assert.match(source, /String\.valueOf\(version\.Id\)\.substring\(0, 15\)/);
+  assert.match(
+    source,
+    /EncodingUtil\.base64Encode\(xml\)[\s\S]*EncodingUtil\.base64Encode\(raw\.VersionData\)/,
+  );
   assert.match(
     source,
     /Assert\.areEqual\(1, \[SELECT COUNT\(\) FROM Submission__c\]\)/,

@@ -49,6 +49,7 @@ public with sharing class SubmissionIngestService {
         Set<String> instanceIds = new Set<String>();
         Set<Id> formVersionIds = new Set<Id>();
         Map<String, Input> byInstance = new Map<String, Input>();
+        Map<String, Id> formVersionByInstance = new Map<String, Id>();
         Map<String, Blob> xmlByInstance = new Map<String, Blob>();
         for (Input input : inputs) {
             if (
@@ -97,6 +98,7 @@ public with sharing class SubmissionIngestService {
                 refuse();
             formVersionIds.add(formVersionId);
             byInstance.put(input.instanceId, input);
+            formVersionByInstance.put(input.instanceId, formVersionId);
             xmlByInstance.put(input.instanceId, xml);
         }
 
@@ -139,8 +141,8 @@ public with sharing class SubmissionIngestService {
             if (existing == null) {
                 fresh.add(input);
             } else if (
-                String.valueOf(existing.Form_Version__c) !=
-                input.formVersionId ||
+                existing.Form_Version__c !=
+                formVersionByInstance.get(input.instanceId) ||
                 existing.Channel__c != input.channel ||
                 existing.XML_Hash__c != input.xmlSha256 ||
                 String.isBlank(existing.Raw_XML_Version__c)

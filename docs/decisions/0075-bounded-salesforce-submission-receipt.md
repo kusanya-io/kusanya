@@ -107,5 +107,5 @@ remaining Phase 2 work, not implied by the receipt name.
 ## Revisit when
 
 The answer parser and mapping engine land, media manifests are transported, the
-the scheduler is mounted, a real valid XML approaches 750,000 bytes, or C10.15
+scheduler is mounted, a real valid XML approaches 750,000 bytes, or C10.15
 measurements require a different request-size or count policy.

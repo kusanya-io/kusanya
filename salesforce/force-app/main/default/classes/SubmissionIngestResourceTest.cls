@@ -20,7 +20,7 @@ private class SubmissionIngestResourceTest {
             String instanceId = 'uuid:123e4567-e89b-12d3-a456-426614174000';
             String body = requestBody(
                 relayId,
-                version.Id,
+                String.valueOf(version.Id).substring(0, 15),
                 instanceId,
                 xml,
                 null
@@ -40,7 +40,10 @@ private class SubmissionIngestResourceTest {
                 FROM ContentVersion
                 WHERE Id = :stored.Raw_XML_Version__c
             ];
-            Assert.areEqual(xml, raw.VersionData);
+            Assert.areEqual(
+                EncodingUtil.base64Encode(xml),
+                EncodingUtil.base64Encode(raw.VersionData)
+            );
             Assert.areEqual(
                 1,
                 [
@@ -88,7 +91,7 @@ private class SubmissionIngestResourceTest {
             Form_Version__c version = publishedVersion();
             String valid = requestBody(
                 relayId,
-                version.Id,
+                String.valueOf(version.Id),
                 instanceId,
                 xml,
                 null
@@ -102,7 +105,13 @@ private class SubmissionIngestResourceTest {
                 invoke(
                     'POST',
                     'application/json',
-                    requestBody(relayId, version.Id, instanceId, changed, null)
+                    requestBody(
+                        relayId,
+                        String.valueOf(version.Id),
+                        instanceId,
+                        changed,
+                        null
+                    )
                 ),
                 relayId,
                 'dead',
@@ -187,7 +196,7 @@ private class SubmissionIngestResourceTest {
 
     private static String requestBody(
         String relayId,
-        Id versionId,
+        String versionId,
         String instanceId,
         Blob xml,
         String channel
@@ -201,7 +210,7 @@ private class SubmissionIngestResourceTest {
                 'submissions' => new List<Object>{
                     new Map<String, Object>{
                         'relayId' => relayId,
-                        'formVersionId' => String.valueOf(versionId),
+                        'formVersionId' => versionId,
                         'instanceId' => instanceId,
                         'channel' => channel == null ? 'phone' : channel,
                         'xmlSha256' => digest,
