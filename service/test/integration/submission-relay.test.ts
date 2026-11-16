@@ -4,11 +4,16 @@ import { test } from 'node:test';
 import { createPostgresPool, createQueryExecutor } from '../../src/database.js';
 import { readConfig } from '../../src/config.js';
 import { applyMigrations } from '../../src/migrations.js';
+import { dispatchTenantSubmissionBatch } from '../../src/submission/submission-dispatcher.js';
 import {
   SubmissionRelayError,
   SubmissionRelayStore,
 } from '../../src/submission/submission-relay-store.js';
-import { normalizeSalesforceOrgId } from '../../src/tenant/connection-store.js';
+import {
+  normalizeSalesforceOrgId,
+  TenantConnectionStore,
+} from '../../src/tenant/connection-store.js';
+import { createTenantCredentialVault } from '../../src/tenant/credential-vault.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 const databaseRequired = process.env.REQUIRE_DATABASE_TESTS === 'true';
@@ -165,13 +170,14 @@ void test(
     await store.markFailed(
       tenantId,
       first.relayId,
+      claimed[0]!.attempt,
       'SALESFORCE_UNAVAILABLE',
       new Date(Date.now() - 1_000),
     );
     const retried = await store.claimBatch(tenantId, 1, new Date());
     assert.equal(retried[0]!.attempt, 2);
-    await store.markCommitted(tenantId, first.relayId);
-    await store.markFailed(otherTenantId, other.relayId, 'MAPPING_REFUSED');
+    await store.markCommitted(tenantId, first.relayId, retried[0]!.attempt);
+    await store.markFailed(otherTenantId, other.relayId, 1, 'MAPPING_REFUSED');
 
     const states = await pool.query<{
       tenant_id: string;
@@ -193,6 +199,39 @@ void test(
       ],
     );
 
+    const leased = await store.enqueue({
+      tenantId,
+      salesforceOrgId: orgId,
+      formVersionId,
+      channel: 'phone',
+      rawXml: bytes(xml('leased', 'uuid:123e4567-e89b-12d3-a456-426614174080')),
+    });
+    const leasedClaim = (await store.claimBatch(tenantId, 1, new Date()))[0]!;
+    assert.equal(leasedClaim.relayId, leased.relayId);
+    const recoveryTime = new Date(Date.now() + 5_000);
+    assert.equal(
+      await store.recoverStale(
+        tenantId,
+        new Date(Date.now() + 1_000),
+        recoveryTime,
+        10,
+      ),
+      1,
+    );
+    await assert.rejects(
+      store.markCommitted(tenantId, leased.relayId, leasedClaim.attempt),
+      /SUBMISSION_RELAY_STATE/,
+    );
+    const reclaimed = (
+      await store.claimBatch(tenantId, 1, new Date(recoveryTime.getTime() + 1))
+    )[0]!;
+    assert.equal(reclaimed.attempt, leasedClaim.attempt + 1);
+    await assert.rejects(
+      store.markCommitted(tenantId, leased.relayId, leasedClaim.attempt),
+      /SUBMISSION_RELAY_STATE/,
+    );
+    await store.markCommitted(tenantId, leased.relayId, reclaimed.attempt);
+
     const exhaustedInstance = 'uuid:123e4567-e89b-12d3-a456-426614174090';
     const healthyInstance = 'uuid:123e4567-e89b-12d3-a456-426614174091';
     const exhausted = await store.enqueue({
@@ -210,6 +249,7 @@ void test(
       await store.markFailed(
         tenantId,
         exhausted.relayId,
+        batch[0]!.attempt,
         'SALESFORCE_UNAVAILABLE',
         new Date(Date.now() - 1_000),
       );
@@ -243,7 +283,11 @@ void test(
         failure_code: 'ATTEMPT_LIMIT_EXHAUSTED',
       },
     ]);
-    await store.markCommitted(tenantId, healthy.relayId);
+    await store.markCommitted(
+      tenantId,
+      healthy.relayId,
+      afterExhaustion[0]!.attempt,
+    );
 
     await assert.rejects(
       pool.query(
@@ -292,5 +336,101 @@ void test(
         error !== null &&
         Object.getOwnPropertyDescriptor(error, 'code')?.value === '23514',
     );
+
+    const raceRelay = await store.enqueue({
+      tenantId,
+      salesforceOrgId: orgId,
+      formVersionId,
+      channel: 'phone',
+      rawXml: bytes(
+        xml('disconnect-race', 'uuid:123e4567-e89b-12d3-a456-426614174093'),
+      ),
+    });
+    const disconnect = await pool.connect();
+    await disconnect.query('BEGIN');
+    try {
+      await disconnect.query(
+        `DELETE FROM tenant_connections WHERE tenant_id = $1`,
+        [tenantId],
+      );
+      await disconnect.query(
+        `UPDATE tenant_administrator_tenants
+         SET salesforce_connection_state = 'disconnected'
+         WHERE tenant_id = $1`,
+        [tenantId],
+      );
+      let deliveries = 0;
+      let oauthRequests = 0;
+      const dispatch = dispatchTenantSubmissionBatch(
+        store,
+        new TenantConnectionStore(
+          createQueryExecutor(pool),
+          createTenantCredentialVault({
+            activeKeyId: 'relay-race',
+            keys: {
+              'relay-race': Buffer.alloc(32, 23).toString('base64'),
+            },
+          }),
+        ),
+        tenantId,
+        {
+          clientId: 'synthetic-client',
+          clientSecret: 'synthetic-secret',
+          refreshTimeoutMs: 1_000,
+          dispatchTimeoutMs: 1_000,
+          leaseTimeoutMs: 3_000,
+          retryDelayMs: 1_000,
+          batchLimit: 1,
+        },
+        async () => {
+          deliveries++;
+          return [];
+        },
+        new Date(),
+        async () => {
+          oauthRequests++;
+          throw new Error('must not fetch after disconnect');
+        },
+      );
+      for (let index = 0; index < 100; index++) {
+        const state = await pool.query<{ state: string }>(
+          `SELECT state FROM tenant_submission_relays
+           WHERE tenant_id = $1 AND relay_id = $2`,
+          [tenantId, raceRelay.relayId],
+        );
+        if (state.rows[0]?.state === 'dispatching') break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      const inFlight = await pool.query<{ state: string }>(
+        `SELECT state FROM tenant_submission_relays
+         WHERE tenant_id = $1 AND relay_id = $2`,
+        [tenantId, raceRelay.relayId],
+      );
+      assert.equal(inFlight.rows[0]?.state, 'dispatching');
+      await disconnect.query('COMMIT');
+      const outcome = await dispatch;
+      assert.equal(outcome.retry, 1);
+      assert.equal(deliveries, 0);
+      assert.equal(oauthRequests, 0);
+      const refused = await pool.query<{
+        state: string;
+        failure_code: string;
+      }>(
+        `SELECT state, failure_code FROM tenant_submission_relays
+         WHERE tenant_id = $1 AND relay_id = $2`,
+        [tenantId, raceRelay.relayId],
+      );
+      assert.deepEqual(refused.rows, [
+        {
+          state: 'queued',
+          failure_code: 'CONNECTION_RECHECK_FAILED',
+        },
+      ]);
+    } catch (error) {
+      await disconnect.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      disconnect.release();
+    }
   },
 );

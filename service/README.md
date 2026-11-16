@@ -10,6 +10,13 @@ acknowledgement and relay retention remain later Phase 2 work.
 No collector Salesforce account is created or required. See the architecture and
 ADRs in `../docs/`.
 
+ADR 0074 adds the internal tenant-batch dispatcher. Claim-time connection joins are
+not authority: the complete org/origin/namespace tuple is revalidated while the
+encrypted credential row is locked. Expired dispatch leases are requeued before new
+claims, every settlement is fenced by its attempt number, and a local deadline does
+not depend on the future delivery transport honouring abort. The Apex ingestion
+transport and runtime scheduler are not implemented by this boundary.
+
 ADR 0038 adds a service-internal tenant connection vault and the first product
 table. It stores one normalized Salesforce org binding per tenant and only an
 AES-256-GCM encrypted refresh-token envelope. Encryption keys remain deployment

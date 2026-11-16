@@ -43,6 +43,8 @@ export interface ClaimedSubmission {
   readonly relayId: string;
   readonly tenantId: string;
   readonly salesforceOrgId: string;
+  readonly authorizationOrigin: string;
+  readonly namespacePrefix: string;
   readonly formVersionId: string;
   readonly instanceId: string;
   readonly channel: 'phone' | 'web';
@@ -55,6 +57,8 @@ interface RelayRow {
   relay_id: unknown;
   tenant_id: unknown;
   salesforce_org_id: unknown;
+  authorization_origin?: unknown;
+  namespace_prefix?: unknown;
   form_version_id: unknown;
   instance_id: unknown;
   channel: unknown;
@@ -125,6 +129,16 @@ function checkedLimit(value: unknown): number {
   return value as number;
 }
 
+function checkedAttempt(value: unknown): number {
+  if (
+    !Number.isInteger(value) ||
+    (value as number) < 1 ||
+    (value as number) > 100
+  )
+    fail('SUBMISSION_RELAY_INPUT');
+  return value as number;
+}
+
 function checkedDate(value: unknown): Date {
   if (!(value instanceof Date) || !Number.isFinite(value.getTime()))
     fail('SUBMISSION_RELAY_INPUT');
@@ -156,6 +170,33 @@ function rowState(value: unknown): EnqueueSubmissionResult['state'] {
 
 function rowChannel(value: unknown): 'phone' | 'web' {
   if (value !== 'phone' && value !== 'web') fail('SUBMISSION_RELAY_STORAGE');
+  return value;
+}
+
+function rowSalesforceOrigin(value: unknown): string {
+  if (typeof value !== 'string' || value.length > 2048)
+    fail('SUBMISSION_RELAY_STORAGE');
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    fail('SUBMISSION_RELAY_STORAGE');
+  }
+  if (
+    parsed.protocol !== 'https:' ||
+    parsed.origin !== value ||
+    parsed.username !== '' ||
+    parsed.password !== '' ||
+    parsed.port !== '' ||
+    !parsed.hostname.endsWith('.salesforce.com')
+  )
+    fail('SUBMISSION_RELAY_STORAGE');
+  return parsed.origin;
+}
+
+function rowNamespacePrefix(value: unknown): string {
+  if (typeof value !== 'string' || !/^(?:|[a-z][a-z0-9]{0,14}__)$/.test(value))
+    fail('SUBMISSION_RELAY_STORAGE');
   return value;
 }
 
@@ -313,7 +354,13 @@ export class SubmissionRelayStore {
          RETURNING relay.relay_id, relay.tenant_id,
                    relay.salesforce_org_id, relay.form_version_id,
                    relay.instance_id, relay.channel, relay.raw_xml,
-                   relay.xml_sha256, relay.state, relay.attempts`,
+                   relay.xml_sha256, relay.state, relay.attempts,
+                   (SELECT authorization_origin
+                    FROM tenant_administrator_tenants
+                    WHERE tenant_id = relay.tenant_id) AS authorization_origin,
+                   (SELECT namespace_prefix
+                    FROM tenant_administrator_tenants
+                    WHERE tenant_id = relay.tenant_id) AS namespace_prefix`,
         [tenantId, now, limit],
       );
     } catch (error) {
@@ -331,6 +378,8 @@ export class SubmissionRelayStore {
           relayId: rowString(row.relay_id),
           tenantId: rowString(row.tenant_id),
           salesforceOrgId: rowString(row.salesforce_org_id).trim(),
+          authorizationOrigin: rowSalesforceOrigin(row.authorization_origin),
+          namespacePrefix: rowNamespacePrefix(row.namespace_prefix),
           formVersionId: rowString(row.form_version_id).trim(),
           instanceId: rowString(row.instance_id),
           channel: rowChannel(row.channel),
@@ -342,31 +391,54 @@ export class SubmissionRelayStore {
     );
   }
 
-  async markCommitted(tenantIdValue: string, relayId: string): Promise<void> {
+  async markCommitted(
+    tenantIdValue: string,
+    relayId: string,
+    attemptValue: number,
+  ): Promise<void> {
     await this.transition(
       `UPDATE tenant_submission_relays
        SET state = 'committed', acknowledged_at = clock_timestamp(),
            failure_code = NULL, next_attempt_at = NULL
-       WHERE tenant_id = $1 AND relay_id = $2 AND state = 'dispatching'`,
-      [checkedTenantId(tenantIdValue), checkedRelayId(relayId)],
+       WHERE tenant_id = $1 AND relay_id = $2 AND state = 'dispatching'
+         AND attempts = $3`,
+      [
+        checkedTenantId(tenantIdValue),
+        checkedRelayId(relayId),
+        checkedAttempt(attemptValue),
+      ],
     );
   }
 
   async markFailed(
     tenantIdValue: string,
     relayIdValue: string,
+    attemptValue: number,
     failureCodeValue: string,
     retryAt?: Date,
   ): Promise<void> {
     const tenantId = checkedTenantId(tenantIdValue);
     const relayId = checkedRelayId(relayIdValue);
+    const attempt = checkedAttempt(attemptValue);
     const failureCode = checkedFailureCode(failureCodeValue);
     if (retryAt === undefined) {
       await this.transition(
         `UPDATE tenant_submission_relays
          SET state = 'dead', failure_code = $3, next_attempt_at = NULL
-         WHERE tenant_id = $1 AND relay_id = $2 AND state = 'dispatching'`,
-        [tenantId, relayId, failureCode],
+         WHERE tenant_id = $1 AND relay_id = $2 AND state = 'dispatching'
+           AND attempts = $4`,
+        [tenantId, relayId, failureCode, attempt],
+      );
+      return;
+    }
+    if (attempt >= 100) {
+      await this.transition(
+        `UPDATE tenant_submission_relays
+         SET state = 'dead', failure_code = 'ATTEMPT_LIMIT_EXHAUSTED',
+             next_attempt_at = NULL
+         WHERE tenant_id = $1 AND relay_id = $2 AND state = 'dispatching'
+           AND attempts = $3`,
+        [tenantId, relayId, attempt],
       );
       return;
     }
@@ -374,9 +446,53 @@ export class SubmissionRelayStore {
     await this.transition(
       `UPDATE tenant_submission_relays
        SET state = 'queued', failure_code = $4, next_attempt_at = $3
-       WHERE tenant_id = $1 AND relay_id = $2 AND state = 'dispatching'`,
-      [tenantId, relayId, next, failureCode],
+       WHERE tenant_id = $1 AND relay_id = $2 AND state = 'dispatching'
+         AND attempts = $5`,
+      [tenantId, relayId, next, failureCode, attempt],
     );
+  }
+
+  async recoverStale(
+    tenantIdValue: string,
+    staleBeforeValue: Date,
+    retryAtValue: Date,
+    limitValue: number,
+  ): Promise<number> {
+    const tenantId = checkedTenantId(tenantIdValue);
+    const staleBefore = checkedDate(staleBeforeValue);
+    const retryAt = checkedDate(retryAtValue);
+    const limit = checkedLimit(limitValue);
+    let result;
+    try {
+      result = await this.database.query<{ relay_id: unknown }>(
+        `WITH stale AS (
+           SELECT relay_id
+           FROM tenant_submission_relays
+           WHERE tenant_id = $1 AND state = 'dispatching'
+             AND updated_at <= $2
+           ORDER BY updated_at, relay_id
+           FOR UPDATE SKIP LOCKED
+           LIMIT $4
+         )
+         UPDATE tenant_submission_relays AS relay
+         SET state = CASE WHEN relay.attempts >= 100 THEN 'dead' ELSE 'queued' END,
+             failure_code = CASE WHEN relay.attempts >= 100
+               THEN 'ATTEMPT_LIMIT_EXHAUSTED' ELSE 'DISPATCH_LEASE_EXPIRED' END,
+             next_attempt_at = CASE WHEN relay.attempts >= 100
+               THEN NULL ELSE $3::timestamptz END
+         FROM stale
+         WHERE relay.tenant_id = $1 AND relay.relay_id = stale.relay_id
+           AND relay.state = 'dispatching'
+         RETURNING relay.relay_id`,
+        [tenantId, staleBefore, retryAt, limit],
+      );
+    } catch (error) {
+      fail(storageCode(error));
+    }
+    if (result.rowCount !== result.rows.length)
+      fail('SUBMISSION_RELAY_STORAGE');
+    for (const row of result.rows) checkedRelayId(row.relay_id);
+    return result.rows.length;
   }
 
   private async transition(text: string, values: unknown[]): Promise<void> {
