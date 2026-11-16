@@ -78,6 +78,12 @@ C4 Submission/Answer/Error Log/Sync Log model. It mounts no OpenRosa route, perf
 no mapping or media upload and claims no C10 acceptance test. Those capabilities
 remain explicit later units before the Phase 2 gate.
 
+ADR 0074 adds bounded internal dispatch orchestration: credential-time tuple
+revalidation answers note L, expired-lease recovery and attempt fencing answer note
+M, and a package-wide metadata ordering guard answers note N. The Apex ingestion
+transport, scheduler and OpenRosa acknowledgement remain later units; this unit also
+claims no C10 acceptance test.
+
 The first unit contains Folder/Form/Form Version and external namespace resolution.
 The current unit adds Question trees, choices and stored skip rules, separate
 Hint/Author Notes, the Current Version INSERT regression and external `__r`

@@ -44,6 +44,8 @@ void test('enqueue parameterizes immutable XML and returns a new relay identity'
           relay_id: relayId,
           tenant_id: tenantId,
           salesforce_org_id: orgId,
+          authorization_origin: 'https://login.salesforce.com',
+          namespace_prefix: 'ksny__',
           form_version_id: formVersionId,
           instance_id: instanceId,
           channel: 'phone',
@@ -130,6 +132,8 @@ void test('claim verifies stored bytes and exposes only a bounded tenant batch',
           relay_id: relayId,
           tenant_id: tenantId,
           salesforce_org_id: orgId,
+          authorization_origin: 'https://login.salesforce.com',
+          namespace_prefix: 'ksny__',
           form_version_id: formVersionId,
           instance_id: instanceId,
           channel: 'phone',
@@ -155,6 +159,8 @@ void test('claim verifies stored bytes and exposes only a bounded tenant batch',
       relayId,
       tenantId,
       salesforceOrgId: orgId,
+      authorizationOrigin: 'https://login.salesforce.com',
+      namespacePrefix: 'ksny__',
       formVersionId,
       instanceId,
       channel: 'phone',
@@ -179,11 +185,12 @@ void test('state transitions are tenant-scoped and refuse missing rows', async (
   await store.markFailed(
     tenantId,
     relayId,
+    1,
     'SALESFORCE_UNAVAILABLE',
     new Date('2026-11-13T10:01:00.000Z'),
   );
-  await store.markFailed(tenantId, relayId, 'MAPPING_REFUSED');
-  await store.markCommitted(tenantId, relayId);
+  await store.markFailed(tenantId, relayId, 1, 'MAPPING_REFUSED');
+  await store.markCommitted(tenantId, relayId, 1);
   assert.equal(calls.length, 3);
   for (const call of calls) {
     assert.match(call.text, /tenant_id = \$1 AND relay_id = \$2/);
@@ -202,9 +209,31 @@ void test('state transitions are tenant-scoped and refuse missing rows', async (
     },
   });
   await assert.rejects(
-    missing.markCommitted(tenantId, relayId),
+    missing.markCommitted(tenantId, relayId, 1),
     /SUBMISSION_RELAY_STATE/,
   );
+});
+
+void test('stale recovery is tenant-scoped, bounded and attempt-safe', async () => {
+  let sql = '';
+  let values: unknown[] = [];
+  const store = new SubmissionRelayStore({
+    async query<Row>(text: string, parameters: unknown[] = []) {
+      sql = text;
+      values = parameters;
+      return result([{ relay_id: relayId } as Row]);
+    },
+  });
+  const staleBefore = new Date('2026-11-16T09:00:00.000Z');
+  const retryAt = new Date('2026-11-16T09:05:00.000Z');
+  assert.equal(await store.recoverStale(tenantId, staleBefore, retryAt, 25), 1);
+  assert.match(sql, /state = 'dispatching'/);
+  assert.match(sql, /updated_at <= \$2/);
+  assert.match(sql, /FOR UPDATE SKIP LOCKED/);
+  assert.match(sql, /DISPATCH_LEASE_EXPIRED/);
+  assert.match(sql, /ATTEMPT_LIMIT_EXHAUSTED/);
+  assert.match(sql, /ELSE \$3::timestamptz END/);
+  assert.deepEqual(values, [tenantId, staleBefore, retryAt, 25]);
 });
 
 void test('hostile inputs and driver failures stay fixed-code and non-disclosing', async () => {

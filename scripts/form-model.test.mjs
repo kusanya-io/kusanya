@@ -8,8 +8,40 @@ const source = new URL(
 );
 const read = (path) => readFileSync(new URL(path, source), 'utf8');
 const files = (path) => readdirSync(new URL(path, source));
+const metadataFiles = (directory = source) =>
+  readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const child = new URL(
+      entry.name + (entry.isDirectory() ? '/' : ''),
+      directory,
+    );
+    return entry.isDirectory()
+      ? metadataFiles(child)
+      : entry.name.endsWith('-meta.xml')
+        ? [child]
+        : [];
+  });
 const tag = (xml, name) =>
   xml.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`))?.[1];
+
+const topLevelElementRuns = (xml) => {
+  let depth = 0;
+  const elements = [];
+  for (const match of xml.matchAll(
+    /<\s*(\/?)\s*([A-Za-z][\w:.-]*)([^<>]*?)(\/?)>/g,
+  )) {
+    const closing = match[1] === '/';
+    const selfClosing = match[4] === '/' || match[3]?.trimEnd().endsWith('/');
+    if (closing) {
+      depth--;
+      continue;
+    }
+    if (depth === 1) elements.push(match[2]);
+    if (!selfClosing) depth++;
+  }
+  return elements.filter(
+    (element, index) => index === 0 || element !== elements[index - 1],
+  );
+};
 const objects = {
   Folder__c: ['Description__c'],
   Form__c: [
@@ -547,6 +579,24 @@ test('new Apex uses local references, responsibility headers and API 64 without 
   );
 });
 
+test('every metadata file keeps repeated direct children in one contiguous run', () => {
+  const splitFixture = '<Package><types/><version/><types/></Package>';
+  const splitRuns = topLevelElementRuns(splitFixture);
+  assert.notEqual(
+    new Set(splitRuns).size,
+    splitRuns.length,
+    'negative control must detect a split top-level element run',
+  );
+  for (const file of metadataFiles()) {
+    const runs = topLevelElementRuns(readFileSync(file, 'utf8'));
+    assert.equal(
+      new Set(runs).size,
+      runs.length,
+      `${decodeURIComponent(file.pathname)} repeats a top-level metadata element after another type`,
+    );
+  }
+});
+
 test('permission sets grant scoped definitions and only integration can import or publish', () => {
   const reviewerApi = read(
     'permissionsets/Kusanya_Reviewer_Integration.permissionset-meta.xml',
@@ -611,18 +661,6 @@ test('permission sets grant scoped definitions and only integration can import o
   ]) {
     const xml = read(`permissionsets/${name}.permissionset-meta.xml`);
     assert.ok(tag(xml, 'description')?.trim());
-    const topLevelElements = [
-      ...xml.matchAll(/^    <([A-Za-z][A-Za-z0-9]*)>/gm),
-    ].map((match) => match[1]);
-    const elementRuns = topLevelElements.filter(
-      (element, index) =>
-        index === 0 || element !== topLevelElements[index - 1],
-    );
-    assert.equal(
-      new Set(elementRuns).size,
-      elementRuns.length,
-      `${name} repeats a top-level metadata element after another type`,
-    );
     assert.doesNotMatch(
       xml,
       /<userPermissions>|<applicationVisibilities>|<externalDataSourceAccesses>|<flowAccesses>|<license>/,

@@ -103,6 +103,11 @@ Direct SQL deletion and a retention policy for relay rows are deliberately not p
 of this foundation. Until that reviewed lifecycle exists, privileged database roles
 remain capable of deletion; application code exposes no deletion operation.
 
+ADR 0074 makes the connection join in `claimBatch` explicitly a scheduling hint,
+not an authorization boundary. The dispatcher revalidates the complete connection
+tuple while loading the credential, recovers expired `dispatching` leases and fences
+every settlement with the claimed attempt number.
+
 Notes D, E and F from the Phase 1 gate are corrected in the same documentation
 change: the namespaced-org working directory is explicit, evidence attribution is
 narrowed, and the automatic exemption is named accurately.

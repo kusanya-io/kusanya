@@ -384,6 +384,13 @@ rows; attempt 100 retires to `dead` without blocking healthy work, and scheduled
 retries retain their last fixed failure code. It is not an OpenRosa endpoint, a
 Salesforce mapping transaction or a retention/deletion lifecycle.
 
+ADR 0074 treats `dispatching.updated_at` as a bounded lease without adding another
+column. Expired work returns to `queued` with `DISPATCH_LEASE_EXPIRED`, except attempt
+100 which becomes terminal. Commit and failure updates include the expected attempt
+number, so a worker from an expired lease cannot settle a reclaimed attempt. The
+claim's org/origin/namespace tuple is rechecked under the encrypted credential lock
+before any Salesforce delivery capability is exposed.
+
 ADR 0029 defines the Answer cardinality boundary for dynamic repeats. The
 submitted count is authoritative per enclosing repeat instance; trailing physical
 rows beyond it are excluded from normalized Answers and mapped child records, a
