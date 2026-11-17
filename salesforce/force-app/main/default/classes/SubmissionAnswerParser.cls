@@ -7,6 +7,7 @@ public inherited sharing class SubmissionAnswerParser {
     private static final Integer MAX_DEPTH = 32;
     private static final Integer MAX_REPEAT_COUNT = 1000;
     private static final Integer MAX_WARNING_NAMES = 50;
+    private static final String ROOT_PARENT_KEY = '#ROOT#';
 
     public class ParseException extends Exception {
     }
@@ -293,7 +294,9 @@ public inherited sharing class SubmissionAnswerParser {
             state.questionsByPlacement.put(placement, question);
             state.questionsByName.put(question.Name, question);
             if (question.Type__c == 'repeat') {
-                String parentKey = String.valueOf(question.Parent__c);
+                String parentKey = question.Parent__c == null
+                    ? ROOT_PARENT_KEY
+                    : String.valueOf(question.Parent__c);
                 if (!state.repeatChildrenByParent.containsKey(parentKey))
                     state.repeatChildrenByParent.put(
                         parentKey,
@@ -454,7 +457,7 @@ public inherited sharing class SubmissionAnswerParser {
         }
         Set<ParsedNode> excluded = new Set<ParsedNode>();
         String parentKey = parent.parent == null
-            ? 'null'
+            ? ROOT_PARENT_KEY
             : parent.question == null
                   ? null
                   : String.valueOf(parent.question.Id);

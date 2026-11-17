@@ -70,6 +70,8 @@ test('submission receipt is one user-mode transaction with bounded answer parsin
   assert.match(parser, /MAX_ANSWERS = 8000/);
   assert.match(parser, /MAX_DEPTH = 32/);
   assert.match(parser, /MAX_REPEAT_COUNT = 1000/);
+  assert.match(parser, /ROOT_PARENT_KEY = '#ROOT#'/);
+  assert.equal((parser.match(/\? ROOT_PARENT_KEY/g) ?? []).length, 2);
   assert.match(parser, /public static Set<Id> store/);
   assert.match(
     parser,
@@ -112,6 +114,7 @@ test('only the integration permission set can invoke submission receipt', () => 
 
 test('hosted receipt tests pin bytes replay conflicts and denied principals', () => {
   const source = read('classes/SubmissionIngestResourceTest.cls');
+  const parserTests = read('classes/SubmissionAnswerParserTest.cls');
   assert.match(source, /Responsibility:/);
   assert.doesNotMatch(source, /@TestSetup/);
   assert.match(source, /receivesExactBytesAndReplaysWithoutDuplicateRecords/);
@@ -120,6 +123,7 @@ test('hosted receipt tests pin bytes replay conflicts and denied principals', ()
     source,
     /isolatesOneMalformedXmlWithoutRollingBackValidReceipts/,
   );
+  assert.match(parserTests, /enforcesSubmittedCountsForTopLevelRepeats/);
   assert.match(source, /String\.valueOf\(version\.Id\)\.substring\(0, 15\)/);
   assert.match(
     source,

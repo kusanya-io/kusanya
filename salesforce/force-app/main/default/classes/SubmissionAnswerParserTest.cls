@@ -318,6 +318,69 @@ private class SubmissionAnswerParserTest {
         }
     }
 
+    @IsTest
+    static void enforcesSubmittedCountsForTopLevelRepeats() {
+        User integration = integrationUser('anstop');
+        System.runAs(integration) {
+            Form_Version__c version = createVersion('Top-level repeats');
+            Question__c count = question(version.Id, 'members', 'integer', 1);
+            insert count;
+            Question__c repeat = question(version.Id, 'person', 'repeat', 2);
+            repeat.Repeat_Mode__c = 'from_answer';
+            repeat.Repeat_Source_Question__c = count.Id;
+            repeat.Repeat_Max__c = 3;
+            insert repeat;
+            Question__c personName = question(
+                version.Id,
+                'person_name',
+                'text',
+                3
+            );
+            personName.Parent__c = repeat.Id;
+            insert personName;
+
+            assertRefused(
+                received(version.Id, 20),
+                '<data><members>2</members><person><person_name>Only</person_name></person></data>'
+            );
+
+            Submission__c trailing = received(version.Id, 21);
+            insert trailing;
+            String xml =
+                '<data><members>1</members>' +
+                '<person><person_name>Kept</person_name></person>' +
+                '<person><person_name>Trailing two</person_name></person>' +
+                '<person><person_name>Trailing three</person_name></person></data>';
+            Assert.areEqual(
+                new Set<Id>(),
+                SubmissionAnswerParser.store(
+                    new Map<Id, Blob>{ trailing.Id => Blob.valueOf(xml) }
+                )
+            );
+            List<Answer__c> answers = [
+                SELECT Node_Name__c, Repeat_Path__c
+                FROM Answer__c
+                WHERE Submission__c = :trailing.Id
+            ];
+            Assert.areEqual(3, answers.size());
+            for (Answer__c answer : answers) {
+                Assert.isFalse(
+                    answer.Repeat_Path__c != null &&
+                    (answer.Repeat_Path__c.contains('[2]') ||
+                    answer.Repeat_Path__c.contains('[3]'))
+                );
+            }
+            Assert.isNotNull(
+                [
+                    SELECT Parsed_At__c
+                    FROM Submission__c
+                    WHERE Id = :trailing.Id
+                ]
+                .Parsed_At__c
+            );
+        }
+    }
+
     private static void assertRefused(Submission__c submission, String xml) {
         insert submission;
         Assert.areEqual(
