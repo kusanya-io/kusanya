@@ -82,6 +82,16 @@ copied into Error Log. Sync Log reserves aggregate counts and API consumption.
 Task, Collector, Device and Form Link relationships wait for their owning models;
 no placeholder lookup, collector Salesforce user or mapping endpoint is created.
 
+ADR 0075 adds the bounded raw-receipt endpoint at
+`POST /services/apexrest/{namespace}/v1/submissions/ingest`. It accepts at most 200
+ordered relay items, validates each item against its published Form Version, and
+stores each new canonical XML document as a private Salesforce File linked to a
+new Submission. Exact replays reuse the existing Submission and File; conflicting
+replays fail closed. The endpoint runs in user mode behind the dedicated ingestion
+custom permission and returns only fixed per-item outcomes. It does not parse XML,
+create Answers, execute mappings, write customer objects, create Tasks, or claim
+the complete C7 delivery pipeline or any C10 acceptance test.
+
 ## Iterative development only
 
 From the repository root in PowerShell, after the maintainer reserves capacity and

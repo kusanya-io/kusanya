@@ -49,7 +49,7 @@ state exists.
 
 Use the already pinned `saxes` streaming parser to extract only routing identity.
 It rejects DTDs, processing instructions, comments, malformed XML, multiple roots,
-noncanonical instance UUIDs, and inputs beyond 5 MiB, 10,000 nodes or 64 levels.
+noncanonical instance UUIDs, and inputs beyond 750,000 bytes, 10,000 nodes or 64 levels.
 The exact bytes are never rewritten. Answer parsing and definition matching remain
 the Apex engine's responsibility, so this parser cannot silently drop unknown
 nodes or claim mapping success.

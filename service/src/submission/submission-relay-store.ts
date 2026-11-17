@@ -129,6 +129,16 @@ function checkedLimit(value: unknown): number {
   return value as number;
 }
 
+function checkedLeaseTimeout(value: unknown): number {
+  if (
+    !Number.isSafeInteger(value) ||
+    (value as number) < 1_001 ||
+    (value as number) > 3_600_000
+  )
+    fail('SUBMISSION_RELAY_INPUT');
+  return value as number;
+}
+
 function checkedAttempt(value: unknown): number {
   if (
     !Number.isInteger(value) ||
@@ -434,11 +444,11 @@ export class SubmissionRelayStore {
     if (attempt >= 100) {
       await this.transition(
         `UPDATE tenant_submission_relays
-         SET state = 'dead', failure_code = 'ATTEMPT_LIMIT_EXHAUSTED',
+         SET state = 'dead', failure_code = $4,
              next_attempt_at = NULL
          WHERE tenant_id = $1 AND relay_id = $2 AND state = 'dispatching'
            AND attempts = $3`,
-        [tenantId, relayId, attempt],
+        [tenantId, relayId, attempt, failureCode],
       );
       return;
     }
@@ -454,13 +464,11 @@ export class SubmissionRelayStore {
 
   async recoverStale(
     tenantIdValue: string,
-    staleBeforeValue: Date,
-    retryAtValue: Date,
+    leaseTimeoutMsValue: number,
     limitValue: number,
-  ): Promise<number> {
+  ): Promise<readonly string[]> {
     const tenantId = checkedTenantId(tenantIdValue);
-    const staleBefore = checkedDate(staleBeforeValue);
-    const retryAt = checkedDate(retryAtValue);
+    const leaseTimeoutMs = checkedLeaseTimeout(leaseTimeoutMsValue);
     const limit = checkedLimit(limitValue);
     let result;
     try {
@@ -469,30 +477,32 @@ export class SubmissionRelayStore {
            SELECT relay_id
            FROM tenant_submission_relays
            WHERE tenant_id = $1 AND state = 'dispatching'
-             AND updated_at <= $2
+             AND updated_at <= clock_timestamp()
+               - ($2::bigint * interval '1 millisecond')
            ORDER BY updated_at, relay_id
            FOR UPDATE SKIP LOCKED
-           LIMIT $4
+           LIMIT $3
          )
          UPDATE tenant_submission_relays AS relay
          SET state = CASE WHEN relay.attempts >= 100 THEN 'dead' ELSE 'queued' END,
              failure_code = CASE WHEN relay.attempts >= 100
                THEN 'ATTEMPT_LIMIT_EXHAUSTED' ELSE 'DISPATCH_LEASE_EXPIRED' END,
              next_attempt_at = CASE WHEN relay.attempts >= 100
-               THEN NULL ELSE $3::timestamptz END
+               THEN NULL ELSE clock_timestamp() END
          FROM stale
          WHERE relay.tenant_id = $1 AND relay.relay_id = stale.relay_id
            AND relay.state = 'dispatching'
          RETURNING relay.relay_id`,
-        [tenantId, staleBefore, retryAt, limit],
+        [tenantId, leaseTimeoutMs, limit],
       );
     } catch (error) {
       fail(storageCode(error));
     }
     if (result.rowCount !== result.rows.length)
       fail('SUBMISSION_RELAY_STORAGE');
-    for (const row of result.rows) checkedRelayId(row.relay_id);
-    return result.rows.length;
+    return Object.freeze(
+      result.rows.map((row) => checkedRelayId(row.relay_id)),
+    );
   }
 
   private async transition(text: string, values: unknown[]): Promise<void> {

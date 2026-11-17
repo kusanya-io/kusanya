@@ -440,6 +440,7 @@ export async function createBoundTenantSalesforceSession(
   trustedBindingValue: TenantSalesforceSessionBinding,
   configurationValue: SalesforceOAuthClientConfiguration,
   fetchImplementation: FetchImplementation = fetch,
+  signal?: AbortSignal,
 ): Promise<TenantSalesforceSession> {
   const trustedBinding = binding(trustedBindingValue);
   return await createSession(
@@ -448,6 +449,7 @@ export async function createBoundTenantSalesforceSession(
     trustedBinding,
     configurationValue,
     fetchImplementation,
+    signal,
   );
 }
 
@@ -457,6 +459,7 @@ async function createSession(
   trustedBinding: TenantSalesforceSessionBinding | undefined,
   configurationValue: SalesforceOAuthClientConfiguration,
   fetchImplementation: FetchImplementation,
+  externalSignal?: AbortSignal,
 ): Promise<TenantSalesforceSession> {
   if (
     typeof trustedTenantId !== 'string' ||
@@ -464,15 +467,18 @@ async function createSession(
     store === null ||
     typeof store !== 'object' ||
     typeof store.withRefreshLock !== 'function' ||
-    typeof fetchImplementation !== 'function'
+    typeof fetchImplementation !== 'function' ||
+    (externalSignal !== undefined && !(externalSignal instanceof AbortSignal))
   )
     fail('TENANT_SALESFORCE_SESSION_INPUT');
+  if (externalSignal?.aborted) fail('TENANT_SALESFORCE_SESSION_REFRESH');
   const decodedConfiguration = configuration(configurationValue);
   let locked:
     LockedTenantRefreshResult<ReturnType<typeof oauthResponse>> | undefined;
   let rotationSeen = false;
   try {
     locked = await store.withRefreshLock(trustedTenantId, async (selected) => {
+      if (externalSignal?.aborted) fail('TENANT_SALESFORCE_SESSION_REFRESH');
       const current = connection(selected, trustedTenantId);
       if (
         trustedBinding !== undefined &&
@@ -488,6 +494,10 @@ async function createSession(
         fail('TENANT_SALESFORCE_SESSION_REFRESH');
       }
       const controller = new AbortController();
+      const abortFromCaller = (): void => controller.abort();
+      externalSignal?.addEventListener('abort', abortFromCaller, {
+        once: true,
+      });
       const timeout = new Promise<never>((_, reject) => {
         controller.signal.addEventListener(
           'abort',
@@ -563,6 +573,7 @@ async function createSession(
         return await Promise.race([exchange(), timeout]);
       } finally {
         clearTimeout(timer);
+        externalSignal?.removeEventListener('abort', abortFromCaller);
       }
     });
   } catch (error) {

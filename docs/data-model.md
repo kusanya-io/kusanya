@@ -386,17 +386,30 @@ Salesforce mapping transaction or a retention/deletion lifecycle.
 
 ADR 0074 treats `dispatching.updated_at` as a bounded lease without adding another
 column. Expired work returns to `queued` with `DISPATCH_LEASE_EXPIRED`, except attempt
-100 which becomes terminal. Commit and failure updates include the expected attempt
+100 which becomes terminal while retaining the final fixed cause. Lease age and
+immediate recovery use PostgreSQL's clock, not the worker's. Commit and failure updates include the expected attempt
 number, so a worker from an expired lease cannot settle a reclaimed attempt. The
 claim's org/origin/namespace tuple is rechecked under the encrypted credential lock
-before any Salesforce delivery capability is exposed.
+before any Salesforce delivery capability is exposed. Dispatcher input is copied and
+validated locally; `touched` counts the unique union of recovered and claimed rows.
+
+ADR 0075 adds the namespaced raw-receipt resource. A new `Submission__c` and its
+byte-attested private raw-XML File are written together; exact replay is idempotent,
+and mismatched reuse of an instance id is terminal. The service sends one bounded
+prefix per Salesforce request and defers the suffix. `Received` deliberately remains
+retryable: no relay is committed until the later mapping engine returns `Mapped`.
+The raw XML boundary is 750,000 bytes so one canonical base64 item fits the
+1,500,000-byte JSON receipt while leaving synchronous Apex heap headroom for the
+request Blob, decoded XML and DML records. Larger tenant batches are split by the
+service without splitting an individual submission. The scheduler remains
+unmounted in this foundation.
 
 ADR 0029 defines the Answer cardinality boundary for dynamic repeats. The
 submitted count is authoritative per enclosing repeat instance; trailing physical
 rows beyond it are excluded from normalized Answers and mapped child records, a
 deficit or invalid count fails closed, and the raw XML remains retained separately.
-Publication package schema 2 pins the rule as `submitted-count-v1`. ADR 0073 adds
-the storage objects but does not yet parse answers or perform ingestion DML.
+Publication package schema 2 pins the rule as `submitted-count-v1`. ADR 0075 now
+performs raw receipt DML, but does not yet parse answers or execute mapping DML.
 
 ## Phase 2 submission foundation
 

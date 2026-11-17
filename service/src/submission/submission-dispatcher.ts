@@ -1,4 +1,5 @@
 /** Bounded relay orchestration with credential-time tenant revalidation. */
+import { createHash } from 'node:crypto';
 import { types } from 'node:util';
 import {
   createBoundTenantSalesforceSession,
@@ -50,10 +51,9 @@ export type DeliverSubmissionBatch = (
 export interface SubmissionDispatcherStore {
   recoverStale(
     tenantId: string,
-    staleBefore: Date,
-    retryAt: Date,
+    leaseTimeoutMs: number,
     limit: number,
-  ): Promise<number>;
+  ): Promise<readonly string[]>;
   claimBatch(
     tenantId: string,
     limit: number,
@@ -76,6 +76,8 @@ export interface SubmissionDispatcherStore {
 export interface SubmissionDispatchRun {
   readonly recovered: number;
   readonly claimed: number;
+  /** Unique relays recovered or claimed during this run. */
+  readonly touched: number;
   readonly committed: number;
   readonly retry: number;
   readonly dead: number;
@@ -184,14 +186,176 @@ function checkedDate(value: unknown): Date {
   return new Date(value.getTime());
 }
 
-function emptyRun(recovered: number): SubmissionDispatchRun {
+function emptyRun(recoveredIds: readonly string[]): SubmissionDispatchRun {
   return Object.freeze({
-    recovered,
+    recovered: recoveredIds.length,
     claimed: 0,
+    touched: new Set(recoveredIds).size,
     committed: 0,
     retry: 0,
     dead: 0,
   });
+}
+
+function checkedSalesforceOrigin(value: unknown): string {
+  if (typeof value !== 'string' || value.length > 2_048)
+    fail('SUBMISSION_DISPATCH_STORAGE');
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    fail('SUBMISSION_DISPATCH_STORAGE');
+  }
+  if (
+    parsed.protocol !== 'https:' ||
+    parsed.origin !== value ||
+    parsed.username !== '' ||
+    parsed.password !== '' ||
+    parsed.port !== '' ||
+    !parsed.hostname.endsWith('.salesforce.com')
+  )
+    fail('SUBMISSION_DISPATCH_STORAGE');
+  return parsed.origin;
+}
+
+function claimSnapshot(
+  value: unknown,
+  tenantId: string,
+  limit: number,
+): readonly ClaimedSubmission[] {
+  if (
+    !Array.isArray(value) ||
+    types.isProxy(value) ||
+    Object.getPrototypeOf(value) !== Array.prototype ||
+    value.length > limit
+  )
+    fail('SUBMISSION_DISPATCH_STORAGE');
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  if (
+    Object.keys(descriptors).some(
+      (key) =>
+        key !== 'length' &&
+        (!/^\d+$/.test(key) || !Object.hasOwn(descriptors[key]!, 'value')),
+    ) ||
+    Object.keys(descriptors).length !== value.length + 1
+  )
+    fail('SUBMISSION_DISPATCH_STORAGE');
+  const ids = new Set<string>();
+  const rows = [] as ClaimedSubmission[];
+  for (let index = 0; index < value.length; index++) {
+    let record: Record<string, unknown>;
+    try {
+      record = plainRecord(descriptors[String(index)]!.value);
+    } catch {
+      fail('SUBMISSION_DISPATCH_STORAGE');
+    }
+    const expectedKeys = [
+      'attempt',
+      'authorizationOrigin',
+      'channel',
+      'formVersionId',
+      'instanceId',
+      'namespacePrefix',
+      'rawXml',
+      'relayId',
+      'salesforceOrgId',
+      'tenantId',
+      'xmlSha256',
+    ];
+    if (Object.keys(record).sort().join(',') !== expectedKeys.join(','))
+      fail('SUBMISSION_DISPATCH_STORAGE');
+    if (
+      typeof record.relayId !== 'string' ||
+      !tenantIdPattern.test(record.relayId) ||
+      ids.has(record.relayId) ||
+      record.tenantId !== tenantId ||
+      typeof record.salesforceOrgId !== 'string' ||
+      !/^00D[A-Za-z0-9]{15}$/.test(record.salesforceOrgId) ||
+      typeof record.namespacePrefix !== 'string' ||
+      !/^(?:|[a-z][a-z0-9]{0,14}__)$/.test(record.namespacePrefix) ||
+      typeof record.formVersionId !== 'string' ||
+      !/^[A-Za-z0-9]{18}$/.test(record.formVersionId) ||
+      typeof record.instanceId !== 'string' ||
+      !/^uuid:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+        record.instanceId,
+      ) ||
+      (record.channel !== 'phone' && record.channel !== 'web') ||
+      !(record.rawXml instanceof Uint8Array) ||
+      types.isProxy(record.rawXml) ||
+      record.rawXml.byteLength < 1 ||
+      record.rawXml.byteLength > 750_000 ||
+      typeof record.xmlSha256 !== 'string' ||
+      !/^[0-9a-f]{64}$/.test(record.xmlSha256) ||
+      !Number.isInteger(record.attempt) ||
+      (record.attempt as number) < 1 ||
+      (record.attempt as number) > 100
+    )
+      fail('SUBMISSION_DISPATCH_STORAGE');
+    const rawXml = new Uint8Array(record.rawXml);
+    if (createHash('sha256').update(rawXml).digest('hex') !== record.xmlSha256)
+      fail('SUBMISSION_DISPATCH_STORAGE');
+    ids.add(record.relayId);
+    rows.push(
+      Object.freeze({
+        relayId: record.relayId,
+        tenantId,
+        salesforceOrgId: record.salesforceOrgId,
+        authorizationOrigin: checkedSalesforceOrigin(
+          record.authorizationOrigin,
+        ),
+        namespacePrefix: record.namespacePrefix,
+        formVersionId: record.formVersionId,
+        instanceId: record.instanceId,
+        channel: record.channel,
+        rawXml,
+        xmlSha256: record.xmlSha256,
+        attempt: record.attempt as number,
+      }),
+    );
+  }
+  return Object.freeze(rows);
+}
+
+function touchedCount(
+  recoveredIds: readonly string[],
+  submissions: readonly ClaimedSubmission[],
+): number {
+  return new Set([
+    ...recoveredIds,
+    ...submissions.map((submission) => submission.relayId),
+  ]).size;
+}
+
+function recoveredSnapshot(value: unknown, limit: number): readonly string[] {
+  if (
+    !Array.isArray(value) ||
+    types.isProxy(value) ||
+    Object.getPrototypeOf(value) !== Array.prototype ||
+    value.length > limit
+  )
+    fail('SUBMISSION_DISPATCH_STORAGE');
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  if (
+    Object.keys(descriptors).some(
+      (key) =>
+        key !== 'length' &&
+        (!/^\d+$/.test(key) || !Object.hasOwn(descriptors[key]!, 'value')),
+    ) ||
+    Object.keys(descriptors).length !== value.length + 1
+  )
+    fail('SUBMISSION_DISPATCH_STORAGE');
+  const ids = [] as string[];
+  for (let index = 0; index < value.length; index++) {
+    const relayId = descriptors[String(index)]!.value as unknown;
+    if (
+      typeof relayId !== 'string' ||
+      !tenantIdPattern.test(relayId) ||
+      ids.includes(relayId)
+    )
+      fail('SUBMISSION_DISPATCH_STORAGE');
+    ids.push(relayId);
+  }
+  return Object.freeze(ids);
 }
 
 function outcomes(
@@ -272,6 +436,7 @@ async function retryAll(
   return Object.freeze({
     recovered: 0,
     claimed: submissions.length,
+    touched: submissions.length,
     committed: 0,
     retry,
     dead,
@@ -308,28 +473,28 @@ export async function dispatchTenantSubmissionBatch(
   const tenantId = checkedTenantId(tenantIdValue);
   const decoded = configuration(configurationValue);
   const now = checkedDate(nowValue);
-  const staleBefore = new Date(now.getTime() - decoded.leaseTimeoutMs);
   const retryAt = new Date(now.getTime() + decoded.retryDelayMs);
-  let recovered: number;
+  let recoveredIds: readonly string[];
   let submissions: readonly ClaimedSubmission[];
   try {
-    recovered = await store.recoverStale(
-      tenantId,
-      staleBefore,
-      now,
+    recoveredIds = recoveredSnapshot(
+      await store.recoverStale(
+        tenantId,
+        decoded.leaseTimeoutMs,
+        decoded.batchLimit,
+      ),
       decoded.batchLimit,
     );
-    submissions = await store.claimBatch(tenantId, decoded.batchLimit, now);
+    submissions = claimSnapshot(
+      await store.claimBatch(tenantId, decoded.batchLimit, now),
+      tenantId,
+      decoded.batchLimit,
+    );
   } catch {
     fail('SUBMISSION_DISPATCH_STORAGE');
   }
-  if (
-    !Number.isInteger(recovered) ||
-    recovered < 0 ||
-    recovered > decoded.batchLimit
-  )
-    fail('SUBMISSION_DISPATCH_STORAGE');
-  if (submissions.length === 0) return emptyRun(recovered);
+  if (submissions.length === 0) return emptyRun(recoveredIds);
+  const touched = touchedCount(recoveredIds, submissions);
 
   const first = submissions[0]!;
   if (
@@ -345,13 +510,13 @@ export async function dispatchTenantSubmissionBatch(
 
   let session: TenantSalesforceSession;
   let sessionTimer: ReturnType<typeof setTimeout> | undefined;
+  const sessionController = new AbortController();
   try {
     const sessionDeadline = new Promise<never>((_, reject) => {
-      sessionTimer = setTimeout(
-        () => reject(new Error('SUBMISSION_SESSION_TIMEOUT')),
-        decoded.oauth.timeoutMs,
-      );
-      sessionTimer.unref();
+      sessionTimer = setTimeout(() => {
+        sessionController.abort();
+        reject(new Error('SUBMISSION_SESSION_TIMEOUT'));
+      }, decoded.oauth.timeoutMs);
     });
     session = await Promise.race([
       createBoundTenantSalesforceSession(
@@ -364,6 +529,7 @@ export async function dispatchTenantSubmissionBatch(
         },
         decoded.oauth,
         fetchImplementation,
+        sessionController.signal,
       ),
       sessionDeadline,
     ]);
@@ -374,7 +540,11 @@ export async function dispatchTenantSubmissionBatch(
       'CONNECTION_RECHECK_FAILED',
       retryAt,
     );
-    return Object.freeze({ ...retried, recovered });
+    return Object.freeze({
+      ...retried,
+      recovered: recoveredIds.length,
+      touched,
+    });
   } finally {
     if (sessionTimer !== undefined) clearTimeout(sessionTimer);
   }
@@ -386,7 +556,6 @@ export async function dispatchTenantSubmissionBatch(
       controller.abort();
       reject(new Error('SUBMISSION_DISPATCH_TIMEOUT'));
     }, decoded.dispatchTimeoutMs);
-    timer.unref();
   });
   let delivered: readonly SubmissionDeliveryOutcome[];
   try {
@@ -409,7 +578,11 @@ export async function dispatchTenantSubmissionBatch(
         : 'DISPATCH_TRANSPORT_FAILED',
       retryAt,
     );
-    return Object.freeze({ ...retried, recovered });
+    return Object.freeze({
+      ...retried,
+      recovered: recoveredIds.length,
+      touched,
+    });
   } finally {
     if (timer !== undefined) clearTimeout(timer);
   }
@@ -422,7 +595,11 @@ export async function dispatchTenantSubmissionBatch(
       'DISPATCH_RESULT_INVALID',
       retryAt,
     );
-    return Object.freeze({ ...retried, recovered });
+    return Object.freeze({
+      ...retried,
+      recovered: recoveredIds.length,
+      touched,
+    });
   }
 
   let committed = 0;
@@ -462,8 +639,9 @@ export async function dispatchTenantSubmissionBatch(
     fail('SUBMISSION_DISPATCH_STORAGE');
   }
   return Object.freeze({
-    recovered,
+    recovered: recoveredIds.length,
     claimed: submissions.length,
+    touched,
     committed,
     retry,
     dead,

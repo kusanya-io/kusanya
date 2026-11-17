@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
-    <description>Scoped integration grants for guarded definition import/read and publication boundaries. Does not assign users, bypass sharing, grant target-object access, grant setup privileges or provide collector Salesforce access.</description>
+    <description>Scoped integration grants for guarded definition import/read, publication and raw-submission receipt boundaries. Does not assign users, bypass sharing, grant customer target-object access, grant setup privileges or provide collector Salesforce access.</description>
     <classAccesses>
         <apexClass>DefinitionImportResource</apexClass>
         <enabled>true</enabled>
@@ -17,6 +17,10 @@
         <apexClass>PublicationArtifactCleanupResource</apexClass>
         <enabled>true</enabled>
     </classAccesses>
+    <classAccesses>
+        <apexClass>SubmissionIngestResource</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
     <customPermissions>
         <enabled>true</enabled>
         <name>Import_Kusanya_Definition</name>
@@ -28,6 +32,10 @@
     <customPermissions>
         <enabled>true</enabled>
         <name>Review_Kusanya_Definition</name>
+    </customPermissions>
+    <customPermissions>
+        <enabled>true</enabled>
+        <name>Ingest_Kusanya_Submissions</name>
     </customPermissions>
     <fieldPermissions>
         <editable>true</editable>

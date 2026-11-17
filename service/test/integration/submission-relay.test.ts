@@ -208,23 +208,15 @@ void test(
     });
     const leasedClaim = (await store.claimBatch(tenantId, 1, new Date()))[0]!;
     assert.equal(leasedClaim.relayId, leased.relayId);
-    const recoveryTime = new Date(Date.now() + 5_000);
-    assert.equal(
-      await store.recoverStale(
-        tenantId,
-        new Date(Date.now() + 1_000),
-        recoveryTime,
-        10,
-      ),
-      1,
-    );
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+    assert.deepEqual(await store.recoverStale(tenantId, 1_001, 10), [
+      leased.relayId,
+    ]);
     await assert.rejects(
       store.markCommitted(tenantId, leased.relayId, leasedClaim.attempt),
       /SUBMISSION_RELAY_STATE/,
     );
-    const reclaimed = (
-      await store.claimBatch(tenantId, 1, new Date(recoveryTime.getTime() + 1))
-    )[0]!;
+    const reclaimed = (await store.claimBatch(tenantId, 1, new Date()))[0]!;
     assert.equal(reclaimed.attempt, leasedClaim.attempt + 1);
     await assert.rejects(
       store.markCommitted(tenantId, leased.relayId, leasedClaim.attempt),
@@ -280,7 +272,7 @@ void test(
       {
         state: 'dead',
         attempts: 100,
-        failure_code: 'ATTEMPT_LIMIT_EXHAUSTED',
+        failure_code: 'SALESFORCE_UNAVAILABLE',
       },
     ]);
     await store.markCommitted(
