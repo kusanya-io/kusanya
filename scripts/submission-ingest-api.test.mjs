@@ -38,14 +38,14 @@ test('submission receipt REST boundary is bounded and non-disclosing', () => {
   );
 });
 
-test('submission receipt is one user-mode transaction with no mapping authority', () => {
+test('submission receipt is one user-mode transaction with bounded answer parsing and no mapping authority', () => {
   const service = read('classes/SubmissionIngestService.cls');
   assert.match(service, /MAX_BATCH_SIZE = 200/);
   assert.match(service, /MAX_XML_BYTES = 750000/);
   assert.equal((service.match(/Database\.setSavepoint\(\)/g) ?? []).length, 1);
   assert.equal(
     (service.match(/Database\.rollback\(receipt\)/g) ?? []).length,
-    1,
+    2,
   );
   assert.equal((service.match(/AccessLevel\.USER_MODE/g) ?? []).length, 3);
   assert.match(service, /FirstPublishLocationId = submissions\[index\]\.Id/);
@@ -60,7 +60,28 @@ test('submission receipt is one user-mode transaction with no mapping authority'
   );
   assert.doesNotMatch(
     service,
-    /Answer__c|Task__c|Mapped_Record_Id__c|Database\.upsert|Type\.forName|Schema\.getGlobalDescribe/,
+    /Task__c|Mapped_Record_Id__c|Database\.upsert|Type\.forName|Schema\.getGlobalDescribe/,
+  );
+  assert.match(service, /SubmissionAnswerParser\.store\(parseXml\)/);
+  assert.match(service, /rejected\.contains\(submissions\[index\]\.Id\)/);
+  assert.match(service, /'retry',\s*'PARSE_FAILED'/);
+
+  const parser = read('classes/SubmissionAnswerParser.cls');
+  assert.match(parser, /MAX_ANSWERS = 8000/);
+  assert.match(parser, /MAX_DEPTH = 32/);
+  assert.match(parser, /MAX_REPEAT_COUNT = 1000/);
+  assert.match(parser, /public static Set<Id> store/);
+  assert.match(
+    parser,
+    /Database\.insert\(level, true, AccessLevel\.USER_MODE\)/,
+  );
+  assert.match(parser, /Parsed_At__c = parsedAt/);
+  assert.match(parser, /Repeat_Mode__c != 'from_answer'/);
+  assert.match(parser, /throw new ParseException\('SUBMISSION_PARSE_FAILED'\)/);
+  assert.doesNotMatch(parser, /getMessage|getStackTraceString|getTypeName/);
+  assert.doesNotMatch(
+    parser,
+    /Task__c|Mapped_Record_Id__c|Database\.upsert|Type\.forName|Schema\.getGlobalDescribe/,
   );
 });
 
@@ -95,6 +116,10 @@ test('hosted receipt tests pin bytes replay conflicts and denied principals', ()
   assert.doesNotMatch(source, /@TestSetup/);
   assert.match(source, /receivesExactBytesAndReplaysWithoutDuplicateRecords/);
   assert.match(source, /refusesConflictsMalformedBodiesAndUngrantedCallers/);
+  assert.match(
+    source,
+    /isolatesOneMalformedXmlWithoutRollingBackValidReceipts/,
+  );
   assert.match(source, /String\.valueOf\(version\.Id\)\.substring\(0, 15\)/);
   assert.match(
     source,

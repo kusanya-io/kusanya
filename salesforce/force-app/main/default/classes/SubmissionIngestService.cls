@@ -1,7 +1,8 @@
 /**
  * Responsibility: persist a bounded batch of byte-attested raw submissions and
- * their private Salesforce Files idempotently. This receipt boundary performs no
- * answer parsing, target mapping, Task resolution, media ingestion or remapping.
+ * their private Salesforce Files and normalized Answer graphs idempotently. This
+ * receipt boundary performs no target mapping, Task resolution, media ingestion
+ * or remapping.
  */
 public with sharing class SubmissionIngestService {
     private static final Integer MAX_BATCH_SIZE = 200;
@@ -127,7 +128,8 @@ public with sharing class SubmissionIngestService {
                 Channel__c,
                 XML_Hash__c,
                 Status__c,
-                Raw_XML_Version__c
+                Raw_XML_Version__c,
+                Parsed_At__c
             FROM Submission__c
             WHERE Instance_Id__c IN :instanceIds
             WITH USER_MODE
@@ -136,6 +138,8 @@ public with sharing class SubmissionIngestService {
         }
 
         List<Input> fresh = new List<Input>();
+        List<Input> existingToParse = new List<Input>();
+        Map<String, Submission__c> parseExistingByInstance = new Map<String, Submission__c>();
         for (Input input : inputs) {
             Submission__c existing = existingByInstance.get(input.instanceId);
             if (existing == null) {
@@ -164,6 +168,10 @@ public with sharing class SubmissionIngestService {
                     input.relayId,
                     new Outcome(input.relayId, 'received', 'ALREADY_RECEIVED')
                 );
+                if (existing.Parsed_At__c == null) {
+                    existingToParse.add(input);
+                    parseExistingByInstance.put(input.instanceId, existing);
+                }
             } else {
                 outcomes.put(
                     input.relayId,
@@ -172,58 +180,124 @@ public with sharing class SubmissionIngestService {
             }
         }
 
-        if (!fresh.isEmpty()) {
+        if (!fresh.isEmpty() || !existingToParse.isEmpty()) {
             Savepoint receipt = Database.setSavepoint();
             try {
-                List<Submission__c> submissions = new List<Submission__c>();
-                for (Input input : fresh) {
-                    submissions.add(
-                        new Submission__c(
-                            Form_Version__c = Id.valueOf(input.formVersionId),
-                            Instance_Id__c = input.instanceId,
-                            Channel__c = input.channel,
-                            Received_At__c = DateTime.now(),
-                            XML_Hash__c = input.xmlSha256,
-                            Status__c = 'Received',
-                            Attempts__c = 0
+                if (!fresh.isEmpty()) {
+                    List<Submission__c> submissions = new List<Submission__c>();
+                    for (Input input : fresh) {
+                        submissions.add(
+                            new Submission__c(
+                                Form_Version__c = Id.valueOf(
+                                    input.formVersionId
+                                ),
+                                Instance_Id__c = input.instanceId,
+                                Channel__c = input.channel,
+                                Received_At__c = DateTime.now(),
+                                XML_Hash__c = input.xmlSha256,
+                                Status__c = 'Received',
+                                Attempts__c = 0
+                            )
+                        );
+                    }
+                    Database.insert(submissions, true, AccessLevel.USER_MODE);
+                    List<ContentVersion> files = new List<ContentVersion>();
+                    for (Integer index = 0; index < fresh.size(); index++) {
+                        Input input = fresh[index];
+                        files.add(
+                            new ContentVersion(
+                                Title = 'Kusanya raw submission ' +
+                                    input.xmlSha256.substring(0, 12),
+                                PathOnClient = 'submission.xml',
+                                VersionData = xmlByInstance.get(
+                                    input.instanceId
+                                ),
+                                FirstPublishLocationId = submissions[index].Id
+                            )
+                        );
+                    }
+                    Database.insert(files, true, AccessLevel.USER_MODE);
+                    for (Integer index = 0; index < fresh.size(); index++) {
+                        submissions[index].Raw_XML_Version__c = String.valueOf(
+                            files[index].Id
+                        );
+                    }
+                    Database.update(submissions, true, AccessLevel.USER_MODE);
+                    Map<Id, Blob> parseXml = new Map<Id, Blob>();
+                    for (Integer index = 0; index < fresh.size(); index++) {
+                        parseXml.put(
+                            submissions[index].Id,
+                            xmlByInstance.get(fresh[index].instanceId)
+                        );
+                    }
+                    Set<Id> rejected = SubmissionAnswerParser.store(parseXml);
+                    for (Integer index = 0; index < fresh.size(); index++) {
+                        Input input = fresh[index];
+                        outcomes.put(
+                            input.relayId,
+                            rejected.contains(submissions[index].Id)
+                                ? new Outcome(
+                                      input.relayId,
+                                      'retry',
+                                      'PARSE_FAILED'
+                                  )
+                                : new Outcome(
+                                      input.relayId,
+                                      'received',
+                                      'RECEIVED'
+                                  )
+                        );
+                    }
+                }
+                if (!existingToParse.isEmpty()) {
+                    Map<Id, Blob> parseXml = new Map<Id, Blob>();
+                    for (Input input : existingToParse) {
+                        parseXml.put(
+                            parseExistingByInstance.get(input.instanceId).Id,
+                            xmlByInstance.get(input.instanceId)
+                        );
+                    }
+                    Set<Id> rejected = SubmissionAnswerParser.store(parseXml);
+                    for (Input input : existingToParse) {
+                        if (
+                            rejected.contains(
+                                parseExistingByInstance.get(input.instanceId).Id
+                            )
                         )
-                    );
+                            outcomes.put(
+                                input.relayId,
+                                new Outcome(
+                                    input.relayId,
+                                    'retry',
+                                    'PARSE_FAILED'
+                                )
+                            );
+                    }
                 }
-                Database.insert(submissions, true, AccessLevel.USER_MODE);
-                List<ContentVersion> files = new List<ContentVersion>();
-                for (Integer index = 0; index < fresh.size(); index++) {
-                    Input input = fresh[index];
-                    files.add(
-                        new ContentVersion(
-                            Title = 'Kusanya raw submission ' +
-                                input.xmlSha256.substring(0, 12),
-                            PathOnClient = 'submission.xml',
-                            VersionData = xmlByInstance.get(input.instanceId),
-                            FirstPublishLocationId = submissions[index].Id
-                        )
-                    );
-                }
-                Database.insert(files, true, AccessLevel.USER_MODE);
-                for (Integer index = 0; index < fresh.size(); index++) {
-                    submissions[index].Raw_XML_Version__c = String.valueOf(
-                        files[index].Id
-                    );
-                }
-                Database.update(submissions, true, AccessLevel.USER_MODE);
-                for (Input input : fresh) {
+            } catch (SubmissionAnswerParser.ParseException error) {
+                Database.rollback(receipt);
+                for (Input input : fresh)
                     outcomes.put(
                         input.relayId,
-                        new Outcome(input.relayId, 'received', 'RECEIVED')
+                        new Outcome(input.relayId, 'retry', 'PARSE_FAILED')
                     );
-                }
+                for (Input input : existingToParse)
+                    outcomes.put(
+                        input.relayId,
+                        new Outcome(input.relayId, 'retry', 'PARSE_FAILED')
+                    );
             } catch (Exception error) {
                 Database.rollback(receipt);
-                for (Input input : fresh) {
+                for (Input input : fresh)
                     outcomes.put(
                         input.relayId,
                         new Outcome(input.relayId, 'retry', 'RECEIPT_FAILED')
                     );
-                }
+                for (Input input : existingToParse)
+                    outcomes.put(
+                        input.relayId,
+                        new Outcome(input.relayId, 'retry', 'PARSE_FAILED')
+                    );
             }
         }
 

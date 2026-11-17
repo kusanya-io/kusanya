@@ -29,12 +29,18 @@ private class SubmissionIngestResourceTest {
             Assert.areEqual(200, first.statusCode);
             assertOutcome(first, relayId, 'received', 'RECEIVED');
             Submission__c stored = [
-                SELECT Id, Status__c, XML_Hash__c, Raw_XML_Version__c
+                SELECT
+                    Id,
+                    Status__c,
+                    XML_Hash__c,
+                    Raw_XML_Version__c,
+                    Parsed_At__c
                 FROM Submission__c
                 WHERE Instance_Id__c = :instanceId
             ];
             Assert.areEqual('Received', stored.Status__c);
             Assert.isNotNull(stored.Raw_XML_Version__c);
+            Assert.isNotNull(stored.Parsed_At__c);
             ContentVersion raw = [
                 SELECT VersionData, ContentDocumentId
                 FROM ContentVersion
@@ -163,6 +169,74 @@ private class SubmissionIngestResourceTest {
         }
     }
 
+    @IsTest
+    static void isolatesOneMalformedXmlWithoutRollingBackValidReceipts() {
+        User integration;
+        System.runAs(new User(Id = UserInfo.getUserId())) {
+            integration = createUser('ingestmix');
+            assignPermission(integration.Id, 'Kusanya_Integration');
+        }
+        System.runAs(integration) {
+            Form_Version__c version = publishedVersion();
+            Blob valid = Blob.valueOf('<data><legacy>kept</legacy></data>');
+            Blob invalid = Blob.valueOf(
+                '<!DOCTYPE data [<!ENTITY x "unsafe">]><data>&x;</data>'
+            );
+            String validRelay = '20000000-0000-4000-8000-000000000003';
+            String invalidRelay = '20000000-0000-4000-8000-000000000004';
+            String invalidInstance = 'uuid:123e4567-e89b-12d3-a456-426614174004';
+            String body = JSON.serialize(
+                new Map<String, Object>{
+                    'schemaVersion' => 1,
+                    'submissions' => new List<Object>{
+                        requestItem(
+                            validRelay,
+                            String.valueOf(version.Id),
+                            'uuid:123e4567-e89b-12d3-a456-426614174003',
+                            valid,
+                            'phone'
+                        ),
+                        requestItem(
+                            invalidRelay,
+                            String.valueOf(version.Id),
+                            invalidInstance,
+                            invalid,
+                            'phone'
+                        )
+                    }
+                }
+            );
+
+            RestResponse first = invoke('POST', 'application/json', body);
+            Assert.areEqual(200, first.statusCode);
+            assertOutcomeAt(first, 0, validRelay, 'received', 'RECEIVED');
+            assertOutcomeAt(first, 1, invalidRelay, 'retry', 'PARSE_FAILED');
+            Assert.areEqual(2, [SELECT COUNT() FROM Submission__c]);
+            Assert.areEqual(
+                1,
+                [SELECT COUNT() FROM Submission__c WHERE Parsed_At__c != NULL]
+            );
+            Assert.areEqual(
+                1,
+                [SELECT COUNT() FROM Answer__c WHERE Node_Name__c = 'legacy']
+            );
+
+            RestResponse replay = invoke(
+                'POST',
+                'application/json',
+                requestBody(
+                    invalidRelay,
+                    String.valueOf(version.Id),
+                    invalidInstance,
+                    invalid,
+                    null
+                )
+            );
+            assertOutcome(replay, invalidRelay, 'retry', 'PARSE_FAILED');
+            Assert.areEqual(2, [SELECT COUNT() FROM Submission__c]);
+        }
+    }
+
     private static Form_Version__c publishedVersion() {
         Form__c form = new Form__c(Name = 'Submission receipt');
         insert form;
@@ -201,24 +275,39 @@ private class SubmissionIngestResourceTest {
         Blob xml,
         String channel
     ) {
-        String digest = EncodingUtil.convertToHex(
-            Crypto.generateDigest('SHA-256', xml)
-        );
         return JSON.serialize(
             new Map<String, Object>{
                 'schemaVersion' => 1,
                 'submissions' => new List<Object>{
-                    new Map<String, Object>{
-                        'relayId' => relayId,
-                        'formVersionId' => versionId,
-                        'instanceId' => instanceId,
-                        'channel' => channel == null ? 'phone' : channel,
-                        'xmlSha256' => digest,
-                        'rawXmlBase64' => EncodingUtil.base64Encode(xml)
-                    }
+                    requestItem(
+                        relayId,
+                        versionId,
+                        instanceId,
+                        xml,
+                        channel == null ? 'phone' : channel
+                    )
                 }
             }
         );
+    }
+
+    private static Map<String, Object> requestItem(
+        String relayId,
+        String versionId,
+        String instanceId,
+        Blob xml,
+        String channel
+    ) {
+        return new Map<String, Object>{
+            'relayId' => relayId,
+            'formVersionId' => versionId,
+            'instanceId' => instanceId,
+            'channel' => channel,
+            'xmlSha256' => EncodingUtil.convertToHex(
+                Crypto.generateDigest('SHA-256', xml)
+            ),
+            'rawXmlBase64' => EncodingUtil.base64Encode(xml)
+        };
     }
 
     private static RestResponse invoke(
@@ -248,9 +337,23 @@ private class SubmissionIngestResourceTest {
         Map<String, Object> envelope = (Map<String, Object>) JSON.deserializeUntyped(
             response.responseBody.toString()
         );
+        Assert.areEqual(1, ((List<Object>) envelope.get('outcomes')).size());
+        assertOutcomeAt(response, 0, relayId, status, code);
+    }
+
+    private static void assertOutcomeAt(
+        RestResponse response,
+        Integer index,
+        String relayId,
+        String status,
+        String code
+    ) {
+        Map<String, Object> envelope = (Map<String, Object>) JSON.deserializeUntyped(
+            response.responseBody.toString()
+        );
         List<Object> outcomes = (List<Object>) envelope.get('outcomes');
-        Assert.areEqual(1, outcomes.size());
-        Map<String, Object> outcome = (Map<String, Object>) outcomes[0];
+        Assert.isTrue(outcomes.size() > index);
+        Map<String, Object> outcome = (Map<String, Object>) outcomes[index];
         Assert.areEqual(relayId, outcome.get('relayId'));
         Assert.areEqual(status, outcome.get('status'));
         Assert.areEqual(code, outcome.get('code'));

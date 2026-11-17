@@ -403,6 +403,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>false</editable>
+        <field>Submission__c.Parsed_At__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
         <field>Submission__c.Mapped_Record_Id__c</field>
         <readable>true</readable>
     </fieldPermissions>
