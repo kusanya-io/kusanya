@@ -3847,3 +3847,94 @@ Six of the verifier's own probes failed on their first run and all six were the 
 What this unit does not establish is as important as what it does. The dispatcher has no route and no scheduler, nothing outside the repository's own tests writes to it, and the delivery transport is injected and still unwritten. The Apex ingestion resource, the runtime scheduler, the OpenRosa acknowledgement, Answer persistence, media handling and relay retention all remain later reviewed units. No C10 acceptance test is claimed by this unit, the harness states as much in its own output, and none is established by this review. There is no Phase 2 gate claim and no production readiness claim. The Phase 1 verdict is unaffected.
 
 Ledger: zero findings. Notes L, M and N are closed, and notes O to T above are new and informational. The open ledger is notes 136, 137 and 140 from earlier units, note C from PR #150, and notes O to T from this one.
+
+## 2026-11-17: PR #158 persists raw submissions through a bounded Salesforce receipt (ADR 0075); one HOLD with three findings, then all three closed and each fix mutation-tested, PASS at `93cb166`
+
+This unit writes to a customer organisation for the first time in Phase 2. It adds an integration-only Apex REST receipt, a user-mode service that persists a `Submission__c` and its private raw-XML File under one savepoint, and the namespace-aware one-request transport that feeds it. The first review ended in **HOLD with three findings**. The second, after one fix commit of six files, ended in **PASS**, with every fix broken on purpose and seen to fail before being accepted.
+
+The builder declared plainly that it had allocated no scratch organisation and that real Apex compilation and execution were left to the verifier, and that its own integration run had one negative-control pass and fourteen skips because a local PostgreSQL service could not be opened. Both gaps were filled here: fifteen of fifteen integration tests against a freshly created database with the requirement enforced, and three separate scratch organisations across the two reviews.
+
+### FINDING 1, decisive: the unit's own Apex test could never pass
+
+A fresh namespaced organisation deployed 230 of 230 components with zero errors, and the full local suite then returned 115 passing and one failing of 116:
+
+```
+SubmissionIngestResourceTest.receivesExactBytesAndReplaysWithoutDuplicateRecords
+System.AssertException: Assertion Failed: Expected: Blob[92], Actual: Blob[92]
+```
+
+The gate requires every local test to pass, so the hosted run would have failed and consumed the head's retry budget. The waiting run was identified and held before any organisation was spent on it.
+
+**The stored bytes were never the problem**, which is the part that took work to establish. Against the stored record the digest, the base64 encoding and the decoded text all matched the submitted XML exactly, while the two Blobs compared unequal. The explanation is narrower than it first appears: **a Blob obtained from a query compares by reference, not by value**, while Blobs held in memory compare by value. Two separate reads of the same field are unequal to each other; the same value re-materialised through a base64 round trip compares equal again.
+
+Two wrong hypotheses were published and withdrawn on the way to that, and the record keeps them because the remedy depends on which rule is true. The first was that Apex Blob equality is reference-based in general, which a control disproved: two Blobs from the same literal compare equal. The second was that identical literals are interned, so the control had compared one object with itself, which a runtime-built string disproved. Only the third attempt, comparing two separate queries of one field, isolated the behaviour.
+
+The remedy was one line, and the fix commit took it: the assertion now compares base64 encodings. **Mutation test:** restoring the original assertion and redeploying reproduced the identical failure message, and restoring the fix made the suite pass again. The assertion is doing the work rather than decorating it.
+
+### FINDING 2: a 15-character Form Version identifier made an exact replay terminal
+
+The conflict rule compared the stored reference, always eighteen characters, against the raw request string, which `Id.valueOf` accepts in either form. A caller using the common fifteen-character identifier therefore received the first delivery and was told **dead** on an exact replay of the same submission, which the relay stores as terminal. Proved live as a Minimum Access integration user: `first=received replay=dead/INSTANCE_CONFLICT`.
+
+ADR 0075 states that a replay with the same instance, definition, channel, hash and File is idempotent and that any mismatch is a terminal conflict. A fifteen-character identifier is the same definition, so the implementation contradicted its own decision record, and in the direction that destroys a submission's retry path rather than the direction that duplicates work. The shipped service could not reach it, because the dispatcher's own snapshot requires eighteen characters and the relay column is `char(18)`, but this resource is the integration boundary rather than an internal function.
+
+The fix compares the normalised identifier captured during validation. Four live cases establish the result, and the third is stronger than what was asked for: the fifteen-character form is received then already-received, **the eighteen-character form of the same identifier is also already-received**, so the two spellings are interchangeable in both directions, and a fifteen-character replay with changed bytes is still a terminal conflict, so the comparison was not simply weakened into always agreeing. **Mutation test:** restoring the old comparison brought the terminal result straight back.
+
+### FINDING 3, least severe: two documents still stated the old 5 MiB parse bound
+
+The unit reduced the raw-XML intake bound from 5,242,880 bytes to 750,000, a deliberate change with a good reason that ADR 0075 explains and the data model records. Two places were missed and both read as live statements of what the code enforces: ADR 0073, which was not amended in this unit, and the untrusted-XML row of the threat model, whose required control is size limits. A reader checking the threat model was told the service bounds raw parsing at seven times the real figure. The fix commit corrected both, and a search of the decision records, the threat model, the architecture and both READMEs now finds the old figure only in this log, where it is a historical record of earlier heads and should stay.
+
+### The receipt itself was sound in the first review and remains so
+
+Twenty four real HTTP requests to the real namespaced resource, in a real organisation, establish the behaviour rather than the intent. A valid submission is received. An exact replay is already-received and creates no second record. The same instance with changed bytes is a terminal conflict. Refused, each with the single fixed code and nothing else: an unknown schema version, an unknown envelope field, an unknown item field, a duplicate JSON key in the envelope and again inside an item, a digest mismatch, non-canonical base64, an uppercase instance UUID, a channel outside the pair, a Draft Form Version, an identifier of the wrong object type, an empty list, a null list, a duplicate relay identifier within one batch, a duplicate instance identifier within one batch, and a batch of 201. A body above the resource cap returns the oversized code. A `GET` is refused by the platform before the resource runs, which makes the resource's own method branch unreachable. A non-JSON media type returns the media-type code. **The unprefixed path returns not-found while the prefixed path works**, so the namespace is load-bearing and the probe discriminates rather than passing trivially.
+
+No response carried a record identifier, an exception message or any submitted XML. After the whole matrix the organisation held ten Submissions, ten raw Files, zero Submissions without a File and **zero content distributions**, so there was no orphan on either side and no public link anywhere.
+
+The permission gate was tested by removal rather than by inspection: deleting the verifier's own integration assignment produced the forbidden code, and restoring it produced a normal idempotent answer.
+
+### The declared byte bound is reachable, and a wrong turn is recorded
+
+ADR 0075 claims 750,000 bytes is chosen so that at least one valid relay always fits one request. The arithmetic is exact, 750,000 bytes becoming 1,000,000 base64 characters and a 1,000,295-byte request, half a megabyte inside the cap. Seven real requests at 200, 100,000, 300,000, 500,000, 600,000, 700,000 and 750,000 bytes were all received.
+
+For a while the opposite appeared true. A first maximum-size request was refused, and several probes went looking for a heap limit before a field-by-field comparison of the payload showed the cause: a generator that had died on a path error left a placeholder in the Form Version field, so the resource was correctly refusing an unparseable identifier. The refusal was right and the probe was wrong. Heap was measured anyway and is not close: building and encoding a maximum submission reaches 1,751,870 bytes and the whole parse path reaches 4,003,045, both in anonymous Apex, which is allowed ten million bytes while synchronous Apex REST is allowed six million. Those figures are therefore indicative, and the seven successful requests are the evidence that the REST context copes.
+
+### The permission grant is sufficient for a genuinely minimal identity and widens nothing
+
+The shipped test creates its integration user on the Standard User profile, which is far more permissive than any real integration identity, so it does not establish what the request itself asks about. A verifier-only probe class was deployed to the disposable organisation to execute the receipt as a **Minimum Access - Salesforce** user holding only the integration permission set. It worked, including `ContentVersion` creation in user mode, which was the part most likely to fail. The authority surface stayed narrow in the same run: Account and Contact inaccessible, Submission not deletable, and no modify-all, view-all or author-Apex permission from any assignment. Form Version remains updateable and the review permission remains granted, both pre-existing and neither touched by this unit, and Form Version mutation is separately guarded by the published-immutability rule, which refused a direct attempt to change a status.
+
+One incidental result confirms the privacy claim better than any assertion could. Counting raw Files as the administrator returned zero while the submission existed and the owner's own query returned it, because the File is private to its creator. The links are exactly two, the inferred owner link and the viewer link to the Submission record, which is the shape the standing File note predicts.
+
+### The dispatcher notes from the previous unit are closed
+
+Notes O to T are all closed in code. Note O was the verifier's own, so its two-case probe was re-run against this build rather than read from the diff: with no other referenced handle the dispatch now settles and requeues under the timeout code, where before it never settled and the runtime exited reporting an unsettled await. Note P is closed by threading an abort signal into the credential session so the deadline aborts the token exchange itself, checked before the lock and again inside it. Note Q is closed in the right place, in SQL, with the stale threshold and the retry time both derived from `clock_timestamp()` so the caller's clock no longer participates. Note R is closed by storing the caller's failure code at the attempt ceiling. Note S is closed by a new unique-union gauge. Note T is closed by a claim snapshot that rebuilds every row, copies the raw bytes, re-verifies the digest against them and freezes its own array, so the dispatcher no longer depends on its store freezing anything.
+
+### The new Apex control, and why it falls
+
+**The control is now 116 tests and 2292 of 2423 executable lines at 94.59 percent**, computed with the repository's own coverage function over its own thirty two production classes. It was measured three times and agreed every time: locally before the mutation round trip, locally after it, and in the hosted run's own fresh organisation.
+
+The percentage falls from 95.45, and that deserves an account rather than a shrug, because a falling control is the shape most easily waved through. The tree grew by 248 executable lines and 216 of them are covered. Both new classes own the shortfall and both sit in the normal range for this package's REST resources, the resource at 81 of 96 and the service at 135 of 152 against existing resources at 87 and 90 percent. No existing class lost coverage. The gate is an organisation-wide 85 percent, which 94.59 clears comfortably. The resource being the lowest single class is partly structural, since its method branch is unreachable behind the platform's own refusal.
+
+### The exact-head run
+
+Run 43883573982 concluded successfully on its first attempt. Every value predicted before it was dispatched matched: decision `full-apex`, an empty Salesforce tree hash, a base matching accepted main, a policy head equal to the reviewed head, and the three coverage figures to two decimal places. Both the automation and Salesforce trees had moved, so neither exemption path was reachable and the gate had to take the full-Apex branch, which it did.
+
+Six distinct forty-character values appeared in the log and all six were accounted for, with the provisioner lines grouped by job showing one hosted image build across all three jobs. The organisation lifecycle was audited in the development hub: the exact ownership tag resolves to one signup record, deleted, namespaced, alive for ninety two seconds and created by the dedicated least-privilege principal rather than the administrator, with zero active organisations in both hubs. Credential hygiene returned no occurrences of an authorisation URL, an organisation identifier, a session identifier or a key block, and the retry ledger recorded an initial attempt both at classification and again immediately before authentication, so the run held at the previous head burned nothing.
+
+**The supersede workflow fired correctly for a third observed time**, cancelling the stale run that was still waiting at the held head. That is the mechanism which makes a fix commit cheap, and it has now done its job on every occasion it has been needed.
+
+A correction to the verifier's own audit habit is recorded here because it affects how cleanup is checked rather than any past conclusion. Querying the development hub through the least-privilege continuous integration principal returns only the records that principal created, so it gives a partial view. The complete view is the administrator's, and that is how this run was audited. Active counts had agreed in earlier units, so no earlier verdict changes, but the narrower view was luck rather than design.
+
+### The verdict and the baseline
+
+`PASS: PR #158 merged as 769782a`, with squash tree `e5f0d12` identical to the verified head tree and the single parent `bdd7088`, so exactly the reviewed content landed. All six checks were green at the exact head, including the three required contexts, the head did not move across the hold, the fix, the re-review, the run or the merge, and the merge state was clean rather than merely mergeable.
+
+The trust boundary matched the declaration in both reviews. The automation tree is unchanged at `e292d47` with the harness pin appearing exactly twice, no manifest or lockfile changed, no dependency was added, the namespace is unchanged, and the permission grant is exactly one Apex class and one custom permission on the integration set with nothing for Admin, Supervisor or Reviewer Integration. One omission is recorded: the declaration did not itemise the credential-session file among its service changes. The change there is sound and minimal, and it is covered by a phrase in the body, but a credential-boundary file deserves its own line in a trust-boundary declaration.
+
+Accepted main is now `769782a`, with the scripts tree at `fb6e53f`, the Salesforce tree at `fdfffe7`, its source tree at `011078f`, the service tree at `c2be14d` and the docs tree at `8ce5f17`, while the automation tree stays at `e292d47`, the configuration tree at `7734bff`, the mobile tree at `e60941c` and the seed tree at `9018dc2`.
+
+Three organisations were spent across the two reviews, all created, used and deleted, with none left active. The verifier probe class was deployed only to a disposable organisation and only after the official measurement was taken, and both mutated class files were restored, with the Salesforce source tree hash confirmed byte-identical to the reviewed head afterwards.
+
+What this unit does not establish remains as important as what it does. Nothing writes to this resource outside tests, because the scheduler is still unmounted and the service transport has no caller. No Answer parsing, mapping, target DML, Task or Collector resolution, media manifest, dead-letter interface, remap, retention, OpenRosa acknowledgement or request budget is implemented or claimed. No C10 acceptance test is claimed by this unit, the harness states as much in its own output, and none is established by this review. There is no Phase 2 gate claim and no production readiness claim. The Phase 1 verdict is unaffected.
+
+One consequence is carried forward rather than held. The transport maps a Salesforce receipt to a relay retry, deliberately, so a mounted scheduler would re-deliver every accepted submission until it reached the attempt ceiling and became terminally dead, for a submission that had in fact arrived safely. ADR 0075 already gives this as its reason for leaving the scheduler unmounted, and it is a sound reason. It is worth recording that the consequence is terminal rather than merely wasteful, so that the scheduler and the mapping engine land together.
+
+Ledger: three findings raised and all three closed, each with a mutation test. The dispatcher notes O to T are closed. The open ledger is notes 136, 137 and 140 from earlier units and note C from PR #150, all informational.
