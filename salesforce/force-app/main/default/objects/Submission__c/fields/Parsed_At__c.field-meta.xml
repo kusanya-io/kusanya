@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Parsed_At__c</fullName>
+    <description>Server time at which the retained raw XML was normalized into the complete Answer graph. Null means parsing has not committed.</description>
+    <label>Parsed At</label>
+    <type>DateTime</type>
+</CustomField>

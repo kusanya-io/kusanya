@@ -169,6 +169,7 @@ const submissionObjects = {
     'Accuracy__c',
     'XML_Hash__c',
     'Raw_XML_Version__c',
+    'Parsed_At__c',
     'Mapped_Record_Id__c',
     'Error__c',
     'Failed_Stage__c',
@@ -825,10 +826,15 @@ test('submission permissions keep collector data scoped by role', () => {
       expectedFields.sort(),
     );
     for (const grant of fieldGrants) {
+      const field = tag(grant, 'field');
       assert.equal(tag(grant, 'readable'), 'true');
       assert.equal(
         tag(grant, 'editable'),
-        String(name !== 'Kusanya_Supervisor'),
+        String(
+          name !== 'Kusanya_Supervisor' &&
+            (field !== 'Submission__c.Parsed_At__c' ||
+              name === 'Kusanya_Integration'),
+        ),
       );
     }
   }

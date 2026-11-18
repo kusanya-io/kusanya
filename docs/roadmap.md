@@ -84,6 +84,15 @@ M, and a package-wide metadata ordering guard answers note N. The Apex ingestion
 transport, scheduler and OpenRosa acknowledgement remain later units; this unit also
 claims no C10 acceptance test.
 
+ADR 0076 adds the C7 raw-XML normalization boundary: bounded structural parsing,
+unknown-node retention, dynamic-repeat cardinality, typed Answer projections,
+parent Answer links and a Parsed At idempotency marker. A malformed item cannot
+roll back valid siblings, but remains retryable with its raw File retained. Target
+mapping, Task/Collector resolution, media, remapping, OpenRosa and the scheduler
+remain absent. The mapper and scheduler must land together so an accepted receipt
+cannot be retried to the terminal attempt ceiling. No C10 acceptance test or Phase
+2 gate is claimed.
+
 The first unit contains Folder/Form/Form Version and external namespace resolution.
 The current unit adds Question trees, choices and stored skip rules, separate
 Hint/Author Notes, the Current Version INSERT regression and external `__r`

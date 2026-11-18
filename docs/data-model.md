@@ -408,14 +408,16 @@ ADR 0029 defines the Answer cardinality boundary for dynamic repeats. The
 submitted count is authoritative per enclosing repeat instance; trailing physical
 rows beyond it are excluded from normalized Answers and mapped child records, a
 deficit or invalid count fails closed, and the raw XML remains retained separately.
-Publication package schema 2 pins the rule as `submitted-count-v1`. ADR 0075 now
-performs raw receipt DML, but does not yet parse answers or execute mapping DML.
+Publication package schema 2 pins the rule as `submitted-count-v1`. ADR 0076 now
+parses the retained XML and writes the complete Answer graph under the receipt
+savepoint, but does not execute mapping DML.
 
 ## Phase 2 submission foundation
 
 Private `Submission__c` carries a unique external ODK instance ID, form version,
 channel, timestamps/location, raw XML ContentVersion pin plus SHA-256, explicit
-mapping state, failure stage and attempts. Controlled children `Answer__c` and
+mapping state, failure stage, attempts and a Parsed At idempotency marker.
+Controlled children `Answer__c` and
 `Error_Log__c` follow its lifecycle. Answer retains node name even when no Question
 matches, repeat location, parent and typed projections. Error Log points to the
 Submission that owns the raw XML instead of copying payload into a log. Private
@@ -424,6 +426,15 @@ for C10.15. Task, Collector, Device and Form Link lookups are added with their
 owning Phase 3 models rather than represented temporarily as text.
 
 No credentials or raw production seed records may become automated test fixtures.
+
+ADR 0076 enforces structural placement against the stored Question tree, retains
+unknown nodes with one bounded warning, and writes parent-before-child Answers in
+user mode. Integer, decimal, date, datetime and single-choice projections supplement
+the exact text. A malformed item retains its raw Submission and File with Parsed At
+null and returns retry without rolling back valid siblings. The 200-item parser
+call is bounded to 8,000 total Answer nodes and depth 32. Customer-target mapping,
+Task closure, media Files and remapping remain absent; the scheduler stays unmounted
+until the target mapper can land with it.
 
 ## Portable compiler boundary
 

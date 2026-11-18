@@ -88,9 +88,17 @@ ordered relay items, validates each item against its published Form Version, and
 stores each new canonical XML document as a private Salesforce File linked to a
 new Submission. Exact replays reuse the existing Submission and File; conflicting
 replays fail closed. The endpoint runs in user mode behind the dedicated ingestion
-custom permission and returns only fixed per-item outcomes. It does not parse XML,
-create Answers, execute mappings, write customer objects, create Tasks, or claim
-the complete C7 delivery pipeline or any C10 acceptance test.
+custom permission and returns only fixed per-item outcomes. It does not execute
+mappings, write customer objects, create Tasks, or claim the complete C7 delivery
+pipeline or any C10 acceptance test.
+
+ADR 0076 extends that same receipt savepoint with bounded XML normalization. It
+creates parent-linked Answers, retains unknown nodes with a warning, applies the
+submitted-count repeat rule and writes typed numeric/date/datetime/single-choice
+projections before setting Submission Parsed At. One malformed item retains its
+raw Submission and File with a retry outcome while valid siblings commit. It still
+does not execute Mapping records, resolve Tasks or Collectors, ingest media or mount
+the scheduler; target mapping and scheduler activation must land together.
 
 ## Iterative development only
 
