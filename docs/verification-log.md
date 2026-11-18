@@ -3938,3 +3938,98 @@ What this unit does not establish remains as important as what it does. Nothing 
 One consequence is carried forward rather than held. The transport maps a Salesforce receipt to a relay retry, deliberately, so a mounted scheduler would re-deliver every accepted submission until it reached the attempt ceiling and became terminally dead, for a submission that had in fact arrived safely. ADR 0075 already gives this as its reason for leaving the scheduler unmounted, and it is a sound reason. It is worth recording that the consequence is terminal rather than merely wasteful, so that the scheduler and the mapping engine land together.
 
 Ledger: three findings raised and all three closed, each with a mutation test. The dispatcher notes O to T are closed. The open ledger is notes 136, 137 and 140 from earlier units and note C from PR #150, all informational.
+
+## 2026-11-18: PR #160 normalises raw submissions into bounded Answer graphs (ADR 0076); 0 findings, one empty superseding commit after a reporting transient burned the first head, notes U, V and W, PASS at `6681beb`
+
+This unit reads the raw XML already persisted by ADR 0075 and turns it into a bounded `Answer__c` graph, with a `Parsed_At__c` marker for idempotency, the ADR 0029 `submitted-count-v1` contract enforced for root repeats, and per-item refusal isolation so one bad submission cannot spoil a batch. The content review ended in **PASS with no findings**. The unit nevertheless took two heads, and the reason is worth recording carefully, because the verifier's first explanation of why was wrong and the repository alone was enough to prove it wrong.
+
+### The first head passed review and then lost its protected run to a reporting transient
+
+The reviewed head `b56b8b9` passed content review. Its protected run failed, and the harness recorded `outcome: "failed-tests"`. Because `decideInfrastructureRetry` denies that outcome unconditionally, by design, that head was permanently burned and could never be retried. The builder therefore pushed `6681beb`, an **empty superseding commit** carrying the byte-identical tree `dc51b81b`, which `git diff-tree` between the two confirms produces no output at all. The second head's content is the first head's content, and the second protected run passed on its first attempt.
+
+An empty superseding commit is the correct and cheapest remedy for this failure mode, and it is now recorded as such. It costs one commit and one approval, and it changes nothing a reviewer has already read.
+
+### The verifier's own diagnosis was wrong, and the log had already refuted it
+
+The first explanation offered for the failed run was that the heavy bulk test had exhausted CPU in the hosted organisation. That explanation cannot be correct, and establishing so required no organisation, no measurement and nothing the builder had to supply.
+
+The reasoning runs on the pinned harness itself. A governor breach fails an Apex test. A failed test makes the command exit non-zero. Every internal failure path in `salesforce-client.mjs` throws `SalesforceCommandError`, including a bare catch around the spawn, a JSON parse guard, a non-zero process status, a non-zero envelope status and a six-minute hard timeout with `SIGKILL`. And `verify-salesforce.mjs` prints `error.message` for that class, but prints the withheld-details wording only in the `else` branch, which is reachable only by a plain `Error`. The failed run printed:
+
+```
+Verification failed (unexpected-error); exception details withheld.
+```
+
+**Therefore the Apex test command exited zero and every test passed in the hosted organisation.** No test failed, nothing timed out, and no limit was breached. Proof of the contrary shape was already in the verifier's own hands from the previous unit, where a deliberate mutation produced a real failing test and an envelope status of **100**, which prints its own message rather than the withheld wording.
+
+Two structural facts about the harness follow and are recorded for whoever reads a failing run next. The outcome marker is **positional**: `testing` is set to true immediately before the Apex command, so anything thrown afterwards inherits the `failed-tests` label whether or not any test failed. The printed message is **evidential**: it is selected in a branch independent of the outcome branch. When the two disagree, trust the wording.
+
+### What did fail, by elimination
+
+Between the point where `testing` becomes true and the point where the outcome becomes `passed`, the harness does three things: it runs the Apex command, it builds the production class list, and it checks the coverage report. The command is excluded above. `productionApexNames` reads the filesystem and its errors classify as `filesystem` rather than `unexpected-error`. That leaves `checkApexCoverage`, whose refusals are all plain `Error` objects matching none of the classifier's patterns.
+
+**The failure was the coverage check refusing a report produced by a successful test command.** Its reachable refusals are a non-zero skip count, a mismatch between the detailed results and the summary count, a missing or empty coverage array, a malformed or duplicate coverage record, a production class absent from the array, and coverage below the floor. Every one of those is a statement about the shape and completeness of Salesforce's own payload. None is a statement about the code under review. Which one fired cannot be known, because the exception text is withheld by deliberate design, and that design should not be weakened to satisfy curiosity. The four candidates that are measurable at this head were measured and all pass with room: thirty three of thirty three classes present, no duplicate rows, no row with zero covered lines, and 93.31 percent against an 85 percent floor.
+
+### A correction to the record on CPU, and the bound that actually matters
+
+The pull request body asked the verifier to confirm that 359 milliseconds of the 10,000 millisecond synchronous limit ruled the CPU hypothesis out. The conclusion is right. The number is not, and the margin it implies is wrong by a factor of six.
+
+The shipped test was measured without touching a single byte of source, by creating a debug level with Apex profiling enabled, running the full suite normally, and reading `LIMIT_USAGE_FOR_NS` out of the test's own Apex log. The test wraps the call under test in `Test.startTest()` and `Test.stopTest()`, and **that pair resets the governor counters and then restores the earlier ones**, so one method produces two independent limit contexts:
+
+| Context in `normalizesTwoHundredSubmissionsWithThirtyAnswersEach` | CPU                    | DML rows            |
+| ----------------------------------------------------------------- | ---------------------- | ------------------- |
+| Outer, the test's own setup before `Test.startTest()`             | 323 ms                 | 234                 |
+| **Inner, the `SubmissionAnswerParser.store` call under test**     | **2,215 ms of 10,000** | **6,200 of 10,000** |
+
+So the work under test consumes **2,215 milliseconds, which is 22.2 percent of the limit**, not 3.59 percent. The probable cause of the discrepancy is instrumentation placement rather than any difference between organisations: a `Limits.getCpuTime()` reading taken around the whole method body reports the outer context and silently excludes exactly the span being measured. The outer contexts of the sibling parser tests in the same log all sit between 300 and 456 milliseconds, which is the range the reported figure falls in. The instrumentation itself was not visible to the verifier, so that is offered as the probable cause and not asserted.
+
+The measurement surfaced something more useful than the CPU figure. The transaction writes **6,200 of the 10,000 permitted DML rows, and Salesforce's own log flags that line as close to the limit**. If this unit ever needed a headroom discussion, that is the bound to discuss. It is not a defect and not a reason to hold, because the test passes with real margin and a breach would fail loudly, but it is the figure that will bite first if the bulk test is extended.
+
+### Evidence at the reviewed head
+
+A fresh namespaced scratch organisation was created, used and deleted for the re-review, and the content was re-executed rather than inferred from tree identity.
+
+| Check                                                     | Result                                               |
+| --------------------------------------------------------- | ---------------------------------------------------- |
+| Deploy `force-app` to a fresh namespaced organisation     | **233 of 233**, zero errors                          |
+| Full local suite with coverage                            | **121 of 121**, envelope status 0, zero skipped      |
+| Coverage by the repository's own function                 | **2,719 of 2,914 executable lines, 93.31 percent**   |
+| Coverage array shape                                      | 33 rows, no duplicates, no zero rows                 |
+| `SubmissionAnswerParser`                                  | 387 of 437, 88.6 percent                             |
+| `SubmissionIngestService`                                 | 175 of 206, 85.0 percent                             |
+| Root, service, format, scaffold and the two script suites | 303 of 303, 500 of 500, clean, clean, 4 of 4, 9 of 9 |
+
+Those figures have now been produced by **four independent organisations** at this content, agreeing to the line.
+
+The three cases that closed the finding in the first review were re-executed unmodified in the new organisation: a root-level repeat declaring two submissions with one physical instance is rejected with zero Answers and a null marker; the same deficit under a section, which is the control, is still rejected; and a root-level repeat declaring one submission with three physical instances stores exactly three Answers at `/person[1]` with the marker set, with no `[2]` and no `[3]`. The control holding matters as much as the other two moving, because it shows the root sentinel did not buy the root path at the expense of the nested one.
+
+Field permissions on the new marker were read live from `FieldPermissions` and match the declaration exactly: Integration readable and editable, Admin and Supervisor readable only.
+
+One lesson was relearned here and is recorded so it is not relearned a third time. The probe would not compile at first, reporting that a field does not exist, and a describe of the question object returned only eleven fields. The deploy was complete and correct. **Kusanya grants field access through permission sets alone and never through the profile**, so an unassigned administrator sees almost nothing. After assigning the admin and integration sets the same describe returned forty two fields. The least-privilege boundary is real enough to block its own author.
+
+### The exact-head run
+
+Run 44166070732 concluded successfully on its first attempt at `6681beb`, and the marker named that head and no other: **121 passed, 2,719 of 2,914 executable lines at 93.31 percent, with no C10 acceptance test claimed**. Every value published before the run was dispatched matched: decision `full-apex`, an empty Salesforce tree hash, a base equal to accepted main, a policy head equal to the reviewed head, `APEX_RESULT: success`, and the three figures to two decimal places. Both the automation and Salesforce trees had moved against accepted main, so neither exemption path was reachable and the gate had to take the full-Apex branch, which it did. **The reporting transient did not recur**, which confirms the empty commit was the whole remedy and no code change was ever needed.
+
+Containment was audited as the administrator rather than through the least-privilege principal. Exactly one scratch organisation was created, in the continuous integration hub at `21:25:58Z`, one second after the ownership-tag line, and its signup record reads **Deleted**, with **zero** active organisations across all three hubs. Six distinct forty-character values appeared in the log and all six were accounted for: the reviewed head, accepted main, the harness pin, the two pinned action commits matching the automation tree at this head, and GitHub's own runner image provisioner commit. Credential hygiene returned nothing: the single match for any secret pattern was the harness's own literal argument list, and the authorisation URL is piped through stdin with the variable deleted from the child environment, the input buffer zeroed, the child's stderr discarded and only a classification name ever printed. Twenty one values were masked.
+
+A calibration correction belongs here, because it affects how a run is audited rather than any conclusion. The verifier challenged the result on the grounds that the Apex job took only two minutes and ten seconds, which is far quicker than the same work on a local Windows machine where the test run alone takes 175 seconds. It is the baseline, not an anomaly: every passing run of this workflow in the preceding week took between **two minutes and two seconds and two minutes and twenty three seconds** for that job, doing the same work. The hub record settles it independently, since a real organisation was created and deleted inside that window. A suspicious duration should be checked against the workflow's own history, never against local timings. Raising the concern was right; stating it as a defect would not have been.
+
+### The verdict and the baseline
+
+`PASS: PR #160 merged as 24339ec`, with squash tree `dc51b81b` identical to the verified head tree and the single parent `f648a3b`, so exactly the reviewed content landed and nothing was altered in the merge. All six checks were green at the exact head, including the three required contexts, the merge state was clean rather than merely mergeable, the head did not move across the review, the run or the merge, and accepted main had not moved since the run produced its result, so the result was not stale.
+
+The trust boundary matched the declaration in every particular. The automation tree is unchanged at `e292d47` with the harness pin `31f63bc` appearing exactly twice in the verification workflow, and all seven trusted harness files are byte-identical to that pin at this head. The complete diff is sixteen files. Under `scripts` only the two test files move, and neither is a pinned harness file nor credential adjacent. No manifest or lockfile changed, no dependency was added, the namespace is unchanged, and the permission set changes are the three declared field entries and nothing else. The service tree did not move at all in this unit.
+
+Accepted main is now `24339ec`, with the Salesforce tree at `0cb10b6`, its source tree at `a87e8dd`, the scripts tree at `547f065` and the docs tree at `d7d40f8`, while the automation tree stays at `e292d47`, the service tree at `c2be14d`, the configuration tree at `7734bff`, the mobile tree at `e60941c` and the seed tree at `9018dc2`.
+
+What this unit does not establish remains as important as what it does. No mapping is executed, no customer object outside the submission graph is written, no reference, Task or Collector is resolved, no media is ingested, no OpenRosa route exists and the scheduler remains unmounted. No C10 acceptance test is claimed by this unit, the harness states as much in its own output, and none is established by this review. There is no Phase 2 gate claim and no production readiness claim. The Phase 1 verdict is unaffected.
+
+Ledger: zero findings. Three notes are raised and all three are informational rather than blocking.
+
+**Note U, against the harness and not this unit.** The `failed-tests` outcome is assigned by position, so a run in which the command exited zero and all 121 tests passed was recorded as a test failure, and because `decideInfrastructureRetry` denies that outcome unconditionally a reviewed head was permanently burned by a reporting transient. This is now demonstrated rather than suspected, and it is the second time this family has cost a head after the comparable case on PR #131. The harness holds the parsed report and can separate a suite that reported failures, which deserves to be terminal, from a suite that passed and a later evidence check that refused, which is an infrastructure retry. The harness sits inside the trust boundary, so changing it needs its own reviewed unit and is out of scope here.
+
+**Note V, a correction to the durable record.** The 359 millisecond CPU figure in the pull request body does not reproduce. The span under test consumes 2,215 milliseconds of 10,000. The stated conclusion stands; the quoted margin does not.
+
+**Note W, informational.** The bulk test writes 6,200 of the 10,000 permitted DML rows and Salesforce flags it as close to the limit. That is the bound that will bite first if the test is extended.
+
+The open ledger is notes U, V and W from this unit, notes 136, 137 and 140 from earlier units, and note C from PR #150, all informational.
