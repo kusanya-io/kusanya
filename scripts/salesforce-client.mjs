@@ -18,7 +18,12 @@ const transientStages = new Set([
   'source-deploy',
 ]);
 export class SalesforceCommandError extends Error {
-  constructor(code, stage = 'salesforce-operation', jobId) {
+  constructor(
+    code,
+    stage = 'salesforce-operation',
+    jobId,
+    apexTestsFailed = false,
+  ) {
     const safeCode = codes.has(code) ? code : 'CLI_FAILED';
     const safeStage = /^[a-z][a-z0-9-]{0,47}$/.test(stage)
       ? stage
@@ -39,7 +44,17 @@ export class SalesforceCommandError extends Error {
       /^2SR[A-Za-z0-9]{12}(?:[A-Za-z0-9]{3})?$/.test(jobId)
     )
       this.jobId = jobId;
+    this.apexTestsFailed = apexTestsFailed === true;
   }
+}
+
+function reportsApexTestFailure(parsed, stage) {
+  if (stage !== 'apex-tests' || parsed?.status !== 100) return false;
+  const summary = parsed?.result?.summary;
+  return (
+    summary?.outcome === 'Failed' ||
+    (Number.isSafeInteger(summary?.failing) && summary.failing > 0)
+  );
 }
 function classify(parsed, processError, stage) {
   if (processError?.code === 'ETIMEDOUT') return 'TIMEOUT';
@@ -161,6 +176,7 @@ export function createSalesforceClient({
         parsed?.data?.scratchOrgInfoId ??
           parsed?.data?.jobId ??
           parsed?.result?.jobId,
+        reportsApexTestFailure(parsed, stage),
       );
     if (
       !parsed ||

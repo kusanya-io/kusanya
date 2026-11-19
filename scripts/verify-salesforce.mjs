@@ -1,6 +1,10 @@
 import { fileURLToPath } from 'node:url';
 import { resolve, join } from 'node:path';
-import { checkApexCoverage, productionApexNames } from './apex-coverage.mjs';
+import {
+  ApexVerificationError,
+  checkApexCoverage,
+  productionApexNames,
+} from './apex-coverage.mjs';
 import { createCleanupJournal } from './scratch-cleanup-journal.mjs';
 import {
   createSalesforceClient,
@@ -46,7 +50,6 @@ export function runVerification({
   let exitCode = 1;
   let sf;
   let orgs = [];
-  let testing = false;
   try {
     const identity = validateIdentity({
       role: env.KUSANYA_VERIFY_ROLE,
@@ -115,7 +118,6 @@ export function runVerification({
       '--wait',
       '5',
     ]);
-    testing = true;
     const report = sf('apex-tests', [
       'apex',
       'run',
@@ -150,8 +152,22 @@ export function runVerification({
       error.code === 'CREATION_REJECTED'
     ) {
       result.outcome = 'failed-creation-rejected';
-    } else if (testing) {
+    } else if (
+      error instanceof ApexVerificationError &&
+      ['test-failure', 'coverage-below-threshold'].includes(error.kind)
+    ) {
       result.outcome = 'failed-tests';
+    } else if (
+      error instanceof SalesforceCommandError &&
+      error.stage === 'apex-tests' &&
+      error.apexTestsFailed
+    ) {
+      result.outcome = 'failed-tests';
+    } else if (
+      error instanceof ApexVerificationError &&
+      error.kind === 'evidence-incomplete'
+    ) {
+      result.retryable = true;
     } else if (error instanceof QuotaBlockedError) {
       result.outcome = 'blocked-quota';
       result.retryable = true;

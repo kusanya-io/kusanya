@@ -161,10 +161,22 @@ concurrency group remains the active-lifecycle guard. A replaced zero-step run h
 consumed no org; its skipped or cancelled job is not passing evidence. A changed
 head needs fresh approval; an older active run cleans up then fails its stale-head
 check.
-Failures, missing coverage, <85% coverage and cleanup errors fail the Apex job. The
-separate, unconditional `Salesforce verification gate` also fails if Apex was
-skipped, cancelled or unsuccessful. Confirm the exact SHA and retain real scratch
-coverage/run evidence for Claude's gate report. Builders never merge their own PRs.
+A suite that reports a failure and a measured coverage result below 85 percent are
+terminal `failed-tests` outcomes. A successful suite whose later report is missing,
+contradictory, malformed or omits an expected production class is instead
+`failed-infrastructure`, `retryable: true`: it still fails the gate, but the existing
+budget may admit one same-head infrastructure retry in that UTC day. An Apex CLI
+error is `failed-tests` only when the structured status-100 envelope itself reports
+a failed suite. Other command failures stay infrastructure failures and retain the
+existing stage-specific retry policy. Invalid source inventory is nonretryable.
+Cleanup failure supersedes every classification and remains permanently
+nonretryable. ADR 0077 records the boundary and its mutation tests.
+
+Failures, missing coverage, <85% coverage and cleanup errors therefore all fail the
+Apex job. The separate, unconditional `Salesforce verification gate` also fails if
+Apex was skipped, cancelled or unsuccessful. Confirm the exact SHA and retain real
+scratch coverage/run evidence for Claude's gate report. Builders never merge their
+own PRs.
 
 ### Strict documentation-only exception
 

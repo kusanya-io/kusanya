@@ -3,37 +3,73 @@ import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const integer = (value) => Number.isSafeInteger(value) && value >= 0;
 
+const failureKinds = new Set([
+  'test-failure',
+  'coverage-below-threshold',
+  'evidence-incomplete',
+  'configuration-invalid',
+]);
+
+export class ApexVerificationError extends Error {
+  constructor(kind, message) {
+    super(message);
+    this.name = 'ApexVerificationError';
+    this.kind = failureKinds.has(kind) ? kind : 'configuration-invalid';
+  }
+}
+
+const refuse = (kind, message) => {
+  throw new ApexVerificationError(kind, message);
+};
+
 // CLI percentages are rounded; enforce C11 using executable-line counts.
 export function checkApexCoverage(report, expectedClasses) {
-  if (report?.status !== 0) throw new Error('Salesforce CLI did not succeed.');
+  if (report?.status !== 0)
+    refuse('evidence-incomplete', 'Salesforce CLI did not succeed.');
   const result = report.result;
   const summary = result?.summary;
   if (
     !summary ||
-    summary.outcome !== 'Passed' ||
     !integer(summary.testsRan) ||
-    summary.testsRan === 0 ||
-    summary.failing !== 0 ||
-    summary.skipped !== 0 ||
-    summary.passing !== summary.testsRan
+    !integer(summary.passing) ||
+    !integer(summary.failing) ||
+    !integer(summary.skipped)
   )
-    throw new Error(
-      'Apex tests must complete with at least one pass and no failures or skips.',
+    refuse(
+      'evidence-incomplete',
+      'Apex test summary evidence is missing or malformed.',
     );
   if (
-    !Array.isArray(result.tests) ||
-    result.tests.length !== summary.testsRan ||
-    result.tests.some((test) => test.Outcome !== 'Pass')
+    summary.outcome !== 'Passed' ||
+    summary.testsRan === 0 ||
+    summary.failing !== 0 ||
+    summary.skipped !== 0
   )
-    throw new Error('Detailed Apex test results are missing or unsuccessful.');
+    refuse(
+      'test-failure',
+      'Apex tests must complete with at least one pass and no failures or skips.',
+    );
+  if (summary.passing !== summary.testsRan)
+    refuse(
+      'evidence-incomplete',
+      'Apex test summary counts are contradictory.',
+    );
+  if (!Array.isArray(result.tests) || result.tests.length !== summary.testsRan)
+    refuse(
+      'evidence-incomplete',
+      'Detailed Apex test results are missing or incomplete.',
+    );
+  if (result.tests.some((test) => test?.Outcome !== 'Pass'))
+    refuse('test-failure', 'Detailed Apex test results are unsuccessful.');
   const coverage = result.coverage?.coverage;
-  if (
-    !Array.isArray(coverage) ||
-    coverage.length === 0 ||
-    !Array.isArray(expectedClasses) ||
-    expectedClasses.length === 0
-  )
-    throw new Error(
+  if (!Array.isArray(expectedClasses) || expectedClasses.length === 0)
+    refuse(
+      'configuration-invalid',
+      'At least one source class or trigger is required.',
+    );
+  if (!Array.isArray(coverage) || coverage.length === 0)
+    refuse(
+      'evidence-incomplete',
       'Executable Apex coverage evidence and source class names are required.',
     );
   const names = new Set();
@@ -48,7 +84,10 @@ export function checkApexCoverage(report, expectedClasses) {
       !integer(entry.totalCovered) ||
       entry.totalCovered > entry.totalLines
     )
-      throw new Error('Malformed or duplicate Apex coverage record.');
+      refuse(
+        'evidence-incomplete',
+        'Malformed or duplicate Apex coverage record.',
+      );
     names.add(entry.name);
     if (expectedClasses.includes(entry.name)) {
       covered += entry.totalCovered;
@@ -57,9 +96,18 @@ export function checkApexCoverage(report, expectedClasses) {
   }
   for (const name of expectedClasses)
     if (!names.has(name))
-      throw new Error(`Missing coverage for source class or trigger: ${name}`);
-  if (total === 0 || covered * 100 < total * 85)
-    throw new Error(
+      refuse(
+        'evidence-incomplete',
+        `Missing coverage for source class or trigger: ${name}`,
+      );
+  if (total === 0)
+    refuse(
+      'evidence-incomplete',
+      'Apex coverage contains no executable source lines.',
+    );
+  if (covered * 100 < total * 85)
+    refuse(
+      'coverage-below-threshold',
       `Apex coverage ${covered}/${total} executable lines is below 85%.`,
     );
   return {

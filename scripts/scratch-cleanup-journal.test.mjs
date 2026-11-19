@@ -14,6 +14,7 @@ import {
   readCleanupJournal,
 } from './scratch-cleanup-journal.mjs';
 import { runCleanup } from './cleanup-salesforce.mjs';
+import { SalesforceCommandError } from './salesforce-client.mjs';
 import { runVerification } from './verify-salesforce.mjs';
 
 const sha = 'a'.repeat(40);
@@ -246,7 +247,12 @@ test('hosted harness persists before create and the separate finalizer is idempo
       if (stage === 'source-deploy' || stage === 'apex-tests') {
         assert.equal(args[args.indexOf('--wait') + 1], '5');
         if (stage === 'apex-tests' && testFails)
-          throw new Error('private-fixture-test-error');
+          throw new SalesforceCommandError(
+            'CLI_FAILED',
+            'apex-tests',
+            undefined,
+            true,
+          );
         return { result: {} };
       }
       return f.sf(stage, args);

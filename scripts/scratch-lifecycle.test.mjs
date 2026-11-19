@@ -620,20 +620,72 @@ test('wrapper emits exactly one successful full-head marker after tests and owne
   assert.equal(f.state.creates, 1);
   assert.equal(f.state.deletes.length, 1);
 });
-test('wrapper emits blocked quota75, test failures nonretryable and cleanup failure nonretryable', () => {
+test('wrapper separates reported test failures from post-pass evidence failures', () => {
   const blocked = verify(fixture({ daily: 0 }));
   assert.equal(blocked.exitCode, 75);
   assert.equal(blocked.result.outcome, 'blocked-quota');
   assert.equal(blocked.result.retryable, true);
+
+  const reportedFailure = new SalesforceCommandError(
+    'CLI_FAILED',
+    'apex-tests',
+    undefined,
+    true,
+  );
   for (const f of [
-    fixture({ testError: new SalesforceCommandError('NETWORK', 'apex-tests') }),
-    fixture({ coverage: envelope({}) }),
+    fixture({ testError: reportedFailure }),
+    fixture({
+      coverage: envelope({
+        summary: {
+          outcome: 'Failed',
+          testsRan: 1,
+          passing: 0,
+          failing: 1,
+          skipped: 0,
+        },
+        tests: [{ Outcome: 'Fail' }],
+      }),
+    }),
+    fixture({
+      coverage: envelope({
+        summary: {
+          outcome: 'Passed',
+          testsRan: 1,
+          passing: 1,
+          failing: 0,
+          skipped: 0,
+        },
+        tests: [{ Outcome: 'Pass' }],
+        coverage: {
+          coverage: [
+            { name: 'FixtureRuntime', totalCovered: 0, totalLines: 1 },
+          ],
+        },
+      }),
+    }),
   ]) {
     const failed = verify(f);
     assert.equal(failed.result.outcome, 'failed-tests');
     assert.equal(failed.result.retryable, false);
     assert.equal(f.state.deletes.length, 1);
   }
+
+  const incompleteFixture = fixture({ coverage: envelope({}) });
+  const incomplete = verify(incompleteFixture);
+  assert.equal(incomplete.result.outcome, 'failed-infrastructure');
+  assert.equal(incomplete.result.retryable, true);
+  assert.equal(incompleteFixture.state.deletes.length, 1);
+
+  const transport = fixture({
+    testError: new SalesforceCommandError('NETWORK', 'apex-tests'),
+  });
+  const transportFailure = verify(transport);
+  assert.equal(transportFailure.result.outcome, 'failed-infrastructure');
+  assert.equal(transportFailure.result.retryable, false);
+  assert.equal(transport.state.deletes.length, 1);
+});
+
+test('wrapper keeps cleanup failure nonretryable', () => {
   const cleanup = verify(fixture({ deleteFails: true }));
   assert.equal(cleanup.result.outcome, 'failed-cleanup');
   assert.equal(cleanup.result.retryable, false);
