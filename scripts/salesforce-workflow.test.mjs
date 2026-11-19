@@ -894,6 +894,7 @@ test('Salesforce workflow keeps the pinned harness, source guard and uncondition
   assert.equal(immutableRefs.length, 2);
   assert.equal(immutableRefs[0], immutableRefs[1]);
   assert.doesNotMatch(workflow, /c9e6db1bc438e2c0a952414706c56078995006a3/);
+  assert.doesNotMatch(workflow, /31f63bc77852346566c418688b250635203e2c05/);
   assert.match(workflow, /run: node trusted\/scripts\/verify-salesforce\.mjs/);
   assert.match(
     workflow,

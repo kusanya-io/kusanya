@@ -240,6 +240,17 @@ and exercised the empty-journal fallback finalizer with zero Salesforce calls.
 Dev Hub readings proved zero active or run-tagged orgs before and after. The proof
 hook and workflow value are retired and forbidden from the clean merge candidate.
 
+Note U amendment (19 November): do not infer `failed-tests` merely from execution
+position after the Apex command starts. A structured status-100 CLI envelope whose
+summary reports a failed suite, a returned report whose suite reports a failure,
+and measured coverage below 85 percent remain terminal `failed-tests`. Once a suite
+has reported success, missing, contradictory, malformed or incomplete coverage
+evidence is `failed-infrastructure`, `retryable: true`; the ordinary budget may
+admit at most one same-head infrastructure retry that UTC day. Invalid local source
+inventory and unclassified command failures do not gain retry authority. Cleanup
+failure still supersedes the first failure and remains permanently nonretryable.
+ADR 0077 records the typed boundary and mutation evidence.
+
 `BLOCKED` fails the required gate. It never becomes a successful skip and never
 falls back to an existing org. A recognized creation-time quota error follows the
 same diagnostic path, since capacity can change after preflight.

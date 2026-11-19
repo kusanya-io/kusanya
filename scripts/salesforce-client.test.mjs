@@ -326,6 +326,34 @@ test('only allowlisted transient setup errors are retryable; tests and auth are 
     false,
   );
 });
+test('Apex command errors distinguish a reported suite failure from transport failure', () => {
+  const command = (stdout, status = 1) => {
+    const sf = createSalesforceClient({
+      cwd: '.',
+      platform: 'linux',
+      spawn: () => ({ status, stdout: JSON.stringify(stdout) }),
+    });
+    try {
+      sf('apex-tests', ['apex', 'run', 'test']);
+    } catch (error) {
+      assert.ok(error instanceof SalesforceCommandError);
+      return error;
+    }
+    assert.fail('Expected Apex command failure');
+  };
+  const reported = command({
+    status: 100,
+    result: { summary: { outcome: 'Failed', failing: 1 } },
+  });
+  assert.equal(reported.apexTestsFailed, true);
+  assert.equal(reported.stage, 'apex-tests');
+  for (const payload of [
+    { status: 100, result: { summary: { outcome: 'Passed', failing: 0 } } },
+    { status: 1, name: 'ECONNRESET' },
+    { status: 1, result: { summary: { outcome: 'Failed', failing: 1 } } },
+  ])
+    assert.equal(command(payload).apexTestsFailed, false);
+});
 test('all CLI operations have bounded hard-kill timeouts', () => {
   for (const stage of [
     'quota-read',
